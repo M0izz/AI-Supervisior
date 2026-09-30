@@ -46,21 +46,26 @@ class BaseAgent(ABC):
         mission_id: str,
         task_id: Optional[str] = None
     ) -> ToolResult:
-        """Execute a tool and emit TOOL_CALL and TOOL_RESULT events."""
+        """Execute a tool with duration tracking, sanitization, and comprehensive event emission."""
+        import time
         target = arguments.get("path") or arguments.get("command") or arguments.get("test_command") or "workspace"
+        sanitized_args = BaseTool.sanitize_arguments(arguments)
 
-        # 1. Emit TOOL_CALL event
+        # 1. Emit TOOL_CALL & TOOL_CALLED event
         await self.event_bus.publish(
             Event(
                 mission_id=mission_id,
                 task_id=task_id,
                 agent_id=self.agent_id,
-                type=EventType.TOOL_CALL,
-                payload=ToolCallPayload(
-                    tool=tool_name,
-                    arguments=arguments,
-                    target=str(target)
-                ).model_dump()
+                type=EventType.TOOL_CALLED,
+                payload={
+                    "agent_id": self.agent_id,
+                    "mission_id": mission_id,
+                    "task_id": task_id,
+                    "tool": tool_name,
+                    "arguments": sanitized_args,
+                    "target": str(target)
+                }
             )
         )
 
@@ -72,20 +77,40 @@ class BaseAgent(ABC):
                     mission_id=mission_id,
                     task_id=task_id,
                     agent_id=self.agent_id,
-                    type=EventType.TOOL_ERROR,
+                    type=EventType.TOOL_FAILED,
                     severity=EventSeverity.ERROR,
                     payload={"tool": tool_name, "error": err_msg}
                 )
             )
             return ToolResult(success=False, error=err_msg)
 
-        # 2. Execute tool
+        # 2. Execute tool with duration timing
+        start_time = time.monotonic()
         try:
             result = await tool.execute(**arguments)
         except Exception as e:
             result = ToolResult(success=False, error=str(e))
+        duration_ms = round((time.monotonic() - start_time) * 1000, 2)
 
-        # 3. Emit TOOL_RESULT or TEST_RESULT event
+        # 3. Check for danger detection
+        if result.metadata.get("danger_detected"):
+            await self.event_bus.publish(
+                Event(
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    agent_id=self.agent_id,
+                    type=EventType.DANGER_DETECTED,
+                    severity=EventSeverity.CRITICAL,
+                    payload={
+                        "tool": tool_name,
+                        "arguments": sanitized_args,
+                        "error": result.error,
+                        "target": str(target)
+                    }
+                )
+            )
+
+        # 4. Emit TEST_RESULT or TOOL_COMPLETED / TOOL_FAILED
         if tool_name == "run_tests":
             await self.event_bus.publish(
                 Event(
@@ -99,6 +124,7 @@ class BaseAgent(ABC):
                         "passed": result.metadata.get("passed", 0),
                         "failed": result.metadata.get("failed", 0),
                         "error_signature": result.metadata.get("error_signature"),
+                        "duration_ms": duration_ms,
                         "output": result.output[:500] if result.output else None,
                         "error": result.error[:500] if result.error else None,
                     }
@@ -110,15 +136,17 @@ class BaseAgent(ABC):
                     mission_id=mission_id,
                     task_id=task_id,
                     agent_id=self.agent_id,
-                    type=EventType.TOOL_RESULT,
+                    type=EventType.TOOL_COMPLETED if result.success else EventType.TOOL_FAILED,
                     severity=EventSeverity.INFO if result.success else EventSeverity.WARNING,
-                    payload=ToolResultPayload(
-                        tool=tool_name,
-                        success=result.success,
-                        output=result.output[:500] if result.output else None,
-                        error=result.error[:500] if result.error else None,
-                        target=str(target)
-                    ).model_dump()
+                    payload={
+                        "tool": tool_name,
+                        "success": result.success,
+                        "duration_ms": duration_ms,
+                        "arguments": sanitized_args,
+                        "output": result.output[:500] if result.output else None,
+                        "error": result.error[:500] if result.error else None,
+                        "target": str(target)
+                    }
                 )
             )
 

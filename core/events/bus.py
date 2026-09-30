@@ -26,6 +26,24 @@ class EventBus:
         # Lock for thread-safe handler mutation
         self._lock = asyncio.Lock()
 
+    def subscribe_sync(
+        self,
+        handler: EventHandler,
+        event_type: Optional[EventType] = None,
+        mission_id: Optional[str] = None
+    ) -> None:
+        """Synchronously subscribe an async handler."""
+        if mission_id:
+            if mission_id not in self._mission_subscribers:
+                self._mission_subscribers[mission_id] = []
+            self._mission_subscribers[mission_id].append(handler)
+        elif event_type:
+            if event_type not in self._subscribers:
+                self._subscribers[event_type] = []
+            self._subscribers[event_type].append(handler)
+        else:
+            self._global_subscribers.append(handler)
+
     async def subscribe(
         self,
         handler: EventHandler,
@@ -33,17 +51,7 @@ class EventBus:
         mission_id: Optional[str] = None
     ) -> None:
         """Subscribe an async handler to specific event types or global stream."""
-        async with self._lock:
-            if mission_id:
-                if mission_id not in self._mission_subscribers:
-                    self._mission_subscribers[mission_id] = []
-                self._mission_subscribers[mission_id].append(handler)
-            elif event_type:
-                if event_type not in self._subscribers:
-                    self._subscribers[event_type] = []
-                self._subscribers[event_type].append(handler)
-            else:
-                self._global_subscribers.append(handler)
+        self.subscribe_sync(handler, event_type, mission_id)
 
     async def unsubscribe(
         self,

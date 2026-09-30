@@ -46,6 +46,15 @@ class MockReasoningProvider(BaseReasoningProvider):
                 recommended_action="Delegate root-cause diagnosis to reviewer agent to check file encodings.",
                 target_agent="reviewer_01"
             )
+        elif anomaly == "NO_PROGRESS":
+            return ReasoningDecision(
+                decision="CHANGE_STRATEGY",
+                severity="medium",
+                confidence=0.89,
+                reason="Multiple test attempts showed no improvement in passing test count.",
+                recommended_action="Formulate alternative parsing approach without modifying database schema.",
+                target_agent="worker_01"
+            )
         elif anomaly == "DANGEROUS_ACTION":
             return ReasoningDecision(
                 decision="REQUEST_APPROVAL",
@@ -62,6 +71,15 @@ class MockReasoningProvider(BaseReasoningProvider):
                 confidence=0.94,
                 reason="Worker attempted modification outside declared task boundaries.",
                 recommended_action="Pause worker and require scope validation.",
+                target_agent=None
+            )
+        elif anomaly == "BUDGET_WARNING":
+            return ReasoningDecision(
+                decision="PAUSE",
+                severity="high",
+                confidence=0.95,
+                reason="Task exceeded configured turn or time budget.",
+                recommended_action="Pause execution for operator budget review.",
                 target_agent=None
             )
 
@@ -84,12 +102,14 @@ class NebiusNemotronProvider(BaseReasoningProvider):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        base_url: str = "https://api.studio.nebius.ai/v1",
-        model: str = "nvidia/nemotron-4-340b-instruct"
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        timeout_seconds: Optional[float] = None
     ):
         self.api_key = api_key or os.getenv("NEBIUS_API_KEY", "")
-        self.base_url = base_url
-        self.model = model
+        self.base_url = base_url or os.getenv("NEBIUS_BASE_URL", "https://api.studio.nebius.ai/v1")
+        self.model = model or os.getenv("NEBIUS_MODEL", "nvidia/nemotron-4-340b-instruct")
+        self.timeout_seconds = timeout_seconds or float(os.getenv("SUPERVISOR_MODEL_TIMEOUT_SECONDS", "20.0"))
 
     async def reason_about_situation(self, prompt_context: Dict[str, Any]) -> ReasoningDecision:
         if not self.api_key:
@@ -113,7 +133,7 @@ class NebiusNemotronProvider(BaseReasoningProvider):
         user_content = json.dumps(prompt_context, indent=2)
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 res = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={

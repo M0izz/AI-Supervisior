@@ -19,6 +19,7 @@ class EventType(str, Enum):
     TASK_CREATED = "task.created"
     TASK_STARTED = "task.started"
     TASK_STATUS_CHANGED = "task.status_changed"
+    TASK_PROGRESS = "task.progress"
     TASK_COMPLETED = "task.completed"
     TASK_FAILED = "task.failed"
 
@@ -30,22 +31,39 @@ class EventType(str, Enum):
     AGENT_COMPLETED = "agent.completed"
     AGENT_FAILED = "agent.failed"
 
-    # Tool events
+    # Tool events (supporting both tool.call/result and tool.called/completed/failed)
     TOOL_CALL = "tool.call"
+    TOOL_CALLED = "tool.called"
     TOOL_RESULT = "tool.result"
+    TOOL_COMPLETED = "tool.completed"
     TOOL_ERROR = "tool.error"
+    TOOL_FAILED = "tool.failed"
 
     # Test execution events
     TEST_STARTED = "test.started"
     TEST_RESULT = "test.result"
+    TEST_COMPLETED = "test.completed"
+    TEST_FAILED = "test.failed"
+
+    # Safety & Danger
+    DANGER_DETECTED = "danger.detected"
 
     # Supervisor events
     SUPERVISOR_ALERT = "supervisor.alert"
+    SUPERVISOR_ANOMALY_DETECTED = "supervisor.anomaly_detected"
+    SUPERVISOR_REASONING_STARTED = "supervisor.reasoning_started"
+    SUPERVISOR_REASONING_COMPLETED = "supervisor.reasoning_completed"
     SUPERVISOR_DECISION = "supervisor.decision"
+    SUPERVISOR_INTERVENTION = "supervisor.intervention"
 
     # Human-in-the-loop approvals
     APPROVAL_REQUESTED = "approval.requested"
     APPROVAL_RESOLVED = "approval.resolved"
+
+    # Recovery events
+    RECOVERY_STARTED = "recovery.started"
+    RECOVERY_CONTEXT_CREATED = "recovery.context_created"
+    RECOVERY_STRATEGY_REPEATED = "recovery.strategy_repeated"
 
     # Verification events
     VERIFICATION_STARTED = "verification.started"

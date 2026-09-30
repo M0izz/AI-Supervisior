@@ -12,6 +12,7 @@ class SupervisorAction(str, Enum):
     PAUSE = "PAUSE"
     REQUEST_APPROVAL = "REQUEST_APPROVAL"
     COMPLETE = "COMPLETE"
+    FAIL = "FAIL"
 
 
 class SupervisorDecision(BaseModel):

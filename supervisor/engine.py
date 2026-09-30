@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Any, Dict, List, Optional
 from core.events.bus import EventBus
 from core.events.schema import Event, EventSeverity, EventType, SupervisorAlertPayload, SupervisorDecisionPayload
@@ -7,7 +8,7 @@ from core.missions.manager import MissionManager
 from core.tasks.manager import TaskManager
 from core.policies.models import PolicyConfig
 from supervisor.decisions import SupervisorAction, SupervisorDecision
-from supervisor.rules import DeterministicRuleEngine
+from supervisor.rules import DeterministicRuleEngine, AnomalyReport
 from supervisor.state_machine import SupervisorStateMachine, SupervisorState
 from supervisor.reasoning import SupervisoryReasoner
 
@@ -18,6 +19,7 @@ class SupervisorEngine:
     """
     Central Brain of the AI Work Supervisor.
     Combines deterministic rules (Layer A) with Nemotron reasoning (Layer B).
+    Watches the live EventBus, detects failure/drift, and intervenes.
     """
 
     def __init__(
@@ -38,10 +40,25 @@ class SupervisorEngine:
 
         self._recent_events: List[Event] = []
         self._recent_tests: List[Event] = []
+        self._registered_workers: Dict[str, Any] = {}
+        self._rejected_approaches: Dict[str, List[str]] = {}
+        self._task_metrics: Dict[str, Dict[str, Any]] = {}  # task_id -> {iterations, tool_calls, start_time}
         self._lock = asyncio.Lock()
 
         # Subscribe to EventBus
-        asyncio.create_task(self._attach_listeners())
+        self.event_bus.subscribe_sync(self.handle_event)
+
+    def register_worker(self, worker: Any) -> None:
+        """Register active worker instance for direct supervisor intervention (pause/resume)."""
+        self._registered_workers[worker.agent_id] = worker
+        logger.info(f"[SUPERVISOR] Registered worker {worker.agent_id}")
+
+    def register_rejected_approach(self, mission_id: str, approach: str) -> None:
+        """Register a disproven/rejected approach to prevent repetition."""
+        if mission_id not in self._rejected_approaches:
+            self._rejected_approaches[mission_id] = []
+        self._rejected_approaches[mission_id].append(approach)
+        logger.info(f"[SUPERVISOR] Registered rejected approach for mission {mission_id}: '{approach}'")
 
     async def _attach_listeners(self) -> None:
         await self.event_bus.subscribe(self.handle_event)
@@ -53,38 +70,118 @@ class SupervisorEngine:
             if len(self._recent_events) > 100:
                 self._recent_events.pop(0)
 
-            if event.type == EventType.TEST_RESULT:
+            # Update metrics per task
+            if event.task_id:
+                if event.task_id not in self._task_metrics:
+                    self._task_metrics[event.task_id] = {
+                        "iterations": 0,
+                        "tool_calls": 0,
+                        "start_time": time.monotonic()
+                    }
+                if event.type in (EventType.TOOL_CALL, EventType.TOOL_CALLED):
+                    self._task_metrics[event.task_id]["tool_calls"] += 1
+                elif event.type == EventType.TASK_PROGRESS:
+                    self._task_metrics[event.task_id]["iterations"] += 1
+
+            if event.type in (EventType.TEST_RESULT, EventType.TEST_COMPLETED, EventType.TEST_FAILED):
                 self._recent_tests.append(event)
                 if len(self._recent_tests) > 20:
                     self._recent_tests.pop(0)
 
-        # 1. Evaluate tool call safety (prior to/at execution)
-        if event.type == EventType.TOOL_CALL:
+        # 1. Danger detected event from tool jail
+        if event.type == EventType.DANGER_DETECTED:
+            logger.warning(f"[SUPERVISOR] Danger event received: {event.payload}")
+            anomaly = AnomalyReport(
+                anomaly_type="DANGEROUS_ACTION",
+                description=f"Dangerous action detected by tool sandbox: {event.payload.get('error', 'policy violation')}",
+                evidence=event.payload,
+                recommended_action=SupervisorAction.REQUEST_APPROVAL
+            )
+            await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", anomaly)
+            return
+
+        # 2. Evaluate tool call safety (prior to/at execution)
+        if event.type in (EventType.TOOL_CALL, EventType.TOOL_CALLED):
             tool_name = event.payload.get("tool", "")
             args = event.payload.get("arguments", {})
             task = await self.task_manager.get_task(event.mission_id, event.task_id) if event.task_id else None
 
+            # Check if action repeats a rejected strategy
+            args_str = str(args).lower()
+            rejected_list = self._rejected_approaches.get(event.mission_id, [])
+            for rejected in rejected_list:
+                if rejected.lower() in args_str or (rejected.lower() in event.payload.get("target", "").lower()):
+                    logger.warning(f"[SUPERVISOR] Worker repeated rejected strategy: '{rejected}'")
+                    await self.event_bus.publish(
+                        Event(
+                            mission_id=event.mission_id,
+                            task_id=event.task_id,
+                            agent_id=event.agent_id,
+                            type=EventType.RECOVERY_STRATEGY_REPEATED,
+                            severity=EventSeverity.CRITICAL,
+                            payload={
+                                "rejected_strategy": rejected,
+                                "tool": tool_name,
+                                "arguments": args
+                            }
+                        )
+                    )
+                    if event.agent_id in self._registered_workers:
+                        self._registered_workers[event.agent_id].pause()
+                    self.state_machine.set_state(SupervisorState.INVESTIGATING)
+                    return
+
             anomaly = self.rules.evaluate_tool_call(tool_name, args, task=task)
             if anomaly:
                 await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", anomaly)
+                return
 
-        # 2. Evaluate test failures (loop detection)
-        elif event.type == EventType.TEST_RESULT:
+        # 3. Evaluate test failures (loop detection & no progress)
+        elif event.type in (EventType.TEST_RESULT, EventType.TEST_COMPLETED, EventType.TEST_FAILED):
             task = await self.task_manager.get_task(event.mission_id, event.task_id) if event.task_id else None
             if task:
-                anomaly = self.rules.evaluate_test_history(task, self._recent_tests)
-                if anomaly:
-                    await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", anomaly)
+                # A. Check repeated failure loop
+                loop_anomaly = self.rules.evaluate_test_history(task, self._recent_tests)
+                if loop_anomaly:
+                    await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", loop_anomaly)
+                    return
+
+                # B. Check no progress
+                no_progress_anomaly = self.rules.evaluate_no_progress(task, self._recent_tests)
+                if no_progress_anomaly:
+                    await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", no_progress_anomaly)
+                    return
+
+        # 4. Evaluate budget
+        if event.task_id and event.task_id in self._task_metrics:
+            m = self._task_metrics[event.task_id]
+            elapsed = time.monotonic() - m["start_time"]
+            budget_anomaly = self.rules.evaluate_budget(m["iterations"], m["tool_calls"], elapsed)
+            if budget_anomaly:
+                await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", budget_anomaly)
+                return
 
     async def _trigger_anomaly_pipeline(
         self,
         mission_id: str,
         task_id: Optional[str],
         agent_id: str,
-        anomaly: Any
+        anomaly: AnomalyReport
     ) -> None:
         """Trigger supervisor alert, Nemotron reasoning, and intervention."""
-        # A. Emit Alert Event
+        logger.warning(f"[SUPERVISOR] anomaly={anomaly.anomaly_type} agent={agent_id} task={task_id}")
+
+        # Transition state machine to INVESTIGATING or PAUSED
+        if anomaly.anomaly_type == "DANGEROUS_ACTION":
+            self.state_machine.set_state(SupervisorState.PAUSED)
+        else:
+            self.state_machine.set_state(SupervisorState.INVESTIGATING)
+
+        # Pause registered worker immediately if dangerous or loop
+        if agent_id in self._registered_workers:
+            self._registered_workers[agent_id].pause()
+
+        # A. Emit Alert Events
         await self.event_bus.publish(
             Event(
                 mission_id=mission_id,
@@ -100,11 +197,35 @@ class SupervisorEngine:
                 ).model_dump()
             )
         )
+        await self.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task_id,
+                agent_id=agent_id,
+                type=EventType.SUPERVISOR_ANOMALY_DETECTED,
+                severity=EventSeverity.WARNING,
+                payload={
+                    "anomaly_type": anomaly.anomaly_type,
+                    "description": anomaly.description,
+                    "evidence": anomaly.evidence
+                }
+            )
+        )
 
         mission = await self.mission_manager.get_mission(mission_id)
         task = await self.task_manager.get_task(mission_id, task_id) if task_id else None
 
-        # B. Call Layer B Nemotron Reasoning
+        # B. Call Layer B Nemotron Reasoning with failure fallback
+        await self.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task_id,
+                agent_id=agent_id,
+                type=EventType.SUPERVISOR_REASONING_STARTED,
+                payload={"anomaly_type": anomaly.anomaly_type}
+            )
+        )
+
         supervisory_ctx = self.reasoner.build_supervisory_context(
             mission_goal=mission.goal if mission else "Unknown",
             current_task_title=task.title if task else "General",
@@ -115,10 +236,36 @@ class SupervisorEngine:
             anomaly_type=anomaly.anomaly_type
         )
 
-        decision = await self.reasoner.decide(supervisory_ctx)
+        try:
+            decision = await self.reasoner.decide(supervisory_ctx)
+        except Exception as e:
+            logger.error(f"[SUPERVISOR] Model reasoning failed: {e}. Falling back to safe deterministic rule.")
+            decision = SupervisorDecision(
+                action=anomaly.recommended_action,
+                severity="high",
+                confidence=0.85,
+                reason=f"Model fallback: deterministic policy selected {anomaly.recommended_action.value} for {anomaly.anomaly_type}.",
+                target_agent="reviewer_01" if anomaly.recommended_action == SupervisorAction.DELEGATE else None,
+                source="deterministic_fallback"
+            )
+
+        await self.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task_id,
+                agent_id=agent_id,
+                type=EventType.SUPERVISOR_REASONING_COMPLETED,
+                payload={
+                    "decision": decision.action.value,
+                    "confidence": decision.confidence,
+                    "reason": decision.reason
+                }
+            )
+        )
 
         # C. Update State Machine
         self.state_machine.transition(decision.action, anomaly_type=anomaly.anomaly_type)
+        logger.info(f"[SUPERVISOR] action={decision.action.value} state={self.state_machine.current_state.value}")
 
         # D. Emit Decision Event
         await self.event_bus.publish(
@@ -140,11 +287,31 @@ class SupervisorEngine:
             )
         )
 
-        # E. Enforce Decision Intervention
+        # E. Emit Intervention Event
+        await self.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task_id,
+                agent_id="supervisor",
+                type=EventType.SUPERVISOR_INTERVENTION,
+                severity=EventSeverity.WARNING,
+                payload={
+                    "intervention": decision.action.value,
+                    "target_agent": decision.target_agent,
+                    "reason": decision.reason,
+                    "recommended_strategy": decision.recommended_strategy
+                }
+            )
+        )
+
+        # F. Enforce Intervention
         if decision.action == SupervisorAction.PAUSE:
             await self.mission_manager.pause_mission(mission_id, reason=decision.reason)
+            if agent_id in self._registered_workers:
+                self._registered_workers[agent_id].pause()
         elif decision.action == SupervisorAction.DELEGATE:
-            # Pause worker and notify operator/reviewer
+            if agent_id in self._registered_workers:
+                self._registered_workers[agent_id].pause()
             await self.event_bus.publish(
                 Event(
                     mission_id=mission_id,
@@ -154,7 +321,24 @@ class SupervisorEngine:
                     payload={
                         "action": "DELEGATE_TO_REVIEWER",
                         "target_agent": decision.target_agent or "reviewer_01",
-                        "instruction": decision.recommended_strategy
+                        "instruction": decision.recommended_strategy or decision.reason
+                    }
+                )
+            )
+        elif decision.action == SupervisorAction.REQUEST_APPROVAL:
+            if agent_id in self._registered_workers:
+                self._registered_workers[agent_id].pause()
+            await self.event_bus.publish(
+                Event(
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    agent_id="supervisor",
+                    type=EventType.APPROVAL_REQUESTED,
+                    severity=EventSeverity.CRITICAL,
+                    payload={
+                        "action_type": anomaly.anomaly_type,
+                        "reason": decision.reason,
+                        "evidence": anomaly.evidence
                     }
                 )
             )
