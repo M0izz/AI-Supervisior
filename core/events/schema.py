@@ -68,9 +68,15 @@ class EventType(str, Enum):
     # Verification events
     VERIFICATION_STARTED = "verification.started"
     VERIFICATION_RESULT = "verification.result"
+    VERIFICATION_FAILED = "verification.failed"
 
     # Project Memory events
     MEMORY_UPDATED = "memory.updated"
+
+    # Control Plane & Multi-Agent Coordination
+    TASK_REOPENED = "task.reopened"
+    FILE_CONTENTION_DETECTED = "supervisor.file_contention_detected"
+    OPERATOR_TAKE_CONTROL = "operator.take_control"
 
 
 class EventSeverity(str, Enum):

@@ -59,14 +59,42 @@ class ReviewerAgent(BaseAgent):
                 if "\\ufeff" not in res.output and ".lstrip(" not in res.output:
                     evidence.append("src/parser.py does not strip UTF-8 BOM characters from raw input")
 
-        diagnosis = ReviewerDiagnosis(
-            diagnosis="UTF-8 BOM marker (\\ufeff) attached to initial CSV header, causing dict key lookup to fail on 'user_id'",
-            failure_category="ENCODING_MISMATCH",
-            evidence=evidence or ["Repeated failure signature: CSV_HEADER_MISMATCH_BOM"],
-            recommended_strategy="Strip leading UTF-8 BOM before CSV parsing (e.g. raw_content.lstrip('\\ufeff'))",
-            rejected_approach="Direct string header comparison without BOM normalization",
-            confidence=0.96
-        )
+        # Check for specific error signatures in context
+        error_sig = ""
+        for attempt in context_package.previous_attempts:
+            if "error_signature" in attempt:
+                error_sig = attempt["error_signature"]
+                break
+        if not error_sig and context_package.task.get("last_error_signature"):
+            error_sig = context_package.task["last_error_signature"]
+
+        if "BOM" in error_sig or "CSV" in error_sig or any("BOM" in ev for ev in evidence):
+            diagnosis = ReviewerDiagnosis(
+                diagnosis="UTF-8 BOM marker (\ufeff) attached to initial CSV header, causing dict key lookup to fail on 'user_id'",
+                failure_category="ENCODING_MISMATCH",
+                evidence=evidence or ["Repeated failure signature: CSV_HEADER_MISMATCH_BOM"],
+                recommended_strategy="Strip leading UTF-8 BOM before CSV parsing (e.g. raw_content.lstrip('\\ufeff'))",
+                rejected_approach="Direct string header comparison without BOM normalization",
+                confidence=0.96
+            )
+        elif error_sig:
+            diagnosis = ReviewerDiagnosis(
+                diagnosis=f"Investigated failure signature '{error_sig}', but root cause requires human investigation.",
+                failure_category="UNKNOWN",
+                evidence=evidence or [f"Signature: {error_sig}"],
+                recommended_strategy="Escalate to human supervisor for guidance.",
+                rejected_approach=None,
+                confidence=0.35
+            )
+        else:
+            diagnosis = ReviewerDiagnosis(
+                diagnosis="No conclusive failure evidence found during inspection.",
+                failure_category="UNKNOWN",
+                evidence=evidence,
+                recommended_strategy="Request operator guidance or retry with verbose logging.",
+                rejected_approach=None,
+                confidence=0.20
+            )
 
         await self.emit_action(
             mission_id=mission_id,

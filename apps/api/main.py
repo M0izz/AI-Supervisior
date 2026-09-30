@@ -93,6 +93,14 @@ async def get_mission(mission_id: str):
     return mission
 
 
+@app.post("/api/missions/{mission_id}/start")
+async def start_mission(mission_id: str):
+    mission = await app_state.mission_manager.start_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    return {"status": "started", "mission": mission}
+
+
 @app.post("/api/missions/{mission_id}/pause")
 async def pause_mission(mission_id: str, req: PauseMissionRequest):
     mission = await app_state.mission_manager.pause_mission(mission_id, reason=req.reason)
@@ -109,6 +117,76 @@ async def resume_mission(mission_id: str):
     return {"status": "resumed", "mission": mission}
 
 
+@app.post("/api/missions/{mission_id}/recover")
+async def recover_mission(mission_id: str, reason: str = "Initiating supervisory recovery"):
+    mission = await app_state.mission_manager.recover_mission(mission_id, reason=reason)
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    return {"status": "recovering", "mission": mission}
+
+
+@app.post("/api/missions/{mission_id}/verify")
+async def verify_mission(mission_id: str):
+    mission = await app_state.mission_manager.verify_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    return {"status": "verifying", "mission": mission}
+
+
+@app.post("/api/missions/{mission_id}/cancel")
+async def cancel_mission(mission_id: str, reason: str = "Cancelled by operator"):
+    mission = await app_state.mission_manager.cancel_mission(mission_id, reason=reason)
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    return {"status": "cancelled", "mission": mission}
+
+
+# --- Control Room & Telemetry ---
+@app.get("/api/control-room/overview")
+async def get_control_room_overview():
+    missions = await app_state.mission_manager.list_missions()
+    agents = await app_state.agent_registry.list_agents()
+    active_missions = [m for m in missions if m.status in (MissionStatus.RUNNING, MissionStatus.RECOVERING, MissionStatus.VERIFYING)]
+
+    telemetry_overview = await app_state.telemetry.get_global_overview(
+        active_missions_count=len(active_missions),
+        total_agents_count=len(agents)
+    )
+
+    # Build rich mission summary cards
+    mission_cards = []
+    for m in missions:
+        m_telem = await app_state.telemetry.get_mission_telemetry(m.id)
+        graph = await app_state.task_manager.get_graph(m.id)
+        total_tasks = len(graph.tasks) if graph else 0
+        completed_tasks = m_telem.execution.completed_tasks
+        progress = int((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
+
+        mission_cards.append({
+            "id": m.id,
+            "title": m.title,
+            "status": m.status.value,
+            "current_task": m_telem.execution.current_task or m.current_task_id or "Planning",
+            "progress_percentage": progress,
+            "agents_count": len([a for a in agents if a.mission_id == m.id]),
+            "tool_calls": m_telem.execution.tool_calls,
+            "interventions": m_telem.reliability.interventions,
+            "runtime_seconds": m_telem.execution.runtime_seconds,
+            "created_at": m.created_at.isoformat()
+        })
+
+    return {
+        "overview": telemetry_overview.model_dump(),
+        "missions": mission_cards
+    }
+
+
+@app.get("/api/missions/{mission_id}/telemetry")
+async def get_mission_telemetry(mission_id: str):
+    telem = await app_state.telemetry.get_mission_telemetry(mission_id)
+    return telem.model_dump()
+
+
 # --- Tasks & Task Graph ---
 @app.get("/api/missions/{mission_id}/tasks")
 async def get_mission_tasks(mission_id: str):
@@ -121,7 +199,7 @@ async def get_mission_tasks(mission_id: str):
     }
 
 
-# --- Events & Timeline ---
+# --- Events, Timeline & Narrative ---
 @app.get("/api/missions/{mission_id}/events")
 async def get_mission_events(
     mission_id: str,
@@ -136,6 +214,114 @@ async def get_mission_events(
 async def get_mission_timeline(mission_id: str):
     timeline = await app_state.event_store.get_mission_timeline(mission_id)
     return {"timeline": timeline}
+
+
+@app.get("/api/missions/{mission_id}/supervisor-timeline")
+async def get_supervisor_narrative_timeline(mission_id: str):
+    from supervisor.timeline import SupervisorTimelineBuilder
+    events = await app_state.event_store.query(mission_id=mission_id, limit=300)
+    narrative = SupervisorTimelineBuilder.build_narrative_timeline(events)
+    return {
+        "mission_id": mission_id,
+        "timeline": [item.model_dump() for item in narrative],
+        "total_items": len(narrative)
+    }
+
+
+@app.get("/api/missions/{mission_id}/decisions")
+async def get_supervisor_decisions(mission_id: str):
+    events = await app_state.event_store.query(mission_id=mission_id, limit=300)
+    decisions = [
+        e.payload for e in events
+        if e.type in (EventType.SUPERVISOR_DECISION, EventType.SUPERVISOR_INTERVENTION)
+    ]
+    return {"mission_id": mission_id, "decisions": decisions}
+
+
+# --- Agent Registry ---
+@app.get("/api/agents")
+async def list_agents(
+    mission_id: Optional[str] = None,
+    agent_type: Optional[str] = None,
+    status: Optional[str] = None
+):
+    agents = await app_state.agent_registry.list_agents(
+        mission_id=mission_id,
+        agent_type=agent_type,
+        status=status
+    )
+    return {"agents": [a.model_dump() for a in agents], "count": len(agents)}
+
+
+@app.get("/api/agents/{agent_id}")
+async def get_agent(agent_id: str):
+    agent = await app_state.agent_registry.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return agent.model_dump()
+
+
+@app.post("/api/agents/{agent_id}/pause")
+async def pause_agent(agent_id: str):
+    success = await app_state.agent_registry.pause_agent(agent_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return {"status": "paused", "agent_id": agent_id}
+
+
+@app.post("/api/agents/{agent_id}/resume")
+async def resume_agent(agent_id: str):
+    success = await app_state.agent_registry.resume_agent(agent_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return {"status": "resumed", "agent_id": agent_id}
+
+
+# --- Human Approvals & Operator Control ---
+@app.get("/api/approvals")
+async def list_approvals(mission_id: Optional[str] = None):
+    reqs = await app_state.approval_manager.list_requests(mission_id=mission_id)
+    return {"approvals": [r.model_dump() for r in reqs], "count": len(reqs)}
+
+
+@app.post("/api/approvals/{approval_id}/resolve")
+async def resolve_approval(approval_id: str, payload: Dict[str, Any]):
+    from supervisor.approvals import ResolveApprovalPayload, ApprovalResolutionAction
+    action_str = payload.get("action", "DENY")
+    try:
+        act = ApprovalResolutionAction(action_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid action '{action_str}'")
+
+    res = await app_state.approval_manager.resolve_request(
+        approval_id,
+        ResolveApprovalPayload(
+            action=act,
+            operator=payload.get("operator", "human_operator"),
+            feedback=payload.get("feedback")
+        )
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail=f"Approval request {approval_id} not found")
+    return {"status": "resolved", "approval": res.model_dump()}
+
+
+@app.post("/api/missions/{mission_id}/take-control")
+async def take_control(mission_id: str, operator: str = "human_operator", reason: str = "Operator taking manual control"):
+    mission = await app_state.mission_manager.pause_mission(mission_id, reason=f"Manual control taken by {operator}: {reason}")
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+
+    await app_state.event_bus.publish(
+        Event(
+            mission_id=mission_id,
+            agent_id=operator,
+            type=EventType.OPERATOR_TAKE_CONTROL,
+            severity=EventSeverity.WARNING,
+            payload={"operator": operator, "reason": reason}
+        )
+    )
+    return {"status": "operator_in_control", "mission": mission}
 
 
 # --- Policies ---

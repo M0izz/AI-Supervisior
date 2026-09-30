@@ -153,6 +153,40 @@ class TaskManager:
         )
         return task
 
+    async def reopen_task(
+        self,
+        mission_id: str,
+        task_id: str,
+        reason: str = "Verification failed - worker claim rejected"
+    ) -> Optional[Task]:
+        async with self._lock:
+            graph = self._graphs.get(mission_id)
+            if not graph:
+                return None
+            task = graph.get_task(task_id)
+            if not task:
+                return None
+            task.status = TaskStatus.IN_PROGRESS
+            task.failures += 1
+            task.metadata["reopened"] = True
+            task.metadata["reopen_reason"] = reason
+
+        await self._event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task_id,
+                agent_id=task.assigned_agent_id,
+                type=EventType.TASK_REOPENED,
+                severity=EventSeverity.WARNING,
+                payload={
+                    "task_id": task_id,
+                    "reason": reason,
+                    "failures": task.failures
+                }
+            )
+        )
+        return task
+
     async def record_file_modification(
         self,
         mission_id: str,

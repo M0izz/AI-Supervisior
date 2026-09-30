@@ -7,6 +7,12 @@ from core.tasks.manager import TaskManager
 from core.policies.models import PolicyConfig
 
 
+from agents.registry import AgentRegistry
+from supervisor.telemetry import TelemetryTracker
+from supervisor.approvals import ApprovalManager
+from supervisor.engine import SupervisorEngine
+
+
 class AppState:
     """Singleton application state holding core services."""
     def __init__(self):
@@ -19,6 +25,20 @@ class AppState:
 
         # Wire event store to automatically record all published events
         self.event_bus._global_subscribers.append(self.event_store.append)
+
+        # Control Plane Subsystems
+        self.agent_registry = AgentRegistry(event_bus=self.event_bus)
+        self.telemetry = TelemetryTracker(event_bus=self.event_bus)
+        self.approval_manager = ApprovalManager(event_bus=self.event_bus)
+        self.supervisor_engine = SupervisorEngine(
+            event_bus=self.event_bus,
+            mission_manager=self.mission_manager,
+            task_manager=self.task_manager,
+            policy=self.policy_config,
+            registry=self.agent_registry,
+            telemetry=self.telemetry,
+            approval_manager=self.approval_manager
+        )
 
 
 # Global instance

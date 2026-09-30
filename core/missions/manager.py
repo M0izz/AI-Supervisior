@@ -96,11 +96,29 @@ class MissionManager:
         )
         return mission
 
+    async def start_mission(self, mission_id: str) -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.RUNNING, reason="Mission started")
+
     async def pause_mission(self, mission_id: str, reason: str) -> Optional[Mission]:
         return await self.update_status(mission_id, MissionStatus.PAUSED, reason=reason)
 
     async def resume_mission(self, mission_id: str) -> Optional[Mission]:
         return await self.update_status(mission_id, MissionStatus.RUNNING, reason="Resumed by operator or supervisor")
+
+    async def recover_mission(self, mission_id: str, reason: str = "Initiating recovery") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.RECOVERING, reason=reason)
+
+    async def verify_mission(self, mission_id: str, reason: str = "Initiating verification") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.VERIFYING, reason=reason)
+
+    async def block_mission(self, mission_id: str, reason: str = "Mission blocked") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.BLOCKED, reason=reason)
+
+    async def fail_mission(self, mission_id: str, reason: str = "Mission failed") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.FAILED, reason=reason)
+
+    async def cancel_mission(self, mission_id: str, reason: str = "Mission cancelled by operator") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.CANCELLED, reason=reason)
 
     async def complete_mission(self, mission_id: str, summary: Optional[str] = None) -> Optional[Mission]:
         return await self.update_status(mission_id, MissionStatus.COMPLETED, reason=summary or "Verified and completed")
