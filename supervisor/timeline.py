@@ -145,6 +145,47 @@ class SupervisorTimelineBuilder:
                 detail = "Verifier found failing tests; task reopened"
                 severity = "critical"
 
+            # Parse CI / Jenkins Events
+            elif e.type == EventType.CI_BUILD_TRIGGERED:
+                actor = "JENKINS"
+                title = f"CI Build Queued: {e.payload.get('job_name', 'build')}"
+                detail = f"Build ID: {e.payload.get('build_id', 'pending')}"
+                severity = "info"
+            elif e.type == EventType.CI_BUILD_STARTED:
+                actor = "JENKINS"
+                title = f"CI Build #{e.payload.get('build_id')} Started"
+                detail = f"Job {e.payload.get('job_name')} running independent pipeline"
+                severity = "info"
+            elif e.type == EventType.CI_BUILD_COMPLETED:
+                actor = "JENKINS"
+                passed = e.payload.get("tests_passed", 0)
+                title = f"CI Build #{e.payload.get('build_id')} Passed ({passed} passed)"
+                detail = "Independent CI verification succeeded; handoff to Verifier"
+                severity = "success"
+            elif e.type == EventType.CI_BUILD_FAILED:
+                actor = "JENKINS"
+                failed = e.payload.get("tests_failed", 0)
+                title = f"CI Build #{e.payload.get('build_id')} Failed ({failed} failed)"
+                detail = e.payload.get("error_signature") or e.payload.get("details")
+                severity = "critical"
+            elif e.type == EventType.CI_TEST_RESULTS_AVAILABLE:
+                actor = "JENKINS"
+                passed = e.payload.get("tests_passed", 0)
+                failed = e.payload.get("tests_failed", 0)
+                title = f"CI Test Results: {passed} passed / {failed} failed"
+                detail = e.payload.get("error_signature") or "Test report processed"
+                severity = "success" if failed == 0 else "critical"
+            elif e.type == EventType.CI_UNAVAILABLE:
+                actor = "JENKINS"
+                title = "CI Server Unavailable"
+                detail = e.payload.get("error") or "Cannot connect to Jenkins infrastructure"
+                severity = "critical"
+            elif e.type == EventType.CI_TIMEOUT:
+                actor = "JENKINS"
+                title = "CI Verification Timeout"
+                detail = e.payload.get("error") or "Timed out polling Jenkins build"
+                severity = "critical"
+
             # Parse Human Approval & Operator Take Control
             elif e.type == EventType.APPROVAL_REQUESTED:
                 actor = "SUPERVISOR"
@@ -184,7 +225,7 @@ class SupervisorTimelineBuilder:
 
             timeline.append(
                 TimelineItem(
-                    id=e.id,
+                    id=getattr(e, "event_id", getattr(e, "id", "evt")),
                     timestamp=time_str,
                     actor=actor,
                     title=title,

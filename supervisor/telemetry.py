@@ -165,7 +165,7 @@ class TelemetryTracker:
                 m.reliability.interventions += 1
             elif event.type == EventType.RECOVERY_STARTED:
                 m.reliability.recovery_attempts += 1
-            elif event.type == EventType.VERIFICATION_FAILED:
+            elif event.type in (EventType.VERIFICATION_FAILED, EventType.CI_BUILD_FAILED):
                 m.reliability.verification_failures += 1
                 m.reliability.failure_count += 1
 

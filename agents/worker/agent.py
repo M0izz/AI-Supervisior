@@ -60,6 +60,19 @@ class WorkerAgent(BaseAgent):
         self.state = WorkerState.FAILED
         self._pause_event.set()
 
+    async def _ask_model_for_next_action(self, context_package: AgentContextPackage, history: List[Dict[str, Any]]) -> WorkerAction:
+        res = self.decision_callback(context_package, history)
+        if asyncio.iscoroutine(res):
+            return await res
+        return res
+
+    async def run_task(self, mission_id: str, task: Dict[str, Any]) -> Dict[str, Any]:
+        context = AgentContextPackage(mission_id=mission_id, objective=task.get("title", ""), task=task)
+        res = await self.run(context)
+        if res.get("status") == "timeout":
+            return {"status": "FAILED", "error": f"Execution timed out after {self.timeout_seconds}s."}
+        return res
+
     async def run(self, context_package: AgentContextPackage) -> Dict[str, Any]:
         """
         Execute the autonomous worker loop against the sandboxed workspace.
@@ -131,7 +144,12 @@ class WorkerAgent(BaseAgent):
 
             # 1. Ask decision provider for next action
             try:
-                worker_action: WorkerAction = self.decision_callback(context_package, self._execution_history)
+                # Support both async and sync callbacks or mocked methods
+                res = self._ask_model_for_next_action(context_package, self._execution_history)
+                if asyncio.iscoroutine(res):
+                    worker_action: WorkerAction = await res
+                else:
+                    worker_action: WorkerAction = res
             except Exception as e:
                 logger.error(f"Error formulating worker action: {e}")
                 worker_action = WorkerAction(

@@ -1,29 +1,35 @@
 import asyncio
 import re
 from pathlib import Path
+from typing import Optional
 from tools.base import BaseTool, ToolResult
+from execution.manager import ExecutionManager
+from execution.models import ExecutionRequest, ExecutionStatus
 
 
 class RunTestsTool(BaseTool):
     name = "run_tests"
     description = "Run test suite and parse structured test results and failure signatures."
 
-    async def execute(self, test_command: str = "python -m pytest tests/ -v") -> ToolResult:
-        try:
-            process = await asyncio.create_subprocess_shell(
-                test_command,
-                cwd=str(self.workspace_root),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=45)
-            out_str = stdout.decode("utf-8", errors="replace")
-            err_str = stderr.decode("utf-8", errors="replace")
+    def __init__(self, workspace_root: Path, execution_manager: Optional[ExecutionManager] = None):
+        super().__init__(workspace_root)
+        self.execution_manager = execution_manager or ExecutionManager()
 
+    async def execute(self, test_command: str = "python -m pytest tests/ -v", timeout: int = 45) -> ToolResult:
+        try:
+            req = ExecutionRequest(
+                command=test_command,
+                workspace_root=self.workspace_root,
+                timeout_seconds=timeout
+            )
+            res = await self.execution_manager.execute(req)
+
+            out_str = res.stdout or ""
+            err_str = res.stderr or ""
             combined = out_str + "\n" + err_str
             passed, failed, error_sig = self._parse_test_summary(combined)
 
-            success = (process.returncode == 0) and (failed == 0)
+            success = (res.exit_code == 0) and (failed == 0) and (passed > 0)
             return ToolResult(
                 success=success,
                 output=out_str,
@@ -32,11 +38,17 @@ class RunTestsTool(BaseTool):
                     "passed": passed,
                     "failed": failed,
                     "error_signature": error_sig,
-                    "returncode": process.returncode
+                    "returncode": res.exit_code,
+                    "backend": res.backend,
+                    "container_id": res.container.container_id if res.container else None
                 }
             )
         except Exception as e:
-            return ToolResult(success=False, error=str(e), metadata={"passed": 0, "failed": 1, "error_signature": "TEST_RUNNER_EXCEPTION"})
+            return ToolResult(
+                success=False,
+                error=str(e),
+                metadata={"passed": 0, "failed": 1, "error_signature": "TEST_RUNNER_EXCEPTION"}
+            )
 
     def _parse_test_summary(self, text: str):
         passed = 0

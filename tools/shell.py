@@ -1,8 +1,10 @@
 import asyncio
 import os
-import subprocess
 from pathlib import Path
+from typing import Optional
 from tools.base import BaseTool, ToolResult
+from execution.manager import ExecutionManager
+from execution.models import ExecutionRequest, ExecutionStatus
 
 
 class RunCommandTool(BaseTool):
@@ -19,6 +21,10 @@ class RunCommandTool(BaseTool):
         ":(){ :|:& };:"
     )
 
+    def __init__(self, workspace_root: Path, execution_manager: Optional[ExecutionManager] = None):
+        super().__init__(workspace_root)
+        self.execution_manager = execution_manager or ExecutionManager()
+
     def validate_command(self, command: str) -> None:
         cmd_stripped = command.strip()
         cmd_lower = cmd_stripped.lower()
@@ -30,7 +36,6 @@ class RunCommandTool(BaseTool):
 
         # 2. Check whitelist prefixes
         first_token = cmd_stripped.split()[0].lower() if cmd_stripped.split() else ""
-        # Handle python -m pytest or similar
         if not any(cmd_lower.startswith(prefix) for prefix in self.ALLOWED_COMMAND_PREFIXES):
             raise PermissionError(f"Command '{first_token}' is not in allowed sandbox commands {self.ALLOWED_COMMAND_PREFIXES}.")
 
@@ -38,26 +43,35 @@ class RunCommandTool(BaseTool):
         try:
             self.validate_command(command)
 
-            process = await asyncio.create_subprocess_shell(
-                command,
-                cwd=str(self.workspace_root),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            req = ExecutionRequest(
+                command=command,
+                workspace_root=self.workspace_root,
+                timeout_seconds=timeout
             )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-            out_str = stdout.decode("utf-8", errors="replace")
-            err_str = stderr.decode("utf-8", errors="replace")
+            res = await self.execution_manager.execute(req)
 
-            success = process.returncode == 0
+            if res.status == ExecutionStatus.BLOCKED or res.metadata.get("danger_detected"):
+                return ToolResult(success=False, error=res.error, metadata={"danger_detected": True})
+
+            if res.status == ExecutionStatus.TIMEOUT:
+                return ToolResult(success=False, error=f"Command timed out after {timeout} seconds", metadata={"timeout": True})
+
+            if res.status == ExecutionStatus.ERROR:
+                return ToolResult(success=False, error=res.error, metadata={"error": True})
+
+            success = res.exit_code == 0
             return ToolResult(
                 success=success,
-                output=out_str[:2000] if out_str else None,
-                error=err_str[:1000] if not success else None,
-                metadata={"returncode": process.returncode}
+                output=res.stdout[:2000] if res.stdout else None,
+                error=res.stderr[:1000] if (res.stderr and not success) else None,
+                metadata={
+                    "returncode": res.exit_code,
+                    "backend": res.backend,
+                    "container_id": res.container.container_id if res.container else None
+                }
             )
-        except asyncio.TimeoutError:
-            return ToolResult(success=False, error=f"Command timed out after {timeout} seconds")
         except PermissionError as pe:
             return ToolResult(success=False, error=str(pe), metadata={"danger_detected": True})
         except Exception as e:
             return ToolResult(success=False, error=str(e))
+

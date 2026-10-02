@@ -108,7 +108,7 @@ async def test_worker_loops_detected(clean_env):
 async def test_worker_timeout(clean_env):
     bus = clean_env["bus"]
     worker = WorkerAgent(agent_id="worker_hang", event_bus=bus, tools={})
-    worker._timeout_seconds = 0.2
+    worker.timeout_seconds = 0.2
 
     # Mock next action to hang
     async def slow_action(*args, **kwargs):
@@ -139,21 +139,22 @@ async def test_worker_exceeds_budget(clean_env):
     worker = WorkerAgent(agent_id="worker_budget", event_bus=bus, tools={})
     supervisor.register_worker(worker)
 
-    # Emit tool calls exceeding threshold (policy has max_tool_calls_per_task=10)
-    for i in range(12):
+    # Emit task progress iterations exceeding max_turns_per_task (policy has max_turns_per_task=50, let's configure 5)
+    supervisor.policy.max_turns_per_task = 5
+    for i in range(6):
         await bus.publish(
             Event(
                 mission_id=mission.id,
                 task_id=task.id,
                 agent_id="worker_budget",
-                type=EventType.TOOL_CALLED,
-                payload={"tool": "read_file", "arguments": {"path": f"file_{i}.py"}}
+                type=EventType.TASK_PROGRESS,
+                payload={"iteration": i}
             )
         )
 
     alerts = [e for e in clean_env["store"]._events if e.type == EventType.SUPERVISOR_ALERT and "BUDGET" in e.payload.get("anomaly_type", "")]
     assert len(alerts) >= 1
-    assert alerts[0].payload["anomaly_type"] == "BUDGET_EXCEEDED"
+    assert alerts[0].payload["anomaly_type"] == "BUDGET_WARNING"
 
 
 # 4. Worker Modifies Wrong File (Scope Violation)

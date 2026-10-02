@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -83,12 +84,16 @@ async def run_killer_demo():
         reasoner=SupervisoryReasoner(provider=MockReasoningProvider())
     )
 
-    tools = get_default_tools(workspace_root)
+    backend = os.getenv("EXECUTION_BACKEND", "local").lower()
+    from execution.manager import ExecutionManager
+    exec_mgr = ExecutionManager(event_bus=event_bus, default_backend=backend, allow_fallback=True)
+
+    tools = get_default_tools(workspace_root, execution_manager=exec_mgr)
     worker = WorkerAgent(agent_id="worker_01", event_bus=event_bus, tools=tools)
     supervisor.register_worker(worker)
 
     # 2. Start Mission
-    console.print("[bold green]> [0:00] MISSION INITIALIZATION[/bold green]")
+    console.print(f"[bold green]> [0:00] MISSION INITIALIZATION (Backend: {backend.upper()})[/bold green]")
     mission = await mission_mgr.create_mission(
         title="Add CSV Import Validation",
         goal="Parse and validate CSV files with UTF-8 support without altering DB schema",

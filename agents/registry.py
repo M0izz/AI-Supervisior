@@ -154,33 +154,39 @@ class AgentRegistry:
         Detects if another agent is already modifying the target file.
         Returns the conflicting agent_id if contention is detected, else None.
         """
+        existing_holder = None
+        contention_detected = False
         async with self._lock:
             existing_holder = self._file_locks.get(file_path)
             if existing_holder and existing_holder != agent_id:
-                logger.warning(
-                    f"[REGISTRY] File contention detected: '{file_path}' active by {existing_holder}, requested by {agent_id}"
-                )
-                if self._event_bus:
-                    await self._event_bus.publish(
-                        Event(
-                            mission_id=mission_id,
-                            agent_id=agent_id,
-                            type=EventType.FILE_CONTENTION_DETECTED,
-                            severity=EventSeverity.WARNING,
-                            payload={
-                                "file_path": file_path,
-                                "current_holder": existing_holder,
-                                "requesting_agent": agent_id,
-                                "action": "blocked"
-                            }
-                        )
+                contention_detected = True
+            else:
+                self._file_locks[file_path] = agent_id
+                record = self._records.get(agent_id)
+                if record and file_path not in record.active_files:
+                    record.active_files.append(file_path)
+
+        if contention_detected:
+            logger.warning(
+                f"[REGISTRY] File contention detected: '{file_path}' active by {existing_holder}, requested by {agent_id}"
+            )
+            if self._event_bus:
+                await self._event_bus.publish(
+                    Event(
+                        mission_id=mission_id,
+                        agent_id=agent_id,
+                        type=EventType.FILE_CONTENTION_DETECTED,
+                        severity=EventSeverity.WARNING,
+                        payload={
+                            "file_path": file_path,
+                            "current_holder": existing_holder,
+                            "requesting_agent": agent_id,
+                            "action": "blocked"
+                        }
                     )
-                return existing_holder
-            self._file_locks[file_path] = agent_id
-            record = self._records.get(agent_id)
-            if record and file_path not in record.active_files:
-                record.active_files.append(file_path)
-            return None
+                )
+            return existing_holder
+        return None
 
     async def release_file(self, agent_id: str, file_path: str) -> None:
         async with self._lock:

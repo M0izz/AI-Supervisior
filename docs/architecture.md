@@ -74,3 +74,22 @@ The **Verifier** independently executes:
 - Lint and type checks
 - Git diff inspection against approved scope
 Only when empirical evidence passes does the Supervisor emit `MISSION_COMPLETED`.
+
+## 5. Execution Layer: Local & Docker Container Isolation (Phase 5)
+
+All worker and tool executions pass through the unified `ExecutionManager`:
+- **LocalExecutionProvider**: Fast developer mode using WorkspaceJail and command prefix whitelisting.
+- **DockerExecutionProvider**: Container sandbox using ephemeral Docker containers with disabled networking (`network_mode="none"`), stripped capabilities (`cap_drop=["ALL"]`), process limits, and memory/CPU quotas.
+- **Safety Boundary**: Only the task workspace is mounted to `/workspace`; host roots, home directories, and the Docker socket are strictly rejected.
+- **Observable Lifecycle**: Container lifecycle events (`container.created`, `container.started`, `container.destroyed`, `container.limit_exceeded`) stream to the EventBus.
+
+## 6. Independent CI/CD Verification Layer: Jenkins (Phase 6)
+
+Worker completion is strictly decoupled from verification.
+- **External CI Gate**: Jenkins operates as an external, independent verification authority that checks out and builds the workspace code.
+- **Structured Test Evidence**: Consumes JUnit XML test reports, publishing structured telemetry (`tests_passed`, `tests_failed`, `error_signature`) to the `EventBus`.
+- **False Completion Interception**: When a worker claims completion but Jenkins finds test failures, the Supervisor flags a `CI_FAILURE` anomaly, reopens the task, pauses the worker, and invokes Nemotron reasoning for targeted recovery.
+- **Clean Provider Abstraction**: Supports production `JenkinsHttpClient` with CSRF and queue resolution, as well as a deterministic `MockJenkinsProvider` for offline testing.
+- **Verifier Handoff**: CI success alone does not auto-complete the mission; it hands off to the independent `VerifierAgent` for final empirical confirmation.
+
+

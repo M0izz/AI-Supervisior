@@ -73,6 +73,24 @@ class MockReasoningProvider(BaseReasoningProvider):
                 recommended_action="Pause worker and require scope validation.",
                 target_agent=None
             )
+        elif anomaly in ("CI_FAILURE", "UNVERIFIED_COMPLETION"):
+            return ReasoningDecision(
+                decision="DELEGATE",
+                severity="medium",
+                confidence=0.94,
+                reason=f"Independent CI evidence contradicts worker completion: '{error_sig}'.",
+                recommended_action="Delegate diagnosis to reviewer agent to inspect UTF-8 BOM encoding issues.",
+                target_agent="reviewer_01"
+            )
+        elif anomaly in ("CI_UNAVAILABLE", "CI_TIMEOUT"):
+            return ReasoningDecision(
+                decision="PAUSE",
+                severity="high",
+                confidence=0.96,
+                reason="Independent CI verification infrastructure is unavailable or timed out; task cannot be verified.",
+                recommended_action="Pause task and alert operator for manual intervention or infrastructure retry.",
+                target_agent=None
+            )
         elif anomaly == "BUDGET_WARNING":
             return ReasoningDecision(
                 decision="PAUSE",

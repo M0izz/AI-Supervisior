@@ -78,6 +78,25 @@ class EventType(str, Enum):
     FILE_CONTENTION_DETECTED = "supervisor.file_contention_detected"
     OPERATOR_TAKE_CONTROL = "operator.take_control"
 
+    # Execution & Container Isolation events
+    EXECUTION_STARTED = "execution.started"
+    EXECUTION_COMPLETED = "execution.completed"
+    EXECUTION_FAILED = "execution.failed"
+    CONTAINER_CREATED = "container.created"
+    CONTAINER_STARTED = "container.started"
+    CONTAINER_STOPPED = "container.stopped"
+    CONTAINER_DESTROYED = "container.destroyed"
+    CONTAINER_LIMIT_EXCEEDED = "container.limit_exceeded"
+
+    # Phase 6: CI / Jenkins Independent Verification events
+    CI_BUILD_TRIGGERED = "ci.build_triggered"
+    CI_BUILD_STARTED = "ci.build_started"
+    CI_BUILD_COMPLETED = "ci.build_completed"
+    CI_BUILD_FAILED = "ci.build_failed"
+    CI_TEST_RESULTS_AVAILABLE = "ci.test_results_available"
+    CI_UNAVAILABLE = "ci.unavailable"
+    CI_TIMEOUT = "ci.timeout"
+
 
 class EventSeverity(str, Enum):
     INFO = "info"
@@ -92,7 +111,7 @@ def generate_event_id(prefix: str = "evt") -> str:
 
 class Event(BaseModel):
     event_id: str = Field(default_factory=generate_event_id)
-    mission_id: str
+    mission_id: str = "default"
     task_id: Optional[str] = None
     agent_id: Optional[str] = None
     type: EventType
@@ -101,6 +120,26 @@ class Event(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @property
+    def id(self) -> str:
+        return self.event_id
+
+
+class CIEventPayload(BaseModel):
+    mission_id: str
+    task_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    build_id: Optional[str] = None
+    job_name: Optional[str] = None
+    status: str
+    result: Optional[str] = None
+    duration_ms: Optional[float] = None
+    tests_passed: Optional[int] = None
+    tests_failed: Optional[int] = None
+    tests_skipped: Optional[int] = None
+    error_signature: Optional[str] = None
+    details: Optional[str] = None
 
 
 # Typed event helpers for easy creation

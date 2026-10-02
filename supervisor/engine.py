@@ -42,7 +42,11 @@ class SupervisorEngine:
         self.task_manager = task_manager
         self.policy = policy or PolicyConfig()
         self.rules = DeterministicRuleEngine(policy=self.policy)
-        self.reasoner = reasoner or SupervisoryReasoner()
+        from integrations.nebius.provider import BaseReasoningProvider
+        if isinstance(reasoner, BaseReasoningProvider):
+            self.reasoner = SupervisoryReasoner(provider=reasoner)
+        else:
+            self.reasoner = reasoner or SupervisoryReasoner()
         self.state_machine = SupervisorStateMachine()
         self.registry = registry
         self.telemetry = telemetry
@@ -53,6 +57,7 @@ class SupervisorEngine:
         self._registered_workers: Dict[str, Any] = {}
         self._rejected_approaches: Dict[str, List[str]] = {}
         self._task_metrics: Dict[str, Dict[str, Any]] = {}  # task_id -> {iterations, tool_calls, start_time}
+        self._ci_alerted_builds: set = set()
         self._lock = asyncio.Lock()
 
         # Subscribe to EventBus
@@ -92,6 +97,8 @@ class SupervisorEngine:
                     self._task_metrics[event.task_id]["tool_calls"] += 1
                 elif event.type == EventType.TASK_PROGRESS:
                     self._task_metrics[event.task_id]["iterations"] += 1
+                    if event.agent_id:
+                        self._task_metrics[event.task_id]["worker_id"] = event.agent_id
 
             if event.type in (EventType.TEST_RESULT, EventType.TEST_COMPLETED, EventType.TEST_FAILED):
                 self._recent_tests.append(event)
@@ -213,9 +220,17 @@ class SupervisorEngine:
                         event.task_id,
                         reason=f"Verifier rejected completion: {failed} tests failed"
                     )
-                worker_id = event.agent_id or "worker_01"
+                task = await self.task_manager.get_task(event.mission_id, event.task_id) if event.task_id else None
+                worker_id = (task.assigned_agent_id if task else None) or self._task_metrics.get(event.task_id, {}).get("worker_id")
+                if not worker_id and self._registered_workers:
+                    worker_id = next(iter(self._registered_workers.keys()))
+                worker_id = worker_id or "worker_01"
+
+                # Actively pause registered worker
                 if worker_id in self._registered_workers:
                     self._registered_workers[worker_id].pause()
+                for w in self._registered_workers.values():
+                    w.pause()
 
                 anomaly = AnomalyReport(
                     anomaly_type="VERIFICATION_FAILED",
@@ -226,12 +241,99 @@ class SupervisorEngine:
                 await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, worker_id, anomaly)
                 return
 
-        # 6. Evaluate budget
-        if event.task_id and event.task_id in self._task_metrics:
+        # 5b. Evaluate independent CI / Jenkins results (detect worker false claims via CI)
+        elif event.type in (EventType.CI_BUILD_FAILED, EventType.CI_TEST_RESULTS_AVAILABLE):
+            failed = event.payload.get("tests_failed", 0)
+            result = event.payload.get("result", "")
+            build_id = str(event.payload.get("build_id", ""))
+            build_key = f"{event.task_id}_{build_id}" if build_id else f"{event.task_id}_anon"
+            if (failed > 0 or result in ("FAILURE", "UNSTABLE")) and build_key not in self._ci_alerted_builds:
+                self._ci_alerted_builds.add(build_key)
+                logger.warning(f"[SUPERVISOR] Independent CI verification FAILED for task {event.task_id}: {failed} failures.")
+                if event.mission_id and event.task_id:
+                    await self.task_manager.reopen_task(
+                        event.mission_id,
+                        event.task_id,
+                        reason=f"Jenkins CI rejected completion: {failed} tests failed"
+                    )
+                task = await self.task_manager.get_task(event.mission_id, event.task_id) if event.task_id else None
+                worker_id = (task.assigned_agent_id if task else None) or self._task_metrics.get(event.task_id, {}).get("worker_id")
+                if not worker_id and self._registered_workers:
+                    worker_id = next(iter(self._registered_workers.keys()))
+                worker_id = worker_id or "worker_01"
+
+                # Actively pause registered worker
+                if worker_id in self._registered_workers:
+                    self._registered_workers[worker_id].pause()
+                for w in self._registered_workers.values():
+                    w.pause()
+
+                anomaly = AnomalyReport(
+                    anomaly_type="CI_FAILURE",
+                    description=f"Worker claimed task was done, but independent Jenkins CI found {failed} failing tests.",
+                    evidence=event.payload,
+                    recommended_action=SupervisorAction.DELEGATE
+                )
+                await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, worker_id, anomaly)
+                return
+
+        elif event.type == EventType.CI_UNAVAILABLE:
+            logger.warning(f"[SUPERVISOR] Jenkins CI is unavailable for mission {event.mission_id}.")
+            task = await self.task_manager.get_task(event.mission_id, event.task_id) if event.task_id else None
+            worker_id = (task.assigned_agent_id if task else None) or self._task_metrics.get(event.task_id, {}).get("worker_id")
+            if not worker_id and self._registered_workers:
+                worker_id = next(iter(self._registered_workers.keys()))
+            worker_id = worker_id or "worker_01"
+
+            if worker_id in self._registered_workers:
+                self._registered_workers[worker_id].pause()
+            for w in self._registered_workers.values():
+                w.pause()
+
+            anomaly = AnomalyReport(
+                anomaly_type="CI_UNAVAILABLE",
+                description=f"Independent Jenkins CI is unavailable: {event.payload.get('error', 'connection refused')}. Task remains unverified.",
+                evidence=event.payload,
+                recommended_action=SupervisorAction.PAUSE
+            )
+            await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, worker_id, anomaly)
+            return
+
+        elif event.type == EventType.CI_TIMEOUT:
+            logger.warning(f"[SUPERVISOR] Jenkins CI build timed out for task {event.task_id}.")
+            task = await self.task_manager.get_task(event.mission_id, event.task_id) if event.task_id else None
+            worker_id = (task.assigned_agent_id if task else None) or self._task_metrics.get(event.task_id, {}).get("worker_id")
+            if not worker_id and self._registered_workers:
+                worker_id = next(iter(self._registered_workers.keys()))
+            worker_id = worker_id or "worker_01"
+
+            if worker_id in self._registered_workers:
+                self._registered_workers[worker_id].pause()
+            for w in self._registered_workers.values():
+                w.pause()
+
+            anomaly = AnomalyReport(
+                anomaly_type="CI_TIMEOUT",
+                description="Jenkins CI verification timed out. Task remains unverified.",
+                evidence=event.payload,
+                recommended_action=SupervisorAction.PAUSE
+            )
+            await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, worker_id, anomaly)
+            return
+
+        elif event.type == EventType.CI_BUILD_COMPLETED:
+            passed = event.payload.get("tests_passed", 0)
+            failed = event.payload.get("tests_failed", 0)
+            if failed == 0 and passed > 0:
+                logger.info(f"[SUPERVISOR] Independent Jenkins CI passed ({passed} tests passed). Handing off to Verifier.")
+
+        # 6. Evaluate budget (only on progress or tool calls, avoiding supervisor event recursion)
+        if event.type in (EventType.TASK_PROGRESS, EventType.TOOL_CALL, EventType.TOOL_CALLED) and event.task_id and event.task_id in self._task_metrics:
             m = self._task_metrics[event.task_id]
             elapsed = time.monotonic() - m["start_time"]
             budget_anomaly = self.rules.evaluate_budget(m["iterations"], m["tool_calls"], elapsed)
-            if budget_anomaly:
+            if budget_anomaly and not m.get("budget_alerted"):
+                m["budget_alerted"] = True
                 await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", budget_anomaly)
                 return
 
