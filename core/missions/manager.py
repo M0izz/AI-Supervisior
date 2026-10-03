@@ -12,8 +12,9 @@ logger = logging.getLogger("supervisor.missions")
 class MissionManager:
     """Manages mission lifecycles, states, and event notifications."""
 
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus, repository: Optional[Any] = None):
         self._event_bus = event_bus
+        self._repository = repository
         self._missions: Dict[str, Mission] = {}
         self._lock = asyncio.Lock()
 
@@ -33,6 +34,12 @@ class MissionManager:
             )
             self._missions[mission.id] = mission
 
+            if self._repository:
+                try:
+                    await self._repository.save(mission)
+                except Exception as e:
+                    logger.warning(f"Failed to persist mission {mission.id} to repository: {e}")
+
         await self._event_bus.publish(
             Event(
                 mission_id=mission.id,
@@ -49,10 +56,30 @@ class MissionManager:
 
     async def get_mission(self, mission_id: str) -> Optional[Mission]:
         async with self._lock:
-            return self._missions.get(mission_id)
+            m = self._missions.get(mission_id)
+            if m:
+                return m
+            if self._repository:
+                try:
+                    data = await self._repository.get(mission_id)
+                    if data:
+                        m = Mission.model_validate(data)
+                        self._missions[m.id] = m
+                        return m
+                except Exception as e:
+                    logger.warning(f"Failed to load mission {mission_id} from repository: {e}")
+            return None
 
     async def list_missions(self) -> List[Mission]:
         async with self._lock:
+            if not self._missions and self._repository:
+                try:
+                    data_list = await self._repository.list_all()
+                    for d in data_list:
+                        m = Mission.model_validate(d)
+                        self._missions[m.id] = m
+                except Exception as e:
+                    logger.warning(f"Failed to load missions from repository: {e}")
             return list(self._missions.values())
 
     def is_valid_transition(self, current: MissionStatus, target: MissionStatus) -> bool:
@@ -71,6 +98,12 @@ class MissionManager:
                 mission.assigned_agents.append(agent_id)
             mission.active_agent_id = agent_id
             mission.updated_at = datetime.now(timezone.utc)
+
+            if self._repository:
+                try:
+                    await self._repository.save(mission)
+                except Exception as e:
+                    logger.warning(f"Failed to update mission {mission_id} agent assignment in repository: {e}")
             return mission
 
     async def update_status(
@@ -99,6 +132,12 @@ class MissionManager:
                 mission.metrics.started_at = mission.updated_at
             elif new_status in (MissionStatus.COMPLETED, MissionStatus.FAILED, MissionStatus.CANCELLED):
                 mission.metrics.completed_at = mission.updated_at
+
+            if self._repository:
+                try:
+                    await self._repository.save(mission)
+                except Exception as e:
+                    logger.warning(f"Failed to persist mission status change to repository: {e}")
 
         # Determine severity and event type
         severity = EventSeverity.INFO

@@ -118,3 +118,48 @@ Phase 8 hardens the control plane against realistic autonomous-agent failure mod
   - *Mission Segregation*: Complete event, state machine, and lock isolation ensures Mission A never contaminates Mission B.
 - **Empirical Chaos Demo**: `demo/scenarios/scenario_03_failure_matrix.py` injects active faults across actual system components and renders a live reliability report without print-only simulation or arbitrary scores.
 
+## 9. Product Kernel & Foundation (Phase 1)
+
+Phase 1 establishes the local-first product kernel necessary to transform AI Supervisor into a desktop control plane managing multiple external agent ecosystems:
+
+### 1. Work Protocol v1 (`core/protocol/`)
+- **Canonical Envelope**: `WorkProtocolEvent` models identity (`event_id`, `mission_id`, `task_id`, `agent_id`, `provider`, `timestamp`, `event_type`, `schema_version`), structured action payloads (`ActionInfo`), and operational metrics (`TelemetryInfo`).
+- **Standard Lifecycle Events**: Canonical typed events for missions, tasks, agents, filesystem mutations, command executions, independent tests, supervisor interventions, handoffs, recoveries, verifications, and human approvals.
+- **Task Dispatch Package**: `TaskDispatchPackage` forms the formal boundary between the Supervisor and any `AgentAdapter`, specifying goals, file whitelists, fine-grained capability permissions, resource caps, and verification commands.
+
+### 2. SQLite WAL Persistence (`storage/sqlite/`)
+- **Durable Local-First Engine**: SQLite configured in `WAL` (Write-Ahead Logging) mode with `PRAGMA foreign_keys = ON;`, `PRAGMA synchronous = NORMAL;`, and busy timeouts.
+- **Relational Domain Models**: Normalized schema covering `missions`, `tasks`, `agents`, `events`, `memory_records`, `approvals`, and `verifications`.
+- **Append-Only Event Store**: Events are immutable, append-only, and independent of UI state.
+- **Process Restart Durability**: Mission, task, and agent state persists across application crashes and restarts, reloaded cleanly by repository layers.
+- **Non-Blocking Event Sink**: `attach_sqlite_persistence` subscribes to the live `EventBus` and records all stream traffic asynchronously without degrading dispatch latency.
+
+### 3. Git Worktree Isolation (`execution/worktree.py`)
+- **FILESYSTEM ISOLATION**: Multi-agent tasks execute inside dedicated Git worktrees on isolated branches (`supervisor/<mission_id>/<task_id>`).
+- **Main Working Tree Protection**: Agents cannot mutate files in the user's primary working tree during task execution.
+- **Strict Git Enforcement**: If Git is uninitialized or unavailable, the system explicitly refuses autonomous multi-agent execution with an actionable error. Silent fallback to shared directory sandboxes is strictly prohibited.
+- **Safe Explicit Failure on Conflicts**: Merge conflict resolution is never performed automatically without verification; conflicts produce safe explicit failures requiring human or supervisory review.
+- **Root Protection**: Worktree cleanup verifies that paths are strictly confined to `.supervisor/worktrees/` and can never delete the main repository root.
+
+## 10. First Production Agent Adapter: Claude Code (Phase 2)
+
+Phase 2 establishes the universal `AgentAdapter` contract and integrates Anthropic's Claude Code as the first production-grade external coding agent:
+
+### 1. Universal AgentAdapter Contract (`adapters/base.py`)
+- **Decoupled Boundary**: External agents implement `identity`, `capabilities`, `check_availability()`, `prepare()`, `execute()`, `cancel()`, `status()`, and `cleanup()`.
+- **Zero Provider Leakage**: The Supervisor core remains agnostic of Claude-specific flags or internal CLI details. Future agents (Codex, Gemini CLI, Qwen) implement this exact same interface.
+
+### 2. Worktree Execution Pipeline
+- **Worktree Enforced**: Tasks execute exclusively inside dedicated Git worktrees on isolated task branches (`.supervisor/worktrees/<mission>_<task>`).
+- **Primary Working Tree Guard**: Any execution attempt targeting the primary repository is strictly aborted before process invocation.
+
+### 3. Observable Work Protocol Streaming
+- **Process Lifecycle Control**: External processes are launched with `asyncio.create_subprocess_exec` using explicit argument arrays (`shell=False` invariant).
+- **Work Protocol Normalization**: Stdout/stderr streams are parsed line-by-line and converted into canonical `WorkProtocolEvent` envelopes (`agent.started`, `command.started`, `file.changed`, `task.completed`, `agent.stopped`) and published onto the `EventBus`.
+- **Supervisory Controls**: Transparent timeout enforcement with graceful SIGTERM escalation to SIGKILL, and manual supervisor cancellation hooks.
+
+### 4. Adapter Discovery (`adapters/registry.py`)
+- Integrated into `AgentRegistry` for dynamic capability querying (`find_by_capability`), availability probing, and multi-agent dispatch coordination.
+
+
+

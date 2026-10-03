@@ -12,10 +12,18 @@ logger = logging.getLogger("supervisor.tasks")
 class TaskManager:
     """Manages tasks, dependencies, and DAG lifecycle for missions."""
 
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus, repository: Optional[Any] = None):
         self._event_bus = event_bus
+        self._repository = repository
         self._graphs: Dict[str, TaskGraph] = {}  # mission_id -> TaskGraph
         self._lock = asyncio.Lock()
+
+    async def _persist_task(self, task: Optional[Task]) -> None:
+        if self._repository and task:
+            try:
+                await self._repository.save(task)
+            except Exception as e:
+                logger.warning(f"Failed to persist task {task.id} to repository: {e}")
 
     async def initialize_mission_tasks(self, mission_id: str, tasks: List[Task]) -> TaskGraph:
         async with self._lock:
@@ -27,8 +35,9 @@ class TaskManager:
                 graph.add_task(task)
             self._graphs[mission_id] = graph
 
-        # Emit events for each task created
+        # Emit events for each task created and persist if repository configured
         for task in tasks:
+            await self._persist_task(task)
             await self._event_bus.publish(
                 Event(
                     mission_id=mission_id,
@@ -47,13 +56,36 @@ class TaskManager:
 
     async def get_graph(self, mission_id: str) -> Optional[TaskGraph]:
         async with self._lock:
-            return self._graphs.get(mission_id)
+            graph = self._graphs.get(mission_id)
+            if graph:
+                return graph
+            if self._repository:
+                try:
+                    tasks_data = await self._repository.list_by_mission(mission_id)
+                    if tasks_data:
+                        g = TaskGraph(mission_id=mission_id)
+                        for d in tasks_data:
+                            g.add_task(Task.model_validate(d))
+                        self._graphs[mission_id] = g
+                        return g
+                except Exception as e:
+                    logger.warning(f"Failed to load task graph for {mission_id} from repository: {e}")
+            return None
 
     async def get_task(self, mission_id: str, task_id: str) -> Optional[Task]:
         async with self._lock:
             graph = self._graphs.get(mission_id)
             if graph:
-                return graph.get_task(task_id)
+                t = graph.get_task(task_id)
+                if t:
+                    return t
+            if self._repository:
+                try:
+                    d = await self._repository.get(task_id)
+                    if d:
+                        return Task.model_validate(d)
+                except Exception as e:
+                    logger.warning(f"Failed to load task {task_id} from repository: {e}")
             return None
 
     async def start_task(self, mission_id: str, task_id: str, agent_id: str) -> Optional[Task]:
@@ -69,6 +101,7 @@ class TaskManager:
             task.assigned_agent_id = agent_id
             task.started_at = datetime.now(timezone.utc)
             task.attempts += 1
+            await self._persist_task(task)
 
         await self._event_bus.publish(
             Event(
@@ -102,6 +135,7 @@ class TaskManager:
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.now(timezone.utc)
             task.result_summary = summary
+            await self._persist_task(task)
 
         await self._event_bus.publish(
             Event(
@@ -154,6 +188,7 @@ class TaskManager:
             task.completed_at = datetime.now(timezone.utc)
             task.metadata["verified"] = True
             task.metadata["verification_evidence"] = evidence or {}
+            await self._persist_task(task)
 
         await self._event_bus.publish(
             Event(
@@ -188,6 +223,7 @@ class TaskManager:
 
             task.failures += 1
             task.last_error_signature = error_signature
+            await self._persist_task(task)
 
         await self._event_bus.publish(
             Event(
@@ -224,6 +260,7 @@ class TaskManager:
             task.failures += 1
             task.metadata["reopened"] = True
             task.metadata["reopen_reason"] = reason
+            await self._persist_task(task)
 
         await self._event_bus.publish(
             Event(

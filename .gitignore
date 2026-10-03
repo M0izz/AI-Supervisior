@@ -28,3 +28,10 @@ dist/
 
 # Sandbox run outputs
 demo/sample-project/.temp/
+
+# AI Supervisor local persistence & worktrees
+*.db
+*.db-wal
+*.db-shm
+.supervisor/
+

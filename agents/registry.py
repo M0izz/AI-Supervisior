@@ -80,15 +80,30 @@ class AgentRegistry:
     detect file contention between concurrent agents, and provide control hooks.
     """
 
-    def __init__(self, event_bus: Optional[EventBus] = None):
+    def __init__(self, event_bus: Optional[EventBus] = None, repository: Optional[Any] = None):
         self._event_bus = event_bus
+        self._repository = repository
         self._records: Dict[str, AgentRecord] = {}
         self._instances: Dict[str, Any] = {}  # agent_id -> BaseAgent instance
         self._file_locks: Dict[str, str] = {}  # file_path -> agent_id (contention detection)
+        from adapters.registry import AdapterRegistry
+        self.adapters = AdapterRegistry()
         self._lock = asyncio.Lock()
 
         if self._event_bus:
             self._event_bus.subscribe_sync(self.handle_event)
+
+    def register_adapter(self, adapter: Any) -> None:
+        """Register an external agent adapter (e.g. ClaudeCodeAdapter)."""
+        self.adapters.register_adapter(adapter)
+
+    def get_adapter(self, adapter_id: str) -> Optional[Any]:
+        """Retrieve an external agent adapter by ID."""
+        return self.adapters.get_adapter(adapter_id)
+
+    def list_adapters(self) -> List[Any]:
+        """List registered external agent adapters."""
+        return self.adapters.list_adapters()
 
     async def register_agent(
         self,
@@ -118,12 +133,31 @@ class AgentRegistry:
             self._records[agent_id] = record
             if agent_instance:
                 self._instances[agent_id] = agent_instance
+
+            if self._repository:
+                try:
+                    await self._repository.save(record)
+                except Exception as e:
+                    logger.warning(f"Failed to persist agent {agent_id} to repository: {e}")
+
             logger.info(f"[REGISTRY] Registered agent {agent_id} (type={norm_type}, mission={mission_id})")
             return record
 
     async def get_agent(self, agent_id: str) -> Optional[AgentRecord]:
         async with self._lock:
-            return self._records.get(agent_id)
+            rec = self._records.get(agent_id)
+            if rec:
+                return rec
+            if self._repository:
+                try:
+                    d = await self._repository.get(agent_id)
+                    if d:
+                        rec = AgentRecord.model_validate(d)
+                        self._records[agent_id] = rec
+                        return rec
+                except Exception as e:
+                    logger.warning(f"Failed to load agent {agent_id} from repository: {e}")
+            return None
 
     def get_agent_sync(self, agent_id: str) -> Optional[AgentRecord]:
         return self._records.get(agent_id)
@@ -138,6 +172,15 @@ class AgentRegistry:
         status: Optional[str] = None
     ) -> List[AgentRecord]:
         async with self._lock:
+            if not self._records and self._repository:
+                try:
+                    all_data = await self._repository.list_all()
+                    for d in all_data:
+                        rec = AgentRecord.model_validate(d)
+                        self._records[rec.agent_id] = rec
+                except Exception as e:
+                    logger.warning(f"Failed to load agents from repository: {e}")
+
             agents = list(self._records.values())
             if mission_id:
                 agents = [a for a in agents if a.mission_id == mission_id]
