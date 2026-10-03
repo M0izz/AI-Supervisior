@@ -12,11 +12,19 @@ logger = logging.getLogger("supervisor.registry")
 
 
 class AgentType(str, Enum):
-    PLANNER = "planner"
-    WORKER = "worker"
-    REVIEWER = "reviewer"
-    VERIFIER = "verifier"
-    SUPERVISOR = "supervisor"
+    PLANNER = "PLANNER"
+    WORKER = "WORKER"
+    REVIEWER = "REVIEWER"
+    VERIFIER = "VERIFIER"
+    SUPERVISOR = "SUPERVISOR"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            for member in cls:
+                if member.value.lower() == value.lower():
+                    return member
+        return None
 
 
 class AgentStatus(str, Enum):
@@ -39,17 +47,30 @@ class AgentHealth(str, Enum):
 
 class AgentRecord(BaseModel):
     agent_id: str
-    type: str = "worker"
+    agent_type: str = "WORKER"
+    type: str = "WORKER"  # Compatibility alias
     model: str = "nemotron"
     status: AgentStatus = AgentStatus.IDLE
     current_task: Optional[str] = None
+    task_id: Optional[str] = None
     mission_id: Optional[str] = None
     iterations: int = 0
     tool_calls: int = 0
+    interventions: int = 0
     last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     health: AgentHealth = AgentHealth.HEALTHY
     active_files: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.agent_type and not self.type:
+            self.type = self.agent_type
+        elif self.type and not self.agent_type:
+            self.agent_type = self.type
+        if self.task_id and not self.current_task:
+            self.current_task = self.task_id
+        elif self.current_task and not self.task_id:
+            self.task_id = self.current_task
 
 
 class AgentRegistry:
@@ -72,24 +93,32 @@ class AgentRegistry:
     async def register_agent(
         self,
         agent_id: str,
-        agent_type: str = "worker",
+        agent_type: str = "WORKER",
         model: str = "nemotron",
         mission_id: Optional[str] = None,
         agent_instance: Optional[Any] = None,
-        status: AgentStatus = AgentStatus.IDLE
+        status: AgentStatus = AgentStatus.IDLE,
+        task_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> AgentRecord:
+        raw_val = agent_type.value if hasattr(agent_type, "value") else str(agent_type)
+        norm_type = raw_val.upper() if raw_val.upper() in ("PLANNER", "WORKER", "REVIEWER", "VERIFIER", "SUPERVISOR") else raw_val
         async with self._lock:
             record = AgentRecord(
                 agent_id=agent_id,
-                type=agent_type,
+                agent_type=norm_type,
+                type=norm_type,
                 model=model,
                 mission_id=mission_id,
-                status=status
+                status=status,
+                task_id=task_id,
+                current_task=task_id,
+                metadata=metadata or {}
             )
             self._records[agent_id] = record
             if agent_instance:
                 self._instances[agent_id] = agent_instance
-            logger.info(f"[REGISTRY] Registered agent {agent_id} (type={agent_type}, mission={mission_id})")
+            logger.info(f"[REGISTRY] Registered agent {agent_id} (type={norm_type}, mission={mission_id})")
             return record
 
     async def get_agent(self, agent_id: str) -> Optional[AgentRecord]:
@@ -113,9 +142,9 @@ class AgentRegistry:
             if mission_id:
                 agents = [a for a in agents if a.mission_id == mission_id]
             if agent_type:
-                agents = [a for a in agents if a.type == agent_type]
+                agents = [a for a in agents if (a.agent_type.lower() == agent_type.lower() or a.type.lower() == agent_type.lower())]
             if status:
-                agents = [a for a in agents if a.status.value == status]
+                agents = [a for a in agents if a.status.value.lower() == status.lower()]
             return agents
 
     async def pause_agent(self, agent_id: str) -> bool:
@@ -196,25 +225,66 @@ class AgentRegistry:
             if record and file_path in record.active_files:
                 record.active_files.remove(file_path)
 
+    async def update_agent(
+        self,
+        agent_id: str,
+        status: Optional[AgentStatus] = None,
+        health: Optional[AgentHealth] = None,
+        task_id: Optional[str] = None,
+        model: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[AgentRecord]:
+        async with self._lock:
+            record = self._records.get(agent_id)
+            if not record:
+                return None
+            if status is not None:
+                record.status = status
+            if health is not None:
+                record.health = health
+            if task_id is not None:
+                record.task_id = task_id
+                record.current_task = task_id
+            if model is not None:
+                record.model = model
+            if metadata is not None:
+                record.metadata.update(metadata)
+            record.last_activity = datetime.now(timezone.utc)
+            return record
+
+    async def record_intervention(self, agent_id: str) -> None:
+        async with self._lock:
+            record = self._records.get(agent_id)
+            if record:
+                record.interventions += 1
+                record.last_activity = datetime.now(timezone.utc)
+
     async def handle_event(self, event: Event) -> None:
         """Update live telemetry and agent records based on EventBus events."""
+        target_agent = event.payload.get("target_agent") or event.payload.get("target_agent_id")
         agent_id = event.agent_id
-        if not agent_id or agent_id == "supervisor" or agent_id == "system":
+        if (not agent_id or agent_id in ("supervisor", "system")) and target_agent:
+            agent_id = target_agent
+
+        if not agent_id or agent_id in ("supervisor", "system"):
             return
 
         async with self._lock:
             if agent_id not in self._records:
                 # Dynamically discover and register agent
-                guessed_type = "worker"
-                if "reviewer" in agent_id:
-                    guessed_type = "reviewer"
-                elif "verifier" in agent_id:
-                    guessed_type = "verifier"
-                elif "planner" in agent_id:
-                    guessed_type = "planner"
+                guessed_type = "WORKER"
+                if "reviewer" in agent_id.lower():
+                    guessed_type = "REVIEWER"
+                elif "verifier" in agent_id.lower():
+                    guessed_type = "VERIFIER"
+                elif "planner" in agent_id.lower():
+                    guessed_type = "PLANNER"
+                elif "supervisor" in agent_id.lower():
+                    guessed_type = "SUPERVISOR"
 
                 self._records[agent_id] = AgentRecord(
                     agent_id=agent_id,
+                    agent_type=guessed_type,
                     type=guessed_type,
                     mission_id=event.mission_id
                 )
@@ -225,17 +295,18 @@ class AgentRegistry:
                 record.mission_id = event.mission_id
             if event.task_id:
                 record.current_task = event.task_id
+                record.task_id = event.task_id
 
             # Update status
-            if event.type == EventType.AGENT_STARTED:
+            if event.type == EventType.AGENT_STARTED or event.type == EventType.TASK_STARTED:
                 record.status = AgentStatus.RUNNING
             elif event.type == EventType.AGENT_PAUSED:
                 record.status = AgentStatus.PAUSED
             elif event.type == EventType.AGENT_RESUMED:
                 record.status = AgentStatus.RUNNING
-            elif event.type == EventType.AGENT_COMPLETED:
+            elif event.type == EventType.AGENT_COMPLETED or event.type == EventType.TASK_COMPLETED:
                 record.status = AgentStatus.COMPLETED
-            elif event.type == EventType.AGENT_FAILED:
+            elif event.type == EventType.AGENT_FAILED or event.type == EventType.TASK_FAILED:
                 record.status = AgentStatus.FAILED
                 record.health = AgentHealth.DEGRADED
             elif event.type == EventType.TASK_PROGRESS:
@@ -253,5 +324,8 @@ class AgentRegistry:
                         )
             elif event.type == EventType.DANGER_DETECTED or event.type == EventType.SUPERVISOR_ALERT:
                 record.health = AgentHealth.ANOMALOUS
+                record.interventions += 1
+            elif event.type in (EventType.SUPERVISOR_INTERVENTION, EventType.APPROVAL_REQUESTED, EventType.SUPERVISOR_HUMAN_REQUIRED):
+                record.interventions += 1
             elif event.type == EventType.VERIFICATION_FAILED:
                 record.health = AgentHealth.DEGRADED

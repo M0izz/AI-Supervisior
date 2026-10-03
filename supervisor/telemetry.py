@@ -16,13 +16,16 @@ class ExecutionTelemetry(BaseModel):
     completed_tasks: int = 0
     failed_tasks: int = 0
     iteration_count: int = 0
+    iterations: int = 0
     tool_calls: int = 0
     runtime_seconds: float = 0.0
+    runtime: float = 0.0
     start_time: Optional[float] = None
 
 
 class ReliabilityTelemetry(BaseModel):
     failure_count: int = 0
+    failures: int = 0
     repeated_failures: int = 0
     interventions: int = 0
     recovery_attempts: int = 0
@@ -43,12 +46,20 @@ class RiskTelemetry(BaseModel):
     blocked_actions: int = 0
 
 
+class CITelemetry(BaseModel):
+    jenkins_builds: int = 0
+    build_failures: int = 0
+    test_failures: int = 0
+
+
 class MissionTelemetry(BaseModel):
     mission_id: str
     execution: ExecutionTelemetry = Field(default_factory=ExecutionTelemetry)
     reliability: ReliabilityTelemetry = Field(default_factory=ReliabilityTelemetry)
     cost: CostTelemetry = Field(default_factory=CostTelemetry)
     risk: RiskTelemetry = Field(default_factory=RiskTelemetry)
+    ci: CITelemetry = Field(default_factory=CITelemetry)
+    agents: Dict[str, ExecutionTelemetry] = Field(default_factory=dict)
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -165,9 +176,21 @@ class TelemetryTracker:
                 m.reliability.interventions += 1
             elif event.type == EventType.RECOVERY_STARTED:
                 m.reliability.recovery_attempts += 1
-            elif event.type in (EventType.VERIFICATION_FAILED, EventType.CI_BUILD_FAILED):
+            elif event.type == EventType.VERIFICATION_FAILED:
                 m.reliability.verification_failures += 1
                 m.reliability.failure_count += 1
+            elif event.type == EventType.CI_BUILD_FAILED:
+                m.ci.build_failures += 1
+                m.reliability.verification_failures += 1
+                m.reliability.failure_count += 1
+            elif event.type == EventType.CI_BUILD_TRIGGERED:
+                m.ci.jenkins_builds += 1
+            elif event.type == EventType.CI_TEST_RESULTS_AVAILABLE:
+                failed = event.payload.get("tests_failed", 0)
+                m.ci.test_failures += failed
+                if failed > 0:
+                    m.reliability.verification_failures += 1
+                    m.reliability.failure_count += 1
 
             # 3. Risk & Danger
             if event.type == EventType.DANGER_DETECTED:
@@ -185,10 +208,26 @@ class TelemetryTracker:
             elif event.type == EventType.FILE_CONTENTION_DETECTED:
                 m.risk.blocked_actions += 1
 
-            # 4. Model usage
-            if event.type == EventType.SUPERVISOR_REASONING_COMPLETED:
-                m.cost.model_calls += 1
-                # Standard Nemotron reasoning approximation
-                m.cost.input_tokens += 1200
-                m.cost.output_tokens += 150
-                m.cost.estimated_cost_usd += round((1200 * 0.0000007) + (150 * 0.000002), 6)
+            # Sync per-agent execution telemetry if agent_id present
+            if event.agent_id and event.agent_id not in ("supervisor", "system"):
+                if event.agent_id not in m.agents:
+                    m.agents[event.agent_id] = ExecutionTelemetry(start_time=time.monotonic())
+                agent_telem = m.agents[event.agent_id]
+                agent_telem.runtime_seconds = round(time.monotonic() - (agent_telem.start_time or time.monotonic()), 2)
+                agent_telem.runtime = agent_telem.runtime_seconds
+                if event.task_id:
+                    agent_telem.current_task = event.task_id
+                if event.type in (EventType.TOOL_CALL, EventType.TOOL_CALLED):
+                    agent_telem.tool_calls += 1
+                elif event.type == EventType.TASK_PROGRESS:
+                    agent_telem.iteration_count += 1
+                    agent_telem.iterations = agent_telem.iteration_count
+                elif event.type == EventType.TASK_COMPLETED:
+                    agent_telem.completed_tasks += 1
+                elif event.type == EventType.TASK_FAILED:
+                    agent_telem.failed_tasks += 1
+
+            # Sync primary execution and reliability aliases
+            m.execution.iterations = m.execution.iteration_count
+            m.execution.runtime = m.execution.runtime_seconds
+            m.reliability.failures = m.reliability.failure_count

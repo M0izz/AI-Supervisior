@@ -18,6 +18,7 @@ class ApprovalResolutionAction(str, Enum):
     APPROVE_FOR_MISSION = "APPROVE_FOR_MISSION"
     DENY = "DENY"
     TAKE_CONTROL = "TAKE_CONTROL"
+    CANCEL = "CANCEL"
 
 
 class ResolveApprovalPayload(BaseModel):
@@ -143,6 +144,8 @@ class ApprovalManager:
                     self._whitelisted_mission_actions[req.mission_id].append(req.target)
             elif resolution.action == ApprovalResolutionAction.TAKE_CONTROL:
                 req.status = ApprovalStatus.DENIED
+            elif resolution.action == ApprovalResolutionAction.CANCEL:
+                req.status = ApprovalStatus.CANCELLED
 
         logger.info(f"[APPROVAL] Resolved {approval_id}: {resolution.action.value} by {resolution.operator}")
 
@@ -183,6 +186,21 @@ class ApprovalManager:
                 )
 
         return req
+
+    async def cancel_request(
+        self,
+        approval_id: str,
+        operator: str = "human_operator",
+        reason: str = "Request cancelled"
+    ) -> Optional[ApprovalRequest]:
+        return await self.resolve_request(
+            approval_id=approval_id,
+            resolution=ResolveApprovalPayload(
+                action=ApprovalResolutionAction.CANCEL,
+                operator=operator,
+                feedback=reason
+            )
+        )
 
     async def handle_event(self, event: Event) -> None:
         """Handle raw approval requested events if generated externally."""

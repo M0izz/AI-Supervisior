@@ -6,18 +6,20 @@ import uuid
 
 
 class MissionStatus(str, Enum):
-    PENDING = "PENDING"
+    CREATED = "CREATED"
+    PLANNING = "PLANNING"
+    PENDING = "PENDING"  # Compatibility alias
     STARTING = "STARTING"
     RUNNING = "RUNNING"
-    INVESTIGATING = "INVESTIGATING"
     PAUSED = "PAUSED"
+    INVESTIGATING = "INVESTIGATING"
     RECOVERING = "RECOVERING"
-    AWAITING_APPROVAL = "AWAITING_APPROVAL"
-    WAITING_APPROVAL = "WAITING_APPROVAL"
     VERIFYING = "VERIFYING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     BLOCKED = "BLOCKED"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"  # Compatibility alias
     CANCELLED = "CANCELLED"
 
 
@@ -57,11 +59,12 @@ class Mission(BaseModel):
     title: str
     goal: str
     repository_path: str = "./demo/sample-project"
-    status: MissionStatus = MissionStatus.PENDING
+    status: MissionStatus = MissionStatus.CREATED
     constraints: MissionConstraints = Field(default_factory=MissionConstraints)
     metrics: MissionMetrics = Field(default_factory=MissionMetrics)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     active_agent_id: Optional[str] = None
     current_task_id: Optional[str] = None
+    assigned_agents: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)

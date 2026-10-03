@@ -76,7 +76,11 @@ class EventType(str, Enum):
     # Control Plane & Multi-Agent Coordination
     TASK_REOPENED = "task.reopened"
     FILE_CONTENTION_DETECTED = "supervisor.file_contention_detected"
+    SUPERVISOR_HUMAN_REQUIRED = "supervisor.human_required"
     OPERATOR_TAKE_CONTROL = "operator.take_control"
+    OPERATOR_PAUSE = "operator.pause"
+    OPERATOR_RESUME = "operator.resume"
+    OPERATOR_CANCEL = "operator.cancel"
 
     # Execution & Container Isolation events
     EXECUTION_STARTED = "execution.started"

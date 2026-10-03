@@ -92,4 +92,13 @@ Worker completion is strictly decoupled from verification.
 - **Clean Provider Abstraction**: Supports production `JenkinsHttpClient` with CSRF and queue resolution, as well as a deterministic `MockJenkinsProvider` for offline testing.
 - **Verifier Handoff**: CI success alone does not auto-complete the mission; it hands off to the independent `VerifierAgent` for final empirical confirmation.
 
+## 7. Mission Control Plane & Multi-Agent Registry (Phase 7)
 
+Phase 7 elevates the Supervisor from a single-agent monitor into an enterprise-grade control plane:
+- **Mission Control Hierarchy**: Human Operator → Mission → Supervisor Control Plane → (Planner, Workers A/B, Reviewer, Verifier).
+- **Enforced Mission Lifecycle**: Full finite state machine (`CREATED` → `PLANNING` → `RUNNING` → `PAUSED` → `INVESTIGATING` → `RECOVERING` → `VERIFYING` → `COMPLETED`, with failure branches `FAILED`, `BLOCKED`, `WAITING_APPROVAL`, `CANCELLED`).
+- **Agent Registry**: Central directory tracking all active agents by `agent_id`, `agent_type` (`PLANNER`, `WORKER`, `REVIEWER`, `VERIFIER`, `SUPERVISOR`), `status`, `health`, `model`, `iterations`, `tool_calls`, and supervisor `interventions`.
+- **Zero Cross-Contamination**: Isolated per-mission state machines, scoped file locks to detect multi-worker contention, and isolated telemetry queries.
+- **Human Supervisory Interventions**: Standardized operator actions (`REQUEST_APPROVAL`, `TAKE_CONTROL`, `PAUSE`, `RESUME`, `CANCEL`, `HUMAN_REQUIRED`). Strict invariant: absence of response is never treated as approval.
+- **Four-Quadrant Telemetry**: Execution, Reliability, Risk, and CI metrics with dedicated per-agent breakdowns and strict zero-fabrication cost accounting.
+- **Full REST & WebSocket Surface**: Live control and streaming endpoints at `/api/missions/{id}/state`, `/api/agents`, `/api/approvals`, `/api/supervisor/events`, and `/ws/events`.

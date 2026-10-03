@@ -9,6 +9,7 @@ class ApprovalStatus(str, Enum):
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     DENIED = "DENIED"
+    CANCELLED = "CANCELLED"
 
 
 class ApprovalRequest(BaseModel):

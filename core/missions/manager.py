@@ -55,11 +55,30 @@ class MissionManager:
         async with self._lock:
             return list(self._missions.values())
 
+    def is_valid_transition(self, current: MissionStatus, target: MissionStatus) -> bool:
+        if current == target:
+            return True
+        if current in (MissionStatus.COMPLETED, MissionStatus.FAILED, MissionStatus.CANCELLED):
+            return False
+        return True
+
+    async def assign_agent(self, mission_id: str, agent_id: str) -> Optional[Mission]:
+        async with self._lock:
+            mission = self._missions.get(mission_id)
+            if not mission:
+                return None
+            if agent_id not in mission.assigned_agents:
+                mission.assigned_agents.append(agent_id)
+            mission.active_agent_id = agent_id
+            mission.updated_at = datetime.now(timezone.utc)
+            return mission
+
     async def update_status(
         self,
         mission_id: str,
         new_status: MissionStatus,
-        reason: Optional[str] = None
+        reason: Optional[str] = None,
+        force: bool = False
     ) -> Optional[Mission]:
         async with self._lock:
             mission = self._missions.get(mission_id)
@@ -67,6 +86,12 @@ class MissionManager:
                 return None
 
             old_status = mission.status
+            if not force and not self.is_valid_transition(old_status, new_status):
+                logger.warning(
+                    f"[MISSION] Invalid transition from terminal/incompatible state {old_status.value} -> {new_status.value} for {mission_id}"
+                )
+                return mission
+
             mission.status = new_status
             mission.updated_at = datetime.now(timezone.utc)
 
@@ -77,11 +102,12 @@ class MissionManager:
 
         # Determine severity and event type
         severity = EventSeverity.INFO
-        if new_status in (MissionStatus.PAUSED, MissionStatus.AWAITING_APPROVAL, MissionStatus.INVESTIGATING):
+        if new_status in (MissionStatus.PAUSED, MissionStatus.AWAITING_APPROVAL, MissionStatus.WAITING_APPROVAL, MissionStatus.INVESTIGATING, MissionStatus.BLOCKED):
             severity = EventSeverity.WARNING
         elif new_status == MissionStatus.FAILED:
             severity = EventSeverity.ERROR
 
+        # Publish MISSION_STATUS_CHANGED
         await self._event_bus.publish(
             Event(
                 mission_id=mission_id,
@@ -94,10 +120,46 @@ class MissionManager:
                 }
             )
         )
+
+        # Publish specific lifecycle event if applicable
+        specific_event_type = None
+        if new_status == MissionStatus.RUNNING and old_status in (MissionStatus.CREATED, MissionStatus.PENDING, MissionStatus.STARTING, MissionStatus.PLANNING):
+            specific_event_type = EventType.MISSION_STARTED
+        elif new_status == MissionStatus.PAUSED:
+            specific_event_type = EventType.MISSION_PAUSED
+        elif new_status == MissionStatus.RUNNING and old_status == MissionStatus.PAUSED:
+            specific_event_type = EventType.MISSION_RESUMED
+        elif new_status == MissionStatus.COMPLETED:
+            specific_event_type = EventType.MISSION_COMPLETED
+        elif new_status == MissionStatus.FAILED:
+            specific_event_type = EventType.MISSION_FAILED
+
+        if specific_event_type:
+            await self._event_bus.publish(
+                Event(
+                    mission_id=mission_id,
+                    type=specific_event_type,
+                    severity=severity,
+                    payload={
+                        "status": new_status.value,
+                        "reason": reason
+                    }
+                )
+            )
+
         return mission
+
+    async def plan_mission(self, mission_id: str, reason: str = "Mission planning initiated") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.PLANNING, reason=reason)
 
     async def start_mission(self, mission_id: str) -> Optional[Mission]:
         return await self.update_status(mission_id, MissionStatus.RUNNING, reason="Mission started")
+
+    async def investigate_mission(self, mission_id: str, reason: str = "Supervisor investigating anomaly") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.INVESTIGATING, reason=reason)
+
+    async def wait_approval_mission(self, mission_id: str, reason: str = "Awaiting human operator approval") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.WAITING_APPROVAL, reason=reason)
 
     async def pause_mission(self, mission_id: str, reason: str) -> Optional[Mission]:
         return await self.update_status(mission_id, MissionStatus.PAUSED, reason=reason)

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from core.events.bus import EventBus
 from core.events.schema import Event, EventSeverity, EventType, SupervisorAlertPayload, SupervisorDecisionPayload
 from core.missions.manager import MissionManager
+from core.missions.models import MissionStatus
 from core.tasks.manager import TaskManager
 from core.policies.models import PolicyConfig
 from supervisor.decisions import SupervisorAction, SupervisorDecision
@@ -47,7 +48,12 @@ class SupervisorEngine:
             self.reasoner = SupervisoryReasoner(provider=reasoner)
         else:
             self.reasoner = reasoner or SupervisoryReasoner()
-        self.state_machine = SupervisorStateMachine()
+        self._default_state_machine = SupervisorStateMachine()
+        self._mission_state_machines: Dict[str, SupervisorStateMachine] = {}
+        self._mission_events: Dict[str, List[Event]] = {}
+        self._mission_tests: Dict[str, List[Event]] = {}
+        self._worker_missions: Dict[str, str] = {}
+        self._last_active_mission_id: Optional[str] = None
         self.registry = registry
         self.telemetry = telemetry
         self.approval_manager = approval_manager
@@ -63,10 +69,82 @@ class SupervisorEngine:
         # Subscribe to EventBus
         self.event_bus.subscribe_sync(self.handle_event)
 
-    def register_worker(self, worker: Any) -> None:
+    @property
+    def state_machine(self) -> SupervisorStateMachine:
+        """Returns the state machine for the most recent active mission or default."""
+        if self._last_active_mission_id and self._last_active_mission_id in self._mission_state_machines:
+            return self._mission_state_machines[self._last_active_mission_id]
+        return self._default_state_machine
+
+    @state_machine.setter
+    def state_machine(self, sm: SupervisorStateMachine) -> None:
+        self._default_state_machine = sm
+
+    def get_state_machine(self, mission_id: Optional[str] = None) -> SupervisorStateMachine:
+        """Returns isolated state machine for the specified mission."""
+        if not mission_id:
+            return self.state_machine
+        if mission_id not in self._mission_state_machines:
+            self._mission_state_machines[mission_id] = SupervisorStateMachine()
+        return self._mission_state_machines[mission_id]
+
+    def register_worker(self, worker: Any, mission_id: Optional[str] = None) -> None:
         """Register active worker instance for direct supervisor intervention (pause/resume)."""
         self._registered_workers[worker.agent_id] = worker
-        logger.info(f"[SUPERVISOR] Registered worker {worker.agent_id}")
+        mid = mission_id or getattr(worker, "mission_id", None)
+        if mid:
+            self._worker_missions[worker.agent_id] = mid
+            self._last_active_mission_id = mid
+        logger.info(f"[SUPERVISOR] Registered worker {worker.agent_id} (mission={mid})")
+        if self.registry:
+            asyncio.create_task(
+                self.registry.register_agent(
+                    agent_id=worker.agent_id,
+                    agent_type="WORKER",
+                    mission_id=mid,
+                    agent_instance=worker
+                )
+            )
+
+    def register_agent(
+        self,
+        agent: Any,
+        agent_type: str = "WORKER",
+        mission_id: Optional[str] = None
+    ) -> None:
+        """Register any agent (PLANNER, WORKER, REVIEWER, VERIFIER, SUPERVISOR) with supervisor & registry."""
+        agent_id = getattr(agent, "agent_id", str(agent))
+        norm_type = str(agent_type).upper()
+        if norm_type == "WORKER" and hasattr(agent, "pause"):
+            self._registered_workers[agent_id] = agent
+        mid = mission_id or getattr(agent, "mission_id", None)
+        if mid:
+            self._worker_missions[agent_id] = mid
+            self._last_active_mission_id = mid
+        logger.info(f"[SUPERVISOR] Registered {norm_type} agent {agent_id} (mission={mid})")
+        if self.registry:
+            asyncio.create_task(
+                self.registry.register_agent(
+                    agent_id=agent_id,
+                    agent_type=norm_type,
+                    mission_id=mid,
+                    agent_instance=agent
+                )
+            )
+
+    def pause_mission_workers(self, mission_id: str) -> None:
+        """Pauses only workers belonging to the specified mission."""
+        for a_id, w in self._registered_workers.items():
+            if self._worker_missions.get(a_id) == mission_id or not self._worker_missions.get(a_id):
+                if hasattr(w, "pause"):
+                    w.pause()
+
+    def resume_mission_workers(self, mission_id: str) -> None:
+        """Resumes only workers belonging to the specified mission."""
+        for a_id, w in self._registered_workers.items():
+            if self._worker_missions.get(a_id) == mission_id or not self._worker_missions.get(a_id):
+                if hasattr(w, "resume"):
+                    w.resume()
 
     def register_rejected_approach(self, mission_id: str, approach: str) -> None:
         """Register a disproven/rejected approach to prevent repetition."""
@@ -80,10 +158,25 @@ class SupervisorEngine:
 
     async def handle_event(self, event: Event) -> None:
         """Process incoming events through Layer A rules and Layer B reasoning."""
+        mid = event.mission_id or "default"
+        self._last_active_mission_id = mid
+        if mid not in self._mission_state_machines:
+            self._mission_state_machines[mid] = SupervisorStateMachine()
+        if mid not in self._mission_events:
+            self._mission_events[mid] = []
+        if mid not in self._mission_tests:
+            self._mission_tests[mid] = []
+
+        if event.agent_id and mid and event.agent_id not in self._worker_missions:
+            self._worker_missions[event.agent_id] = mid
+
         async with self._lock:
             self._recent_events.append(event)
+            self._mission_events[mid].append(event)
             if len(self._recent_events) > 100:
                 self._recent_events.pop(0)
+            if len(self._mission_events[mid]) > 100:
+                self._mission_events[mid].pop(0)
 
             # Update metrics per task
             if event.task_id:
@@ -102,8 +195,11 @@ class SupervisorEngine:
 
             if event.type in (EventType.TEST_RESULT, EventType.TEST_COMPLETED, EventType.TEST_FAILED):
                 self._recent_tests.append(event)
+                self._mission_tests[mid].append(event)
                 if len(self._recent_tests) > 20:
                     self._recent_tests.pop(0)
+                if len(self._mission_tests[mid]) > 20:
+                    self._mission_tests[mid].pop(0)
 
         # 1. Danger detected event from tool jail
         if event.type == EventType.DANGER_DETECTED:
@@ -145,7 +241,8 @@ class SupervisorEngine:
                     )
                     if event.agent_id in self._registered_workers:
                         self._registered_workers[event.agent_id].pause()
-                    self.state_machine.set_state(SupervisorState.INVESTIGATING)
+                    self.get_state_machine(event.mission_id).set_state(SupervisorState.INVESTIGATING)
+                    self._default_state_machine.set_state(SupervisorState.INVESTIGATING)
                     return
 
             # Check file contention if multiple agents are modifying the same file
@@ -181,14 +278,15 @@ class SupervisorEngine:
         elif event.type in (EventType.TEST_RESULT, EventType.TEST_COMPLETED, EventType.TEST_FAILED):
             task = await self.task_manager.get_task(event.mission_id, event.task_id) if event.task_id else None
             if task:
+                mission_tests = self._mission_tests.get(mid, self._recent_tests)
                 # A. Check repeated failure loop
-                loop_anomaly = self.rules.evaluate_test_history(task, self._recent_tests)
+                loop_anomaly = self.rules.evaluate_test_history(task, mission_tests)
                 if loop_anomaly:
                     await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", loop_anomaly)
                     return
 
                 # B. Check no progress
-                no_progress_anomaly = self.rules.evaluate_no_progress(task, self._recent_tests)
+                no_progress_anomaly = self.rules.evaluate_no_progress(task, mission_tests)
                 if no_progress_anomaly:
                     await self._trigger_anomaly_pipeline(event.mission_id, event.task_id, event.agent_id or "worker_01", no_progress_anomaly)
                     return
@@ -229,8 +327,6 @@ class SupervisorEngine:
                 # Actively pause registered worker
                 if worker_id in self._registered_workers:
                     self._registered_workers[worker_id].pause()
-                for w in self._registered_workers.values():
-                    w.pause()
 
                 anomaly = AnomalyReport(
                     anomaly_type="VERIFICATION_FAILED",
@@ -265,8 +361,6 @@ class SupervisorEngine:
                 # Actively pause registered worker
                 if worker_id in self._registered_workers:
                     self._registered_workers[worker_id].pause()
-                for w in self._registered_workers.values():
-                    w.pause()
 
                 anomaly = AnomalyReport(
                     anomaly_type="CI_FAILURE",
@@ -287,8 +381,6 @@ class SupervisorEngine:
 
             if worker_id in self._registered_workers:
                 self._registered_workers[worker_id].pause()
-            for w in self._registered_workers.values():
-                w.pause()
 
             anomaly = AnomalyReport(
                 anomaly_type="CI_UNAVAILABLE",
@@ -309,8 +401,6 @@ class SupervisorEngine:
 
             if worker_id in self._registered_workers:
                 self._registered_workers[worker_id].pause()
-            for w in self._registered_workers.values():
-                w.pause()
 
             anomaly = AnomalyReport(
                 anomaly_type="CI_TIMEOUT",
@@ -440,8 +530,10 @@ class SupervisorEngine:
         )
 
         # C. Update State Machine
-        self.state_machine.transition(decision.action, anomaly_type=anomaly.anomaly_type)
-        logger.info(f"[SUPERVISOR] action={decision.action.value} state={self.state_machine.current_state.value}")
+        sm = self.get_state_machine(mission_id)
+        sm.transition(decision.action, anomaly_type=anomaly.anomaly_type)
+        self._default_state_machine.transition(decision.action, anomaly_type=anomaly.anomaly_type)
+        logger.info(f"[SUPERVISOR] action={decision.action.value} state={sm.current_state.value}")
 
         # D. Emit Decision Event
         await self.event_bus.publish(
@@ -502,31 +594,243 @@ class SupervisorEngine:
                 )
             )
         elif decision.action == SupervisorAction.REQUEST_APPROVAL:
+            target_desc = str(anomaly.evidence.get("target") or anomaly.evidence.get("command") or anomaly.evidence.get("path") or "workspace")
+            await self.request_approval(
+                mission_id=mission_id,
+                agent_id=agent_id,
+                action_type=anomaly.anomaly_type,
+                target=target_desc,
+                reason=decision.reason,
+                risk_level="critical" if anomaly.anomaly_type == "DANGEROUS_ACTION" else "high",
+                task_id=task_id
+            )
+        elif decision.action == SupervisorAction.HUMAN_REQUIRED:
+            await self.human_required(
+                mission_id=mission_id,
+                reason=decision.reason,
+                agent_id=agent_id,
+                task_id=task_id
+            )
+
+    # =========================================================================
+    # Structured Human Intervention Requests & Control Plane Methods
+    # =========================================================================
+
+    async def request_approval(
+        self,
+        mission_id: str,
+        agent_id: str,
+        action_type: str,
+        target: str,
+        reason: str,
+        risk_level: str = "high",
+        task_id: Optional[str] = None
+    ) -> Any:
+        """Structured human intervention: request explicit approval for dangerous/protected action."""
+        if agent_id in self._registered_workers:
+            self._registered_workers[agent_id].pause()
+
+        sm = self.get_state_machine(mission_id)
+        sm.transition(SupervisorAction.REQUEST_APPROVAL)
+        self._default_state_machine.transition(SupervisorAction.REQUEST_APPROVAL)
+
+        await self.mission_manager.update_status(
+            mission_id,
+            MissionStatus.WAITING_APPROVAL,
+            reason=f"Approval required: {reason}"
+        )
+
+        if self.approval_manager:
+            return await self.approval_manager.create_request(
+                mission_id=mission_id,
+                agent_id=agent_id,
+                action_type=action_type,
+                target=target,
+                reason=reason,
+                risk_level=risk_level,
+                task_id=task_id
+            )
+        else:
+            await self.event_bus.publish(
+                Event(
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    agent_id=agent_id,
+                    type=EventType.APPROVAL_REQUESTED,
+                    severity=EventSeverity.CRITICAL if risk_level in ("high", "critical") else EventSeverity.WARNING,
+                    payload={
+                        "action_type": action_type,
+                        "target": target,
+                        "reason": reason,
+                        "risk_level": risk_level
+                    }
+                )
+            )
+
+    async def human_required(
+        self,
+        mission_id: str,
+        reason: str,
+        agent_id: Optional[str] = None,
+        task_id: Optional[str] = None
+    ) -> Any:
+        """Structured intervention: repeated unrecoverable failures trigger HUMAN_REQUIRED."""
+        if agent_id and agent_id in self._registered_workers:
+            self._registered_workers[agent_id].pause()
+        elif not agent_id:
+            self.pause_mission_workers(mission_id)
+
+        sm = self.get_state_machine(mission_id)
+        sm.transition(SupervisorAction.HUMAN_REQUIRED)
+        self._default_state_machine.transition(SupervisorAction.HUMAN_REQUIRED)
+
+        await self.mission_manager.update_status(
+            mission_id,
+            MissionStatus.WAITING_APPROVAL,
+            reason=f"Human intervention required: {reason}"
+        )
+
+        await self.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task_id,
+                agent_id=agent_id or "supervisor",
+                type=EventType.SUPERVISOR_HUMAN_REQUIRED,
+                severity=EventSeverity.CRITICAL,
+                payload={
+                    "reason": reason,
+                    "target_agent": agent_id,
+                    "task_id": task_id
+                }
+            )
+        )
+
+        if self.approval_manager:
+            return await self.approval_manager.create_request(
+                mission_id=mission_id,
+                agent_id=agent_id or "supervisor",
+                action_type="HUMAN_REQUIRED",
+                target="mission_intervention",
+                reason=reason,
+                risk_level="critical",
+                task_id=task_id
+            )
+
+    async def take_control(
+        self,
+        mission_id: str,
+        operator: str = "human_operator",
+        reason: str = "Manual override"
+    ) -> None:
+        """Operator explicitly takes control of mission."""
+        self.pause_mission_workers(mission_id)
+        sm = self.get_state_machine(mission_id)
+        sm.transition(SupervisorAction.TAKE_CONTROL)
+        self._default_state_machine.transition(SupervisorAction.TAKE_CONTROL)
+
+        await self.mission_manager.pause_mission(
+            mission_id,
+            reason=f"Manual control taken by {operator}: {reason}"
+        )
+
+        await self.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                agent_id=operator,
+                type=EventType.OPERATOR_TAKE_CONTROL,
+                severity=EventSeverity.WARNING,
+                payload={"operator": operator, "reason": reason}
+            )
+        )
+
+    async def pause(
+        self,
+        mission_id: str,
+        reason: str = "Paused by supervisor or operator",
+        agent_id: Optional[str] = None
+    ) -> None:
+        """Pause mission or specific agent."""
+        if agent_id:
             if agent_id in self._registered_workers:
                 self._registered_workers[agent_id].pause()
-            if self.approval_manager:
-                target_desc = str(anomaly.evidence.get("target") or anomaly.evidence.get("command") or anomaly.evidence.get("path") or "workspace")
-                await self.approval_manager.create_request(
+            if self.registry:
+                await self.registry.pause_agent(agent_id)
+            await self.event_bus.publish(
+                Event(
                     mission_id=mission_id,
                     agent_id=agent_id,
-                    action_type=anomaly.anomaly_type,
-                    target=target_desc,
-                    reason=decision.reason,
-                    risk_level="critical" if anomaly.anomaly_type == "DANGEROUS_ACTION" else "high",
-                    task_id=task_id
+                    type=EventType.AGENT_PAUSED,
+                    severity=EventSeverity.WARNING,
+                    payload={"agent_id": agent_id, "reason": reason}
                 )
-            else:
-                await self.event_bus.publish(
-                    Event(
-                        mission_id=mission_id,
-                        task_id=task_id,
-                        agent_id="supervisor",
-                        type=EventType.APPROVAL_REQUESTED,
-                        severity=EventSeverity.CRITICAL,
-                        payload={
-                            "action_type": anomaly.anomaly_type,
-                            "reason": decision.reason,
-                            "evidence": anomaly.evidence
-                        }
-                    )
+            )
+        else:
+            self.pause_mission_workers(mission_id)
+            sm = self.get_state_machine(mission_id)
+            sm.transition(SupervisorAction.PAUSE)
+            self._default_state_machine.transition(SupervisorAction.PAUSE)
+            await self.mission_manager.pause_mission(mission_id, reason=reason)
+            await self.event_bus.publish(
+                Event(
+                    mission_id=mission_id,
+                    type=EventType.OPERATOR_PAUSE,
+                    severity=EventSeverity.INFO,
+                    payload={"reason": reason}
                 )
+            )
+
+    async def resume(
+        self,
+        mission_id: str,
+        reason: str = "Resumed by supervisor or operator",
+        agent_id: Optional[str] = None
+    ) -> None:
+        """Resume mission or specific agent."""
+        if agent_id:
+            if agent_id in self._registered_workers:
+                self._registered_workers[agent_id].resume()
+            if self.registry:
+                await self.registry.resume_agent(agent_id)
+            await self.event_bus.publish(
+                Event(
+                    mission_id=mission_id,
+                    agent_id=agent_id,
+                    type=EventType.AGENT_RESUMED,
+                    severity=EventSeverity.INFO,
+                    payload={"agent_id": agent_id, "reason": reason}
+                )
+            )
+        else:
+            self.resume_mission_workers(mission_id)
+            sm = self.get_state_machine(mission_id)
+            sm.transition(SupervisorAction.RESUME)
+            self._default_state_machine.transition(SupervisorAction.RESUME)
+            await self.mission_manager.resume_mission(mission_id)
+            await self.event_bus.publish(
+                Event(
+                    mission_id=mission_id,
+                    type=EventType.OPERATOR_RESUME,
+                    severity=EventSeverity.INFO,
+                    payload={"reason": reason}
+                )
+            )
+
+    async def cancel(
+        self,
+        mission_id: str,
+        reason: str = "Cancelled by supervisor or operator"
+    ) -> None:
+        """Cancel mission and halt all its agents."""
+        self.pause_mission_workers(mission_id)
+        sm = self.get_state_machine(mission_id)
+        sm.transition(SupervisorAction.CANCEL)
+        self._default_state_machine.transition(SupervisorAction.CANCEL)
+        await self.mission_manager.cancel_mission(mission_id, reason=reason)
+        await self.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                type=EventType.OPERATOR_CANCEL,
+                severity=EventSeverity.WARNING,
+                payload={"reason": reason}
+            )
+        )

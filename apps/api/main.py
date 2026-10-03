@@ -10,6 +10,8 @@ from core.events.schema import Event, EventType, EventSeverity
 from core.missions.models import Mission, MissionStatus, MissionConstraints
 from core.tasks.models import Task, TaskStatus
 from core.policies.models import PolicyConfig
+from agents.registry import AgentStatus, AgentHealth
+from supervisor.approvals import ResolveApprovalPayload, ApprovalResolutionAction
 from apps.api.state import app_state
 from apps.api.websocket import ws_hub
 
@@ -54,6 +56,54 @@ class PauseMissionRequest(BaseModel):
     reason: str = "Operator paused via Control Room"
 
 
+class UpdateMissionStatusRequest(BaseModel):
+    status: str
+    reason: Optional[str] = "Status updated via Control Plane API"
+
+
+class RegisterAgentRequest(BaseModel):
+    agent_id: str
+    agent_type: str = "WORKER"
+    model: str = "nemotron"
+    mission_id: Optional[str] = None
+    task_id: Optional[str] = None
+    status: str = "IDLE"
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class UpdateAgentStateRequest(BaseModel):
+    status: Optional[str] = None
+    health: Optional[str] = None
+    task_id: Optional[str] = None
+    model: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class CreateTaskRequest(BaseModel):
+    id: Optional[str] = None
+    title: str
+    dependencies: List[str] = []
+    expected_files: List[str] = []
+    order: Optional[int] = None
+
+
+class UpdateTaskStatusRequest(BaseModel):
+    status: str  # IN_PROGRESS, COMPLETED, FAILED, PENDING
+    agent_id: Optional[str] = None
+    summary: Optional[str] = None
+    error_signature: Optional[str] = None
+
+
+class CreateApprovalRequest(BaseModel):
+    mission_id: str
+    agent_id: str
+    action_type: str
+    target: str
+    reason: str
+    risk_level: str = "high"
+    task_id: Optional[str] = None
+
+
 # --- Health ---
 @app.get("/health")
 async def health_check():
@@ -93,6 +143,51 @@ async def get_mission(mission_id: str):
     return mission
 
 
+@app.get("/api/missions/{mission_id}/state")
+async def get_mission_state(mission_id: str):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    sm = app_state.supervisor_engine.get_state_machine(mission_id)
+    telem = await app_state.telemetry.get_mission_telemetry(mission_id)
+    agents = await app_state.agent_registry.list_agents(mission_id=mission_id)
+    graph = await app_state.task_manager.get_graph(mission_id)
+    total_tasks = len(graph.tasks) if graph else 0
+    completed_tasks = telem.execution.completed_tasks
+
+    return {
+        "mission_id": mission.id,
+        "title": mission.title,
+        "status": mission.status.value,
+        "supervisor_state": sm.current_state.value,
+        "goal": mission.goal,
+        "repository_path": mission.repository_path,
+        "assigned_agents": [a.agent_id for a in agents],
+        "active_agent_id": mission.active_agent_id,
+        "current_task_id": mission.current_task_id,
+        "tasks_count": total_tasks,
+        "completed_tasks": completed_tasks,
+        "constraints": mission.constraints.model_dump(),
+        "metrics": mission.metrics.model_dump(),
+        "telemetry": telem.model_dump(),
+        "created_at": mission.created_at.isoformat(),
+        "updated_at": mission.updated_at.isoformat()
+    }
+
+
+@app.post("/api/missions/{mission_id}/status")
+@app.put("/api/missions/{mission_id}/state")
+async def update_mission_state(mission_id: str, req: UpdateMissionStatusRequest):
+    try:
+        new_status = MissionStatus(req.status.upper())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid mission status '{req.status}'")
+    mission = await app_state.mission_manager.update_status(mission_id, new_status, reason=req.reason)
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    return {"status": "updated", "mission": mission}
+
+
 @app.post("/api/missions/{mission_id}/start")
 async def start_mission(mission_id: str):
     mission = await app_state.mission_manager.start_mission(mission_id)
@@ -102,8 +197,10 @@ async def start_mission(mission_id: str):
 
 
 @app.post("/api/missions/{mission_id}/pause")
-async def pause_mission(mission_id: str, req: PauseMissionRequest):
-    mission = await app_state.mission_manager.pause_mission(mission_id, reason=req.reason)
+async def pause_mission(mission_id: str, req: Optional[PauseMissionRequest] = None):
+    reason = req.reason if req else "Operator paused via Control Room"
+    await app_state.supervisor_engine.pause(mission_id, reason=reason)
+    mission = await app_state.mission_manager.get_mission(mission_id)
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
     return {"status": "paused", "mission": mission}
@@ -111,7 +208,8 @@ async def pause_mission(mission_id: str, req: PauseMissionRequest):
 
 @app.post("/api/missions/{mission_id}/resume")
 async def resume_mission(mission_id: str):
-    mission = await app_state.mission_manager.resume_mission(mission_id)
+    await app_state.supervisor_engine.resume(mission_id)
+    mission = await app_state.mission_manager.get_mission(mission_id)
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
     return {"status": "resumed", "mission": mission}
@@ -135,7 +233,8 @@ async def verify_mission(mission_id: str):
 
 @app.post("/api/missions/{mission_id}/cancel")
 async def cancel_mission(mission_id: str, reason: str = "Cancelled by operator"):
-    mission = await app_state.mission_manager.cancel_mission(mission_id, reason=reason)
+    await app_state.supervisor_engine.cancel(mission_id, reason=reason)
+    mission = await app_state.mission_manager.get_mission(mission_id)
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
     return {"status": "cancelled", "mission": mission}
@@ -199,6 +298,65 @@ async def get_mission_tasks(mission_id: str):
     }
 
 
+@app.post("/api/missions/{mission_id}/tasks")
+async def create_mission_task(mission_id: str, req: CreateTaskRequest):
+    graph = await app_state.task_manager.get_graph(mission_id)
+    task_id = req.id or (f"TASK-{len(graph.tasks) + 1:03d}" if graph else "TASK-001")
+    task = Task(
+        id=task_id,
+        mission_id=mission_id,
+        title=req.title,
+        dependencies=req.dependencies,
+        expected_files=req.expected_files,
+        order=req.order or (len(graph.tasks) + 1 if graph else 1)
+    )
+    if not graph:
+        await app_state.task_manager.initialize_mission_tasks(mission_id, [task])
+    else:
+        graph.add_task(task)
+        await app_state.event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task.id,
+                type=EventType.TASK_CREATED,
+                payload={
+                    "task_id": task.id,
+                    "title": task.title,
+                    "dependencies": task.dependencies,
+                    "expected_files": task.expected_files,
+                    "order": task.order,
+                }
+            )
+        )
+    return {"status": "created", "task": task.model_dump()}
+
+
+@app.get("/api/missions/{mission_id}/tasks/{task_id}")
+async def get_task_endpoint(mission_id: str, task_id: str):
+    task = await app_state.task_manager.get_task(mission_id, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found in mission {mission_id}")
+    return task.model_dump()
+
+
+@app.post("/api/missions/{mission_id}/tasks/{task_id}/status")
+async def update_task_status(mission_id: str, task_id: str, req: UpdateTaskStatusRequest):
+    st = req.status.upper()
+    if st in ("IN_PROGRESS", "RUNNING"):
+        task = await app_state.task_manager.start_task(mission_id, task_id, req.agent_id or "worker_01")
+    elif st == "COMPLETED":
+        task = await app_state.task_manager.complete_task(mission_id, task_id, summary=req.summary)
+    elif st == "FAILED":
+        task = await app_state.task_manager.fail_task(mission_id, task_id, error_signature=req.error_signature)
+    else:
+        task = await app_state.task_manager.get_task(mission_id, task_id)
+        if task:
+            task.status = TaskStatus(st)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return {"status": "updated", "task": task.model_dump()}
+
+
 # --- Events, Timeline & Narrative ---
 @app.get("/api/missions/{mission_id}/events")
 async def get_mission_events(
@@ -238,7 +396,70 @@ async def get_supervisor_decisions(mission_id: str):
     return {"mission_id": mission_id, "decisions": decisions}
 
 
+@app.get("/api/supervisor/events")
+async def query_supervisor_events(
+    mission_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    severity: Optional[str] = None,
+    limit: int = Query(default=100, le=500),
+    offset: int = 0
+):
+    ev_type = None
+    if event_type:
+        try:
+            ev_type = EventType(event_type)
+        except ValueError:
+            pass
+    ev_sev = None
+    if severity:
+        try:
+            ev_sev = EventSeverity(severity)
+        except ValueError:
+            pass
+
+    events = await app_state.event_store.query(
+        mission_id=mission_id,
+        event_types=[ev_type] if ev_type else None,
+        limit=limit,
+        offset=offset
+    )
+    if ev_sev:
+        events = [e for e in events if e.severity == ev_sev]
+    return {"events": events, "count": len(events)}
+
+
+@app.get("/api/supervisor/decisions")
+async def list_all_supervisor_decisions(limit: int = 100):
+    events = await app_state.event_store.query(limit=limit)
+    decisions = [
+        e.payload for e in events
+        if e.type in (EventType.SUPERVISOR_DECISION, EventType.SUPERVISOR_INTERVENTION)
+    ]
+    return {"decisions": decisions, "count": len(decisions)}
+
+
 # --- Agent Registry ---
+@app.post("/api/agents")
+async def register_agent_endpoint(req: RegisterAgentRequest):
+    status_enum = AgentStatus.IDLE
+    try:
+        status_enum = AgentStatus(req.status.upper())
+    except ValueError:
+        pass
+    record = await app_state.agent_registry.register_agent(
+        agent_id=req.agent_id,
+        agent_type=req.agent_type,
+        model=req.model,
+        mission_id=req.mission_id,
+        status=status_enum,
+        task_id=req.task_id,
+        metadata=req.metadata
+    )
+    if req.mission_id:
+        await app_state.mission_manager.assign_agent(req.mission_id, req.agent_id)
+    return {"status": "registered", "agent": record.model_dump()}
+
+
 @app.get("/api/agents")
 async def list_agents(
     mission_id: Optional[str] = None,
@@ -261,6 +482,57 @@ async def get_agent(agent_id: str):
     return agent.model_dump()
 
 
+@app.get("/api/agents/{agent_id}/state")
+async def get_agent_state(agent_id: str):
+    agent = await app_state.agent_registry.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return {
+        "agent_id": agent.agent_id,
+        "agent_type": agent.agent_type,
+        "model": agent.model,
+        "status": agent.status.value,
+        "health": agent.health.value,
+        "current_task": agent.current_task,
+        "task_id": agent.task_id,
+        "mission_id": agent.mission_id,
+        "iterations": agent.iterations,
+        "tool_calls": agent.tool_calls,
+        "interventions": agent.interventions,
+        "last_activity": agent.last_activity.isoformat(),
+        "active_files": agent.active_files,
+        "metadata": agent.metadata
+    }
+
+
+@app.put("/api/agents/{agent_id}/state")
+async def update_agent_state(agent_id: str, req: UpdateAgentStateRequest):
+    st_enum = None
+    if req.status:
+        try:
+            st_enum = AgentStatus(req.status.upper())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid agent status '{req.status}'")
+    hl_enum = None
+    if req.health:
+        try:
+            hl_enum = AgentHealth(req.health.upper())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid agent health '{req.health}'")
+
+    updated = await app_state.agent_registry.update_agent(
+        agent_id=agent_id,
+        status=st_enum,
+        health=hl_enum,
+        task_id=req.task_id,
+        model=req.model,
+        metadata=req.metadata
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return {"status": "updated", "agent": updated.model_dump()}
+
+
 @app.post("/api/agents/{agent_id}/pause")
 async def pause_agent(agent_id: str):
     success = await app_state.agent_registry.pause_agent(agent_id)
@@ -278,15 +550,36 @@ async def resume_agent(agent_id: str):
 
 
 # --- Human Approvals & Operator Control ---
+@app.post("/api/approvals")
+async def create_approval_endpoint(req: CreateApprovalRequest):
+    req_obj = await app_state.approval_manager.create_request(
+        mission_id=req.mission_id,
+        agent_id=req.agent_id,
+        action_type=req.action_type,
+        target=req.target,
+        reason=req.reason,
+        risk_level=req.risk_level,
+        task_id=req.task_id
+    )
+    return {"status": "created", "approval": req_obj.model_dump()}
+
+
 @app.get("/api/approvals")
 async def list_approvals(mission_id: Optional[str] = None):
     reqs = await app_state.approval_manager.list_requests(mission_id=mission_id)
     return {"approvals": [r.model_dump() for r in reqs], "count": len(reqs)}
 
 
+@app.get("/api/approvals/{approval_id}")
+async def get_approval_endpoint(approval_id: str):
+    req = await app_state.approval_manager.get_request(approval_id)
+    if not req:
+        raise HTTPException(status_code=404, detail=f"Approval request {approval_id} not found")
+    return req.model_dump()
+
+
 @app.post("/api/approvals/{approval_id}/resolve")
 async def resolve_approval(approval_id: str, payload: Dict[str, Any]):
-    from supervisor.approvals import ResolveApprovalPayload, ApprovalResolutionAction
     action_str = payload.get("action", "DENY")
     try:
         act = ApprovalResolutionAction(action_str)
@@ -304,6 +597,16 @@ async def resolve_approval(approval_id: str, payload: Dict[str, Any]):
     if not res:
         raise HTTPException(status_code=404, detail=f"Approval request {approval_id} not found")
     return {"status": "resolved", "approval": res.model_dump()}
+
+
+@app.post("/api/approvals/{approval_id}/cancel")
+async def cancel_approval_endpoint(approval_id: str, payload: Optional[Dict[str, Any]] = None):
+    operator = (payload or {}).get("operator", "human_operator")
+    reason = (payload or {}).get("reason", "Cancelled by operator")
+    res = await app_state.approval_manager.cancel_request(approval_id, operator=operator, reason=reason)
+    if not res:
+        raise HTTPException(status_code=404, detail=f"Approval request {approval_id} not found")
+    return {"status": "cancelled", "approval": res.model_dump()}
 
 
 @app.post("/api/missions/{mission_id}/take-control")
@@ -377,6 +680,8 @@ async def websocket_event_stream(websocket: WebSocket):
             # Keep alive and listen for client commands
             data = await websocket.receive_text()
             logger.debug(f"Received client message over WS: {data}")
+            if "ping" in data.lower():
+                await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
         await ws_hub.disconnect(websocket)
     except Exception as e:

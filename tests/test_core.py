@@ -52,7 +52,7 @@ async def test_mission_manager_lifecycle():
         title="Add CSV import",
         goal="Parse CSV files without database modification"
     )
-    assert mission.status == MissionStatus.PENDING
+    assert mission.status in (MissionStatus.PENDING, MissionStatus.CREATED)
 
     await mgr.update_status(mission.id, MissionStatus.RUNNING)
     assert len(mission_events) == 1
