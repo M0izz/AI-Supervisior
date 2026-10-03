@@ -102,3 +102,19 @@ Phase 7 elevates the Supervisor from a single-agent monitor into an enterprise-g
 - **Human Supervisory Interventions**: Standardized operator actions (`REQUEST_APPROVAL`, `TAKE_CONTROL`, `PAUSE`, `RESUME`, `CANCEL`, `HUMAN_REQUIRED`). Strict invariant: absence of response is never treated as approval.
 - **Four-Quadrant Telemetry**: Execution, Reliability, Risk, and CI metrics with dedicated per-agent breakdowns and strict zero-fabrication cost accounting.
 - **Full REST & WebSocket Surface**: Live control and streaming endpoints at `/api/missions/{id}/state`, `/api/agents`, `/api/approvals`, `/api/supervisor/events`, and `/ws/events`.
+
+## 8. Reliability, Failure Injection & Safety Invariants (Phase 8)
+
+Phase 8 hardens the control plane against realistic autonomous-agent failure modes through deterministic fixtures, property-style invariants, and chaos testing:
+- **24-Scenario Failure Matrix**: Deterministic handling for repeated failures, stagnation, infinite loops, timeouts, iteration/tool budget overflow, scope violations, dangerous commands, false completions, CI/Jenkins faults, container crashes, resource exhaustion (OOM), model reasoning failures/timeouts, reviewer/verifier rejections, mission cancellations, and concurrent worker contention.
+- **Strict Safety Invariants**:
+  - *Dangerous Actions Blocked*: Dangerous commands cannot execute autonomously without explicit operator approval.
+  - *Worker Cannot Mark Work VERIFIED*: Verification is strictly segregated to the independent `VerifierAgent` or Supervisor.
+  - *Reviewer Read-Only*: Reviewer is restricted to `ALLOWED_READONLY_TOOLS` and cannot mutate workspace files.
+  - *Empirical Verification Invariant*: Tasks cannot enter `VERIFIED` state without verified empirical proof (passing CI/tests).
+  - *Repeated Strategy Guard*: Previously rejected recovery approaches are blocked and escalated to `HUMAN_REQUIRED`.
+  - *Sandbox Isolation*: Container engine strictly prohibits host-root, home directory, or unauthorized path mounts.
+  - *Secret Redaction*: Sensitive credentials, bearer tokens, and keys are scrubbed from arguments and event payloads.
+  - *Mission Segregation*: Complete event, state machine, and lock isolation ensures Mission A never contaminates Mission B.
+- **Empirical Chaos Demo**: `demo/scenarios/scenario_03_failure_matrix.py` injects active faults across actual system components and renders a live reliability report without print-only simulation or arbitrary scores.
+

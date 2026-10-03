@@ -55,13 +55,30 @@ class BaseTool(ABC):
     @staticmethod
     def sanitize_arguments(arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Strip sensitive secrets or env vars from tool argument payloads."""
+        import re
         sanitized = {}
-        sensitive_keywords = {"key", "secret", "token", "password", "auth", "credential", "bearer"}
+        sensitive_keywords = {"key", "secret", "token", "password", "auth", "credential", "bearer", "api_key", "access_token", "private_key"}
+        secret_patterns = [
+            (re.compile(r"ghp_[A-Za-z0-9_]{10,}", re.IGNORECASE), "[REDACTED]"),
+            (re.compile(r"sk-[A-Za-z0-9_]{10,}", re.IGNORECASE), "[REDACTED]"),
+            (re.compile(r"Bearer\s+[A-Za-z0-9_\-\.]{10,}", re.IGNORECASE), "Bearer [REDACTED]"),
+            (re.compile(r"(password\s*[:=]\s*)([^\s;]+)", re.IGNORECASE), r"\1[REDACTED]"),
+            (re.compile(r"(secret\s*[:=]\s*)([^\s;]+)", re.IGNORECASE), r"\1[REDACTED]"),
+            (re.compile(r"(api[_-]?key\s*[:=]\s*)([^\s;]+)", re.IGNORECASE), r"\1[REDACTED]"),
+        ]
         for k, v in arguments.items():
             if any(s in k.lower() for s in sensitive_keywords):
                 sanitized[k] = "[REDACTED]"
-            elif isinstance(v, str) and len(v) > 500:
-                sanitized[k] = v[:500] + "... [TRUNCATED]"
+            elif isinstance(v, str):
+                val = v
+                for pattern, repl in secret_patterns:
+                    val = pattern.sub(repl, val)
+                if len(val) > 500:
+                    sanitized[k] = val[:500] + "... [TRUNCATED]"
+                else:
+                    sanitized[k] = val
+            elif isinstance(v, dict):
+                sanitized[k] = BaseTool.sanitize_arguments(v)
             else:
                 sanitized[k] = v
         return sanitized

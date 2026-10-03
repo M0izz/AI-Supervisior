@@ -40,6 +40,19 @@ class ReviewerAgent(BaseAgent):
         }
         super().__init__(agent_id=agent_id, role="Reviewer", event_bus=event_bus or EventBus(), tools=readonly_tools)
 
+    async def call_tool(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        mission_id: str,
+        task_id: Optional[str] = None
+    ) -> Any:
+        if tool_name not in self.ALLOWED_READONLY_TOOLS:
+            raise PermissionError(
+                f"Reviewer is strictly read-only and cannot mutate workspace files (disallowed tool: '{tool_name}')."
+            )
+        return await super().call_tool(tool_name, arguments, mission_id=mission_id, task_id=task_id)
+
     async def run(self, context_package: AgentContextPackage) -> ReviewerDiagnosis:
         mission_id = context_package.mission_id
         task_id = context_package.task.get("id")

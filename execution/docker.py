@@ -81,22 +81,30 @@ class DockerExecutionProvider(BaseExecutionProvider):
         resolved = workspace_path.resolve()
         resolved_str = str(resolved).replace("\\", "/").rstrip("/")
 
-        # Check against host roots
-        for prohibited in self.PROHIBITED_HOST_PATHS:
-            prohib_str = prohibited.replace("\\", "/").rstrip("/")
-            if resolved_str == prohib_str or resolved == resolved.parent:
-                raise PermissionError(f"DockerExecutionProvider: Mounting host root is strictly prohibited: '{resolved}'")
-
-        # Check home directory mount
+        # 1. Check home directory mount
         is_home = False
         try:
             home_dir = Path.home().resolve()
-            is_home = (resolved == home_dir)
+            is_home = (resolved == home_dir or str(resolved).lower() == str(home_dir).lower())
         except Exception:
             is_home = False
 
         if is_home:
             raise PermissionError(f"DockerExecutionProvider: Mounting user home directory is prohibited: '{resolved}'")
+
+        # 2. Check against host roots and prohibited system paths
+        for prohibited in self.PROHIBITED_HOST_PATHS:
+            prohib_norm = prohibited.replace("\\", "/").rstrip("/")
+            if not prohib_norm:
+                if resolved == resolved.parent or resolved_str in ("/", ""):
+                    raise PermissionError(f"DockerExecutionProvider: Mounting host root is strictly prohibited: '{resolved}'")
+                continue
+            if (
+                resolved_str.lower() == prohib_norm.lower()
+                or resolved == resolved.parent
+                or resolved_str.lower().endswith("/" + prohib_norm.lstrip("/").lower())
+            ):
+                raise PermissionError(f"DockerExecutionProvider: Mounting host root is strictly prohibited: '{resolved}'")
 
         if not resolved.exists():
             raise FileNotFoundError(f"DockerExecutionProvider: Task workspace does not exist: '{resolved}'")

@@ -88,10 +88,11 @@ class CreateTaskRequest(BaseModel):
 
 
 class UpdateTaskStatusRequest(BaseModel):
-    status: str  # IN_PROGRESS, COMPLETED, FAILED, PENDING
+    status: str  # IN_PROGRESS, COMPLETED, FAILED, PENDING, VERIFIED
     agent_id: Optional[str] = None
     summary: Optional[str] = None
     error_signature: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class CreateApprovalRequest(BaseModel):
@@ -348,6 +349,24 @@ async def update_task_status(mission_id: str, task_id: str, req: UpdateTaskStatu
         task = await app_state.task_manager.complete_task(mission_id, task_id, summary=req.summary)
     elif st == "FAILED":
         task = await app_state.task_manager.fail_task(mission_id, task_id, error_signature=req.error_signature)
+    elif st == "VERIFIED":
+        caller_role = (req.agent_id or "WORKER").upper()
+        meta = req.metadata or {}
+        ci_passed = bool(meta.get("ci_passed", False))
+        tests_passed = bool(meta.get("tests_passed", False))
+        try:
+            task = await app_state.task_manager.verify_task(
+                mission_id=mission_id,
+                task_id=task_id,
+                caller_role=caller_role,
+                ci_passed=ci_passed,
+                tests_passed=tests_passed,
+                evidence=meta
+            )
+        except PermissionError as pe:
+            raise HTTPException(status_code=403, detail=str(pe))
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
     else:
         task = await app_state.task_manager.get_task(mission_id, task_id)
         if task:

@@ -17,6 +17,7 @@ class ApprovalResolutionAction(str, Enum):
     APPROVE_ONCE = "APPROVE_ONCE"
     APPROVE_FOR_MISSION = "APPROVE_FOR_MISSION"
     DENY = "DENY"
+    REJECT = "DENY"  # Compatibility alias
     TAKE_CONTROL = "TAKE_CONTROL"
     CANCEL = "CANCEL"
 

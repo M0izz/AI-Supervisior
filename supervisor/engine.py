@@ -15,6 +15,7 @@ from supervisor.reasoning import SupervisoryReasoner
 from agents.registry import AgentRegistry
 from supervisor.telemetry import TelemetryTracker
 from supervisor.approvals import ApprovalManager
+from core.state.models import ApprovalStatus
 
 logger = logging.getLogger("supervisor.engine")
 
@@ -152,6 +153,22 @@ class SupervisorEngine:
             self._rejected_approaches[mission_id] = []
         self._rejected_approaches[mission_id].append(approach)
         logger.info(f"[SUPERVISOR] Registered rejected approach for mission {mission_id}: '{approach}'")
+
+    def is_approach_rejected(self, mission_id: str, approach: str) -> bool:
+        """Check if an approach has already been rejected/exhausted for this mission."""
+        rejected = self._rejected_approaches.get(mission_id, [])
+        return any(approach.lower() in r.lower() or r.lower() in approach.lower() for r in rejected)
+
+    def validate_recovery_strategy(self, mission_id: str, proposed_strategy: str) -> bool:
+        """
+        Invariants:
+        - Repeated recovery strategies are strictly blocked.
+        Returns True if valid, False if rejected/repeated.
+        """
+        if self.is_approach_rejected(mission_id, proposed_strategy):
+            logger.warning(f"[SUPERVISOR] Repeated recovery strategy blocked for mission {mission_id}: '{proposed_strategy}'")
+            return False
+        return True
 
     async def _attach_listeners(self) -> None:
         await self.event_bus.subscribe(self.handle_event)
@@ -515,6 +532,22 @@ class SupervisorEngine:
                 source="deterministic_fallback"
             )
 
+        # Check if the recommended recovery strategy repeats an already disproven approach
+        strategy_text = decision.recommended_strategy or decision.reason
+        if strategy_text and not self.validate_recovery_strategy(mission_id, strategy_text):
+            logger.warning(
+                f"[SUPERVISOR] Overriding decision: recovery strategy '{strategy_text}' was previously rejected. "
+                "Escalating to HUMAN_REQUIRED."
+            )
+            decision = SupervisorDecision(
+                action=SupervisorAction.HUMAN_REQUIRED,
+                severity="critical",
+                confidence=0.99,
+                reason=f"Recovery strategy blocked: approach '{strategy_text}' has already failed previously for mission {mission_id}. Human intervention required.",
+                target_agent=agent_id,
+                source="invariant_guard"
+            )
+
         await self.event_bus.publish(
             Event(
                 mission_id=mission_id,
@@ -826,6 +859,10 @@ class SupervisorEngine:
         sm.transition(SupervisorAction.CANCEL)
         self._default_state_machine.transition(SupervisorAction.CANCEL)
         await self.mission_manager.cancel_mission(mission_id, reason=reason)
+        if self.approval_manager:
+            pending = await self.approval_manager.list_requests(mission_id=mission_id, status=ApprovalStatus.PENDING)
+            for req in pending:
+                await self.approval_manager.cancel_request(req.id, operator="supervisor", reason=f"Mission {mission_id} cancelled: {reason}")
         await self.event_bus.publish(
             Event(
                 mission_id=mission_id,

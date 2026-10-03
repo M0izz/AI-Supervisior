@@ -9,6 +9,7 @@ class ApprovalStatus(str, Enum):
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     DENIED = "DENIED"
+    REJECTED = "DENIED"  # Compatibility alias
     CANCELLED = "CANCELLED"
 
 

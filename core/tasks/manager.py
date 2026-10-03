@@ -117,6 +117,60 @@ class TaskManager:
         )
         return task
 
+    async def verify_task(
+        self,
+        mission_id: str,
+        task_id: str,
+        caller_role: str = "VERIFIER",
+        ci_passed: bool = False,
+        tests_passed: bool = False,
+        evidence: Optional[Dict[str, Any]] = None
+    ) -> Task:
+        """
+        Mark task as VERIFIED.
+        Enforces strict safety invariants:
+        - Workers CANNOT mark work VERIFIED (only Verifier or Supervisor can).
+        - Failed or missing CI/tests cannot produce VERIFIED.
+        """
+        if caller_role.upper() not in ("VERIFIER", "SUPERVISOR"):
+            raise PermissionError(
+                f"Role '{caller_role}' is not authorized to mark task as VERIFIED. "
+                "Only Verifier or Supervisor can verify."
+            )
+        if not (ci_passed or tests_passed):
+            raise ValueError(
+                "Empirical verification requirement not met: "
+                "CI or tests must pass before task can be marked VERIFIED."
+            )
+
+        async with self._lock:
+            graph = self._graphs.get(mission_id)
+            if not graph:
+                raise ValueError(f"Mission graph '{mission_id}' not found.")
+            task = graph.get_task(task_id)
+            if not task:
+                raise ValueError(f"Task '{task_id}' not found.")
+            task.status = TaskStatus.VERIFIED
+            task.completed_at = datetime.now(timezone.utc)
+            task.metadata["verified"] = True
+            task.metadata["verification_evidence"] = evidence or {}
+
+        await self._event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                task_id=task_id,
+                agent_id=caller_role,
+                type=EventType.VERIFICATION_RESULT,
+                severity=EventSeverity.INFO,
+                payload={
+                    "task_id": task_id,
+                    "status": "VERIFIED",
+                    "evidence": evidence or {}
+                }
+            )
+        )
+        return task
+
     async def fail_task(
         self,
         mission_id: str,
