@@ -32,9 +32,11 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
   onSelectAgent,
   onNavigateToTab
 }) => {
-  const activeMissions = missions.filter(m => m.status === 'RUNNING' || m.status === 'INVESTIGATING' || m.status === 'WAITING_APPROVAL' || m.status === 'RECOVERING');
-  const runningAgents = agents.filter(a => a.status === 'RUNNING' || a.status === 'BUSY');
-  const failedMissions = missions.filter(m => m.status === 'FAILED');
+  const safeMissions = Array.isArray(missions) ? missions : [];
+  const safeAgents = Array.isArray(agents) ? agents : [];
+  const activeMissions = safeMissions.filter(m => m.status === 'RUNNING' || m.status === 'INVESTIGATING' || m.status === 'WAITING_APPROVAL' || m.status === 'RECOVERING');
+  const runningAgents = safeAgents.filter(a => a.status === 'RUNNING' || a.status === 'BUSY');
+  const failedMissions = safeMissions.filter(m => m.status === 'FAILED');
 
   const getMissionStatusBadge = (status: string) => {
     switch (status) {

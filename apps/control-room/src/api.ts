@@ -38,7 +38,8 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 // Missions
 export async function getMissions(): Promise<Mission[]> {
-  return fetchJson<Mission[]>('/api/missions');
+  const data = await fetchJson<any>('/api/missions');
+  return Array.isArray(data) ? data : (data?.missions || []);
 }
 export const fetchMissions = getMissions;
 
@@ -100,11 +101,15 @@ export async function getMissionTasks(missionId: string): Promise<{
   tasks: Task[];
   graph: { nodes: any[]; edges: any[] };
 }> {
-  return fetchJson(`/api/missions/${missionId}/tasks`);
+  const data = await fetchJson<any>(`/api/missions/${missionId}/tasks`);
+  return {
+    tasks: Array.isArray(data?.tasks) ? data.tasks : [],
+    graph: data?.graph || { nodes: [], edges: [] }
+  };
 }
 
 export async function getTask(missionId: string, taskId: string): Promise<Task> {
-  return fetchJson(`/api/missions/${missionId}/tasks/${taskId}`);
+  return fetchJson<Task>(`/api/missions/${missionId}/tasks/${taskId}`);
 }
 
 // Telemetry
@@ -112,7 +117,11 @@ export async function getOverviewTelemetry(): Promise<{
   overview: GlobalOverviewTelemetry;
   missions: any[];
 }> {
-  return fetchJson('/api/telemetry/overview');
+  try {
+    return await fetchJson('/api/control-room/overview');
+  } catch {
+    return await fetchJson('/api/telemetry/overview');
+  }
 }
 export const fetchTelemetry = getOverviewTelemetry;
 
@@ -126,8 +135,8 @@ export async function getAgents(params?: { missionId?: string; agentType?: strin
   if (params?.missionId) q.set('mission_id', params.missionId);
   if (params?.agentType) q.set('agent_type', params.agentType);
   if (params?.status) q.set('status', params.status);
-  const data = await fetchJson<{ agents: AgentRecord[]; count: number }>(`/api/agents?${q.toString()}`);
-  return data.agents;
+  const data = await fetchJson<any>(`/api/agents?${q.toString()}`);
+  return Array.isArray(data) ? data : (data?.agents || []);
 }
 export const fetchAgents = getAgents;
 
@@ -150,8 +159,8 @@ export async function resumeAgent(agentId: string): Promise<{ status: string }> 
 // Approvals
 export async function getApprovals(missionId?: string): Promise<ApprovalRequest[]> {
   const q = missionId ? `?mission_id=${missionId}` : '';
-  const data = await fetchJson<{ requests: ApprovalRequest[]; count: number }>(`/api/approvals${q}`);
-  return data.requests;
+  const data = await fetchJson<any>(`/api/approvals${q}`);
+  return Array.isArray(data) ? data : (data?.approvals || data?.requests || []);
 }
 export const fetchApprovals = getApprovals;
 
@@ -192,18 +201,18 @@ export async function getSupervisorEvents(params?: {
   if (params?.severity) q.set('severity', params.severity);
   if (params?.limit) q.set('limit', String(params.limit));
   if (params?.offset) q.set('offset', String(params.offset));
-  const data = await fetchJson<{ events: Event[]; count: number }>(`/api/supervisor/events?${q.toString()}`);
-  return data.events;
+  const data = await fetchJson<any>(`/api/supervisor/events?${q.toString()}`);
+  return Array.isArray(data) ? data : (data?.events || []);
 }
 
 export async function getMissionEvents(missionId: string, limit: number = 100): Promise<Event[]> {
-  const data = await fetchJson<{ events: Event[]; count: number }>(`/api/missions/${missionId}/events?limit=${limit}`);
-  return data.events;
+  const data = await fetchJson<any>(`/api/missions/${missionId}/events?limit=${limit}`);
+  return Array.isArray(data) ? data : (data?.events || []);
 }
 
 export async function getMissionTimeline(missionId: string): Promise<any[]> {
-  const data = await fetchJson<{ mission_id: string; timeline: any[] }>(`/api/missions/${missionId}/timeline`);
-  return data.timeline;
+  const data = await fetchJson<any>(`/api/missions/${missionId}/timeline`);
+  return Array.isArray(data) ? data : (data?.timeline || []);
 }
 
 // Memory
@@ -211,8 +220,8 @@ export async function getAllMemory(params?: { missionId?: string; category?: str
   const q = new URLSearchParams();
   if (params?.missionId) q.set('mission_id', params.missionId);
   if (params?.category) q.set('category', params.category);
-  const data = await fetchJson<{ records: MemoryRecord[]; count: number }>(`/api/memory?${q.toString()}`);
-  return data.records;
+  const data = await fetchJson<any>(`/api/memory?${q.toString()}`);
+  return Array.isArray(data) ? data : (data?.records || []);
 }
 export const fetchMemory = getAllMemory;
 

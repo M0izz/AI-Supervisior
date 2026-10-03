@@ -30,10 +30,12 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
   const [isAdding, setIsAdding] = useState<boolean>(false);
   const [newContent, setNewContent] = useState<string>('');
   const [newType, setNewType] = useState<MemoryRecordType>('VERIFIED_FACT');
-  const [newMissionId, setNewMissionId] = useState<string>(missions[0]?.id || 'global');
+  const safeMissions = Array.isArray(missions) ? missions : [];
+  const [newMissionId, setNewMissionId] = useState<string>(safeMissions[0]?.id || 'global');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const filteredRecords = memoryRecords.filter(rec => {
+  const safeRecords = Array.isArray(memoryRecords) ? memoryRecords : [];
+  const filteredRecords = safeRecords.filter(rec => {
     const category = (rec.category || rec.type || '').toUpperCase();
     if (selectedType !== 'ALL' && category !== selectedType && rec.status !== selectedType) return false;
     if (searchTerm) {

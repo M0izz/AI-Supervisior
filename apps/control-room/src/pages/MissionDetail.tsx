@@ -90,7 +90,8 @@ export const MissionDetail: React.FC<MissionDetailProps> = ({
   }
 
   const assignedList = currentMission.assigned_agents || currentMission.assigned_agent_ids || [];
-  const assignedAgents = agents.filter(a => 
+  const safeAgents = Array.isArray(agents) ? agents : [];
+  const assignedAgents = safeAgents.filter(a => 
     assignedList.includes(a.agent_id) || 
     tasks.some(t => t.assigned_agent_id === a.agent_id)
   );

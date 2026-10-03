@@ -27,7 +27,8 @@ export const AgentDetail: React.FC<AgentDetailProps> = ({
   const [isActing, setIsActing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const currentAgent = agents.find(a => a.agent_id === selectedAgentId) || agents[0];
+  const safeAgents = Array.isArray(agents) ? agents : [];
+  const currentAgent = safeAgents.find(a => a.agent_id === selectedAgentId) || safeAgents[0];
 
   const handlePause = async () => {
     if (!currentAgent) return;

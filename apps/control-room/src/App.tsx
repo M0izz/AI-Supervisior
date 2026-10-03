@@ -45,18 +45,23 @@ export const App: React.FC = () => {
         fetchTelemetry().catch(() => null)
       ]);
 
-      setMissions(m);
-      if (m.length > 0 && !selectedMissionId) {
-        setSelectedMissionId(m[0].id);
+      const safeMissions = Array.isArray(m) ? m : [];
+      const safeAgents = Array.isArray(a) ? a : [];
+      const safeApprovals = Array.isArray(apprv) ? apprv : [];
+      const safeMemory = Array.isArray(mem) ? mem : [];
+
+      setMissions(safeMissions);
+      if (safeMissions.length > 0 && !selectedMissionId) {
+        setSelectedMissionId(safeMissions[0].id);
       }
 
-      setAgents(a);
-      if (a.length > 0 && !selectedAgentId) {
-        setSelectedAgentId(a[0].agent_id);
+      setAgents(safeAgents);
+      if (safeAgents.length > 0 && !selectedAgentId) {
+        setSelectedAgentId(safeAgents[0].agent_id);
       }
 
-      setApprovals(apprv);
-      setMemoryRecords(mem);
+      setApprovals(safeApprovals);
+      setMemoryRecords(safeMemory);
       setTelemetry(tel);
     } catch (err) {
       console.error('Failed to sync control room data', err);
@@ -123,7 +128,7 @@ export const App: React.FC = () => {
     }
   };
 
-  const pendingApprovalsCount = approvals.filter(a => a.status === 'PENDING').length;
+  const pendingApprovalsCount = Array.isArray(approvals) ? approvals.filter(a => a.status === 'PENDING').length : 0;
 
   return (
     <div className="app-container">

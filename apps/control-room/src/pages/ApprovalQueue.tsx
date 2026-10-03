@@ -22,8 +22,9 @@ export const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const pendingApprovals = approvals.filter(a => a.status === 'PENDING');
-  const historicalApprovals = approvals.filter(a => a.status !== 'PENDING');
+  const safeApprovals = Array.isArray(approvals) ? approvals : [];
+  const pendingApprovals = safeApprovals.filter(a => a.status === 'PENDING');
+  const historicalApprovals = safeApprovals.filter(a => a.status !== 'PENDING');
 
   const handleResolve = async (requestId: string, status: 'APPROVE_ONCE' | 'DENY') => {
     setSubmittingId(requestId);

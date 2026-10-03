@@ -301,6 +301,7 @@ async def cancel_mission(mission_id: str, reason: str = "Cancelled by operator")
 
 # --- Control Room & Telemetry ---
 @app.get("/api/control-room/overview")
+@app.get("/api/telemetry/overview")
 async def get_control_room_overview():
     missions = await app_state.mission_manager.list_missions()
     agents = await app_state.agent_registry.list_agents()
@@ -644,7 +645,8 @@ async def create_approval_endpoint(req: CreateApprovalRequest):
 @app.get("/api/approvals")
 async def list_approvals(mission_id: Optional[str] = None):
     reqs = await app_state.approval_manager.list_requests(mission_id=mission_id)
-    return {"approvals": [r.model_dump() for r in reqs], "count": len(reqs)}
+    serialized = [r.model_dump() for r in reqs]
+    return {"approvals": serialized, "requests": serialized, "count": len(reqs)}
 
 
 @app.get("/api/approvals/{approval_id}")

@@ -24,7 +24,8 @@ export const SupervisorEvents: React.FC<SupervisorEventsProps> = ({
   const [viewMode, setViewMode] = useState<'timeline' | 'table'>('timeline');
 
   // Filter events
-  const filteredEvents = events.filter((ev) => {
+  const safeEvents = Array.isArray(events) ? events : [];
+  const filteredEvents = safeEvents.filter((ev) => {
     const eventType = ev.event_type || ev.type || '';
     if (filterType !== 'ALL' && eventType !== filterType) return false;
     if (filterSeverity !== 'ALL') {
