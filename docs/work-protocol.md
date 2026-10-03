@@ -134,3 +134,30 @@ When an external adapter runs:
    - Timeout/Cancel: `agent.stopped` with `exit_status="timeout"` / `"cancelled"`
 4. Events stream to the live `EventBus` and are durably persisted into SQLite WAL tables.
 
+---
+
+## 8. Live Supervisory Watchdogs Integration (Phase 3)
+
+The Supervisor consumes the canonical `WorkProtocolEvent` stream passively via `WatchdogEngine` without coupling to adapter internals:
+
+```text
+ClaudeCodeAdapter
+       ↓
+WorkProtocolEvent (file.changed, command.started, test.failed)
+       ↓
+  EventBus
+       ↓
+WatchdogEngine
+       ↓
+WatchdogDecision (ALLOW / CANCEL / REQUIRE_APPROVAL)
+       ↓
+InterventionController
+       ↓
+ClaudeCodeAdapter.cancel() (if violated)
+```
+
+1. **Passive Evaluation**: Events are inspected as untrusted data without triggering recursive command executions or arbitrary shell evaluations.
+2. **Deterministic Rules**: `LOOP_DETECTED` (normalized error signatures $\times 3$), `SCOPE_VIOLATION` (out-of-bounds files or directory traversal), `DANGEROUS_COMMAND` (prohibited shell/SQL commands), and `BUDGET_EXCEEDED` / `TIMEOUT_EXCEEDED`.
+3. **Structured Intervention**: Generates `supervisor.intervened` events with audit records, published onto the `EventBus` and persisted to SQLite WAL storage.
+
+

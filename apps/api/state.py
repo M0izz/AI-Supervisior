@@ -65,23 +65,30 @@ class AppState:
 
         # Execution & Isolation Managers
         from execution.worktree import GitWorktreeManager
+        from adapters.registry import AdapterRegistry
         from adapters.claude_code import ClaudeCodeAdapter
+        from supervisor.watchdogs import WatchdogEngine, InterventionController
+
         self.worktree_manager = GitWorktreeManager(repo_root=Path("."))
+        self.adapter_registry = AdapterRegistry()
         self.claude_adapter = ClaudeCodeAdapter(
             event_bus=self.event_bus,
             worktree_manager=self.worktree_manager,
         )
-        self.agent_registry.register_adapter(self.claude_adapter)
+        self.adapter_registry.register_adapter(self.claude_adapter)
+
+        # Supervisory Watchdog Engine & Intervention Controller (Phase 3)
+        self.watchdog_engine = WatchdogEngine(policy=self.policy_config)
+        self.intervention_controller = InterventionController(
+            watchdog_engine=self.watchdog_engine,
+            adapter_registry=self.adapter_registry,
+            event_bus=self.event_bus,
+            approval_repo=self.approval_repo,
+            event_repo=self.event_repo,
+        )
 
         # Execution Manager (Docker sandboxing + local process fallback)
         self.execution_manager = ExecutionManager(event_bus=self.event_bus)
-
-    async def _sqlite_event_sink(self, event: Any) -> None:
-        """Asynchronously persists event bus stream to SQLite without blocking handlers."""
-        try:
-            await self.event_repo.append(event)
-        except Exception:
-            pass
 
         # Reasoning Provider (Nebius Nemotron when API key configured, otherwise deterministic mock)
         if os.getenv("NEBIUS_API_KEY"):
@@ -105,9 +112,17 @@ class AppState:
             reasoner=self.reasoner,
             registry=self.agent_registry,
             telemetry=self.telemetry,
-            approval_manager=self.approval_manager
+            approval_manager=self.approval_manager,
         )
+
+    async def _sqlite_event_sink(self, event: Any) -> None:
+        """Asynchronously persists event bus stream to SQLite without blocking handlers."""
+        try:
+            await self.event_repo.append(event)
+        except Exception:
+            pass
 
 
 # Global instance
 app_state = AppState()
+

@@ -161,5 +161,20 @@ Phase 2 establishes the universal `AgentAdapter` contract and integrates Anthrop
 ### 4. Adapter Discovery (`adapters/registry.py`)
 - Integrated into `AgentRegistry` for dynamic capability querying (`find_by_capability`), availability probing, and multi-agent dispatch coordination.
 
+## 11. Live Supervisory Watchdogs on the Work Protocol (Phase 3)
 
+Phase 3 operationalizes the fundamental invariant: *the agent is not allowed to supervise itself*. The Supervisor observes external agents via canonical `WorkProtocolEvent` streams and intervenes deterministically:
 
+### 1. Watchdog Engine (`supervisor/watchdogs.py`)
+- **Deterministic-First Evaluation**: Zero LLM dependencies for safety-critical decisions. All rules evaluate synchronously or near-instantaneously from protocol events.
+- **Provider-Independent Decisions**: Evaluates events into structured `WatchdogDecision` records containing `action` (`ALLOW`, `WARN`, `PAUSE`, `CANCEL`, `REQUIRE_APPROVAL`), `rule_id`, `severity`, and concrete evidence.
+- **Integrated Rules**:
+  - `DANGEROUS_COMMAND`: Intercepts prohibited destructive commands (`rm -rf /`, `DROP TABLE`, `kill -9`) before/during execution.
+  - `SCOPE_VIOLATION`: Enforces authorized task file boundaries, flags traversal attempts (`../`), and protects system/secret paths (`.git/`, `.env`).
+  - `LOOP_DETECTED`: Detects repeated failure loops using normalized error signatures (abstracting line numbers and pointers); halts after 3 consecutive identical failures.
+  - `BUDGET_EXCEEDED` & `TIMEOUT_EXCEEDED`: Enforces action turn budgets and execution duration limits.
+
+### 2. Intervention Controller & Idempotency
+- **Decoupled Actuation**: Converts `WatchdogDecision` into adapter lifecycle actions (`AgentAdapter.cancel(task_id)`), human approval requests, and audit logs.
+- **Idempotency Guard**: Guarantees that a task receives terminal cancellation at most once, preventing cascaded process kill attempts during shutdown.
+- **Durable Audit Trail**: Persists every intervention to SQLite WAL storage and publishes `supervisor.intervention` events to the `EventBus`.

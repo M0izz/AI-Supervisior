@@ -28,7 +28,8 @@ This matrix tracks the real operational status of every agent adapter. An adapte
 PHASE 00 ──► PHASE 01 ──► PHASE 02 ──► PHASE 03 ──► PHASE 04 ──► PHASE 05
 Audit &      Product      Claude Code  Supervisory  Independent  Codex Handoff
 Roadmap      Kernel       Adapter      Watchdogs    Verifier     (MVP Milestone)
-(COMPLETE)   (COMPLETE)   (COMPLETE)
+(COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)
+
 
     │
     ▼
@@ -100,13 +101,28 @@ Router       Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (T
 
 ---
 
-### Phase 3: Supervisory Watchdogs on Live Protocol — READY TO BUILD
-* **Objective**: Connect the deterministic watchdog engine to live Work Protocol streams emitted by external adapters.
-* **Prerequisites**: Phase 1 kernel + Phase 2 Claude Code adapter complete.
+### Phase 3: Supervisory Watchdogs on Live Protocol
+* **Objective**: Connect the deterministic watchdog engine to live Work Protocol streams emitted by external adapters and enact automated interventions.
 * **Deliverables**:
-  - `core/supervisor/watchdogs.py`: Connect loop detector, scope violation guard, dangerous command interceptor, and budget ceiling enforcer to `WorkProtocolEvent` stream.
-  - Adapter pause/resume/cancel control hooks invoked on watchdog trigger.
-* **Status**: ⏳ **READY FOR IMPLEMENTATION (Awaiting Phase 3 authorization)**
+  - `supervisor/watchdogs.py`: `WatchdogEngine`, `WatchdogDecision`, `WatchdogAction`, `InterventionRecord`, and `InterventionController`.
+  - Integrated rules: `DANGEROUS_COMMAND`, `SCOPE_VIOLATION`, `LOOP_DETECTED` (threshold = 3, normalized signatures), `BUDGET_EXCEEDED`, and `TIMEOUT_EXCEEDED`.
+  - Intervention actuation: Decoupled invocation of `AgentAdapter.cancel(task_id)` with strict idempotency guards against teardown cascades.
+  - EventBus & SQLite persistence: Structured `supervisor.intervention` events with audit records.
+  - Test Suite: `tests/test_watchdogs.py` (19 tests covering evaluation, loop detection, scope, dangerous commands, budgets, idempotency, and end-to-end killer scenario).
+  - Documentation: `docs/supervision/watchdogs.md`.
+* **Acceptance Criteria**:
+  - [x] WorkProtocolEvent reaches watchdog engine.
+  - [x] Watchdogs evaluate live external-agent events deterministically without LLMs.
+  - [x] Claude execution remains provider-independent from watchdog logic.
+  - [x] Repeated failure loop detection with normalized error signatures triggers cancellation.
+  - [x] Scope violation detection stops out-of-scope modifications, path traversal, and protected file edits.
+  - [x] Prohibited dangerous commands intercepted safely.
+  - [x] Execution budgets (turn caps and duration timeouts) enforced.
+  - [x] InterventionController dispatches adapter cancellation and integrates with approvals.
+  - [x] Idempotency guards prevent duplicate cancellations.
+  - [x] All 19 Phase 3 tests pass; full regression suite passes with 172 passed, 3 skipped, 0 failed.
+* **Status**: ✅ **COMPLETE**
+
 
 ---
 
