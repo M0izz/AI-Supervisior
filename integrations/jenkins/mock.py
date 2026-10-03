@@ -207,3 +207,13 @@ class MockJenkinsProvider(JenkinsProvider):
         if self.mode == "TIMEOUT":
             raise JenkinsTimeoutError(f"Mock build {build_id} timed out waiting for completion.")
         return await self.get_build_result(build_id, job_name=job_name)
+
+    async def check_health(self) -> Dict[str, Any]:
+        """Return health status of mock Jenkins provider."""
+        return {
+            "status": "healthy" if self.mode != "UNAVAILABLE" else "offline",
+            "url": "local://mock-jenkins",
+            "job": "ai-work-supervisor",
+            "mode": f"mock_{self.mode.lower()}"
+        }
+

@@ -105,18 +105,76 @@ class CreateApprovalRequest(BaseModel):
     task_id: Optional[str] = None
 
 
-# --- Health ---
+# --- Health & Readiness Probes ---
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
         "service": "AI Work Supervisor",
+        "version": "1.0.0",
         "subsystems": {
             "event_bus": "operational",
             "event_store": "operational",
             "missions": len(await app_state.mission_manager.list_missions()),
+            "agents": len(await app_state.agent_registry.list_agents()),
+            "supervisor_engine": "watching"
         }
     }
+
+
+@app.get("/ready")
+async def readiness_probe():
+    """
+    Kubernetes / Cloud Readiness probe checking:
+    1. Model / Reasoning Provider (Nebius Nemotron / local fallback)
+    2. Execution Backend (Docker / local process sandbox)
+    3. CI Verification (Jenkins HTTP / mock)
+    4. Supervisor Engine Core
+    """
+    model_health = await app_state.reasoner.check_health()
+    execution_health = await app_state.execution_manager.check_health()
+    jenkins_health = await app_state.jenkins_client.check_health()
+
+    is_ready = (
+        model_health.get("status") in ("healthy", "degraded") and
+        execution_health.get("status") == "healthy" and
+        jenkins_health.get("status") in ("healthy", "degraded", "offline")
+    )
+
+    result = {
+        "status": "ready" if is_ready else "not_ready",
+        "service": "AI Work Supervisor",
+        "model_provider": model_health,
+        "execution_backend": execution_health,
+        "jenkins_ci": jenkins_health,
+        "supervisor": {
+            "status": "watching",
+            "active_missions": len(await app_state.mission_manager.list_missions()),
+            "active_agents": len(await app_state.agent_registry.list_agents())
+        }
+    }
+
+    if not is_ready:
+        raise HTTPException(status_code=503, detail=result)
+    return result
+
+
+@app.get("/health/model")
+async def model_health_check():
+    """Detailed health check for NVIDIA Nemotron / Nebius inference provider."""
+    return await app_state.reasoner.check_health()
+
+
+@app.get("/health/jenkins")
+async def jenkins_health_check():
+    """Detailed health check for Jenkins CI integration."""
+    return await app_state.jenkins_client.check_health()
+
+
+@app.get("/health/execution")
+async def execution_health_check():
+    """Detailed health check for execution backends (Docker & local)."""
+    return await app_state.execution_manager.check_health()
 
 
 # --- Missions ---

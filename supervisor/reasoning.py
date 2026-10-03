@@ -61,3 +61,12 @@ class SupervisoryReasoner:
             recommended_strategy=decision_raw.recommended_action,
             source="nemotron-4-340b" if isinstance(self.provider, NebiusNemotronProvider) else "mock_nemotron"
         )
+
+    async def check_health(self) -> Dict[str, Any]:
+        if hasattr(self.provider, "check_health"):
+            return await self.provider.check_health()
+        return {
+            "status": "healthy",
+            "provider": type(self.provider).__name__,
+            "mode": "custom"
+        }

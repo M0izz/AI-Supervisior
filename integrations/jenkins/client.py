@@ -76,6 +76,14 @@ class JenkinsProvider(ABC):
         """Poll until build finishes or timeout expires."""
         pass
 
+    async def check_health(self) -> Dict[str, Any]:
+        """Check Jenkins connectivity without leaking credentials."""
+        return {
+            "status": "healthy",
+            "provider": type(self).__name__,
+            "mode": "base_default"
+        }
+
 
 class JenkinsHttpClient(JenkinsProvider):
     """
@@ -358,6 +366,45 @@ class JenkinsHttpClient(JenkinsProvider):
             await asyncio.sleep(interval)
 
         raise JenkinsTimeoutError(f"Build {build_id} timed out after {timeout_seconds or self.timeout_seconds}s.")
+
+    async def check_health(self) -> Dict[str, Any]:
+        """Check Jenkins connectivity without leaking credentials."""
+        try:
+            auth = self._get_auth()
+            async with httpx.AsyncClient(timeout=min(self.timeout_seconds, 4.0)) as client:
+                res = await client.get(f"{self.base_url}/api/json", auth=auth)
+                if res.status_code == 200:
+                    return {
+                        "status": "healthy",
+                        "url": self.base_url,
+                        "job": self.default_job,
+                        "authenticated": bool(self.username and self.api_token),
+                        "mode": "jenkins_http"
+                    }
+                elif res.status_code in (401, 403):
+                    return {
+                        "status": "unauthorized",
+                        "url": self.base_url,
+                        "job": self.default_job,
+                        "authenticated": False,
+                        "mode": "jenkins_http"
+                    }
+                else:
+                    return {
+                        "status": "degraded",
+                        "url": self.base_url,
+                        "job": self.default_job,
+                        "http_status": res.status_code,
+                        "mode": "jenkins_http"
+                    }
+        except Exception as e:
+            return {
+                "status": "offline",
+                "url": self.base_url,
+                "job": self.default_job,
+                "reason": f"Cannot reach Jenkins: {type(e).__name__}",
+                "mode": "jenkins_http"
+            }
 
     def _extract_error_signature(self, text: str) -> str:
         """Derive normalized concise error signature from error details."""

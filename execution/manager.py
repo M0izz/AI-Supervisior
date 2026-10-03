@@ -104,3 +104,26 @@ class ExecutionManager:
 
         # Default local execution
         return await self.local_provider.execute(request)
+
+    async def check_health(self) -> Dict[str, Any]:
+        """Check availability of execution backends without crashing."""
+        docker_available = await self.docker_provider.is_available()
+        return {
+            "status": "healthy",
+            "default_backend": self.default_backend,
+            "allow_fallback": self.allow_fallback,
+            "local_backend": {
+                "status": "healthy",
+                "available": True,
+                "sandbox_type": "restricted_process"
+            },
+            "docker_backend": {
+                "status": "healthy" if docker_available else "offline",
+                "available": docker_available,
+                "image": self.docker_provider.image,
+                "memory_limit": self.docker_provider.memory_limit,
+                "cpu_limit": self.docker_provider.cpu_limit,
+                "network_disabled": self.docker_provider.network_disabled
+            }
+        }
+

@@ -26,12 +26,30 @@ class BaseReasoningProvider(ABC):
         """Analyze situation and return structured decision."""
         pass
 
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify model/provider health without leaking credentials."""
+        return {
+            "status": "healthy",
+            "provider": type(self).__name__,
+            "mode": "base_default"
+        }
+
 
 class MockReasoningProvider(BaseReasoningProvider):
     """
     Local mock reasoning engine for tests and offline development.
     Produces deterministic Nemotron-like structured decisions.
     """
+
+    async def check_health(self) -> Dict[str, Any]:
+        return {
+            "status": "healthy",
+            "provider": "mock_nemotron",
+            "model": "nemotron-4-340b-instruct-mock",
+            "mode": "deterministic_local",
+            "endpoint": "local://mock",
+            "safe_fallback_active": True
+        }
 
     async def reason_about_situation(self, prompt_context: Dict[str, Any]) -> ReasoningDecision:
         anomaly = prompt_context.get("anomaly_type")
@@ -128,6 +146,57 @@ class NebiusNemotronProvider(BaseReasoningProvider):
         self.base_url = base_url or os.getenv("NEBIUS_BASE_URL", "https://api.studio.nebius.ai/v1")
         self.model = model or os.getenv("NEBIUS_MODEL", "nvidia/nemotron-4-340b-instruct")
         self.timeout_seconds = timeout_seconds or float(os.getenv("SUPERVISOR_MODEL_TIMEOUT_SECONDS", "20.0"))
+
+    async def check_health(self) -> Dict[str, Any]:
+        """Verify Nebius Nemotron endpoint connectivity without leaking secrets."""
+        if not self.api_key:
+            return {
+                "status": "healthy",
+                "provider": "nebius_nemotron",
+                "model": self.model,
+                "mode": "fallback_local",
+                "reason": "NEBIUS_API_KEY not configured; operating in safe deterministic local fallback mode",
+                "base_url": self.base_url,
+                "safe_fallback_active": True
+            }
+
+        try:
+            async with httpx.AsyncClient(timeout=min(self.timeout_seconds, 5.0)) as client:
+                res = await client.get(
+                    f"{self.base_url}/models",
+                    headers={"Authorization": f"Bearer {self.api_key}"}
+                )
+                if res.status_code == 200:
+                    return {
+                        "status": "healthy",
+                        "provider": "nebius_nemotron",
+                        "model": self.model,
+                        "mode": "nebius_cloud",
+                        "base_url": self.base_url,
+                        "authenticated": True,
+                        "safe_fallback_active": True
+                    }
+                else:
+                    return {
+                        "status": "degraded",
+                        "provider": "nebius_nemotron",
+                        "model": self.model,
+                        "mode": "fallback_local",
+                        "reason": f"Nebius API returned HTTP {res.status_code}",
+                        "base_url": self.base_url,
+                        "authenticated": False,
+                        "safe_fallback_active": True
+                    }
+        except Exception as e:
+            return {
+                "status": "degraded",
+                "provider": "nebius_nemotron",
+                "model": self.model,
+                "mode": "fallback_local",
+                "reason": f"Endpoint unreachable: {type(e).__name__}",
+                "base_url": self.base_url,
+                "safe_fallback_active": True
+            }
 
     async def reason_about_situation(self, prompt_context: Dict[str, Any]) -> ReasoningDecision:
         if not self.api_key:
