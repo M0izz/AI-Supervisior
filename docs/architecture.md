@@ -94,7 +94,7 @@ Worker completion is strictly decoupled from verification.
 
 ## 7. Mission Control Plane & Multi-Agent Registry (Phase 7)
 
-Phase 7 elevates the Supervisor from a single-agent monitor into an enterprise-grade control plane:
+Phase 7 elevates the Supervisor from a single-agent monitor into a robust, multi-agent control plane:
 - **Mission Control Hierarchy**: Human Operator → Mission → Supervisor Control Plane → (Planner, Workers A/B, Reviewer, Verifier).
 - **Enforced Mission Lifecycle**: Full finite state machine (`CREATED` → `PLANNING` → `RUNNING` → `PAUSED` → `INVESTIGATING` → `RECOVERING` → `VERIFYING` → `COMPLETED`, with failure branches `FAILED`, `BLOCKED`, `WAITING_APPROVAL`, `CANCELLED`).
 - **Agent Registry**: Central directory tracking all active agents by `agent_id`, `agent_type` (`PLANNER`, `WORKER`, `REVIEWER`, `VERIFIER`, `SUPERVISOR`), `status`, `health`, `model`, `iterations`, `tool_calls`, and supervisor `interventions`.

@@ -112,7 +112,7 @@ The system adheres strictly to the rule: **Local development must continue worki
 
 1. **Zero-Secret Offline Mode**:
    - If `NEBIUS_API_KEY` is not present, `NebiusNemotronProvider` immediately falls back to `MockReasoningProvider`.
-   - All 126 test suites, scenarios, and the Control Room UI work offline deterministically.
+   - All 126 test items (124 passed, 2 skipped offline external tests), scenarios, and the Control Room UI work offline deterministically.
 2. **Cloud Outage Resilience**:
    - If Nebius AI Studio experiences network latency, rate limits, or 5xx outages, the supervisor catches the error, logs a clean diagnostic message without crashing, and switches to safe fallback reasoning.
 3. **Execution Graceful Degradation**:
@@ -176,7 +176,7 @@ Navigate to `http://localhost:5173` to access the Control Room.
 
 ## 6. Health & Readiness Probes
 
-The API exposes enterprise-grade health probes designed for Kubernetes, cloud load balancers, and observability agents:
+The API exposes structured health probes designed for container monitors, load balancers, and observability agents:
 
 ### 1. Basic Liveness: `GET /health`
 ```json
@@ -255,7 +255,7 @@ Never conflate mock test results with cloud test results.
 
 To run all automated verification tests:
 ```bash
-# Run full suite (126 tests across Phases 0–10)
+# Run full suite (126 tests collected: 124 passed, 2 skipped)
 python -m pytest tests/ -v
 
 # Run Phase 10 deployment tests specifically

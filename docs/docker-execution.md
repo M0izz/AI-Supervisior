@@ -34,7 +34,7 @@ The WorkerAgent remains completely agnostic to whether its commands execute loca
 
 ## 2. Security Model & Container Hardening
 
-The Docker execution layer guarantees container confinement:
+The Docker execution layer enforces container confinement:
 
 1. **Workspace Boundary Confinement**:
    - The provider mounts **ONLY** the intended task directory (`demo/sample-project`) to `/workspace`.

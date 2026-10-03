@@ -102,7 +102,7 @@ The `AgentRegistry` (`agents/registry.py`) provides real-time lifecycle tracking
 
 * `agent_id`: Unique identifier (e.g., `planner_01`, `worker_backend_02`).
 * `agent_type`: Standardized role — `PLANNER`, `WORKER`, `REVIEWER`, `VERIFIER`, `SUPERVISOR`.
-* `mission_id`: Bound mission boundary (guarantees isolation).
+* `mission_id`: Bound mission boundary (enforces isolation).
 * `task_id` / `current_task`: Active assigned task.
 * `model`: LLM model designation (e.g. `nemotron`, `deepseek`).
 * `status`: `IDLE`, `RUNNING`, `WAITING`, `INVESTIGATING`, `PAUSED`, `RECOVERING`, `COMPLETED`, `FAILED`.
@@ -208,7 +208,7 @@ The FastAPI control plane (`apps/api/main.py`) exposes endpoints for dashboard a
 
 ## 7. Zero Cross-Mission Contamination
 
-The control plane guarantees complete multi-tenancy isolation:
+The control plane enforces complete multi-tenancy isolation:
 1. **Per-Mission State Machines**: Each mission maintains its own `SupervisorStateMachine` instance.
 2. **Filtered Queries**: Telemetry, events, and task managers filter strictly by `mission_id`.
 3. **Agent Segregation**: Agents bound to Mission A cannot read locks, execute tasks, or mutate memory of Mission B.

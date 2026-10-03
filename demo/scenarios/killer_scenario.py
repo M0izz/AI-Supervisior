@@ -103,7 +103,7 @@ async def run_killer_scenario():
         jenkins_name = f"Live Jenkins Server ({os.getenv('JENKINS_URL')})"
     else:
         jenkins = MockJenkinsProvider(default_mode="DYNAMIC_WORKSPACE", workspace_path=str(workspace_root))
-        jenkins_name = "Independent Jenkins CI Runner"
+        jenkins_name = "Offline Jenkins simulation / fallback provider"
 
     supervisor = SupervisorEngine(
         event_bus=event_bus,
@@ -195,6 +195,7 @@ async def run_killer_scenario():
     console.print("[bold yellow]▶ [STEP 6] JENKINS CI INDEPENDENTLY CONFIRMS FAILURE[/bold yellow]")
     trigger_1 = await jenkins.trigger_build(job_name="ai-work-supervisor-ci")
     ci_build_1 = await jenkins.get_build_result(trigger_1.build_id, "ai-work-supervisor-ci")
+    console.print(f"  CI Provider: {jenkins_name}")
     console.print(f"  CI Build: #{ci_build_1.build_id} | Status: [bold red]{ci_build_1.result.value}[/bold red]")
     console.print(f"  CI Proof: {ci_build_1.tests_passed} passed, {ci_build_1.tests_failed} failed")
     console.print(f"  Error Signature: [red]{ci_build_1.error_signature}[/red]\n")
@@ -324,6 +325,7 @@ async def run_killer_scenario():
     console.print("[bold green]▶ [STEP 15] JENKINS CI INDEPENDENT VERIFICATION PASSES[/bold green]")
     trigger_2 = await jenkins.trigger_build(job_name="ai-work-supervisor-ci")
     ci_build_2 = await jenkins.get_build_result(trigger_2.build_id, "ai-work-supervisor-ci")
+    console.print(f"  CI Provider: {jenkins_name}")
     console.print(f"  CI Build: #{ci_build_2.build_id} | Status: [bold green]{ci_build_2.result.value}[/bold green]")
     console.print(f"  JUnit Tests: [bold green]{ci_build_2.tests_passed} passed, 0 failed[/bold green]\n")
 
@@ -361,7 +363,7 @@ async def run_killer_scenario():
     console.print(table)
 
     duration = time.monotonic() - start_time
-    console.print(f"\n[bold green]✓ Killer scenario executed in {duration:.2f}s with 100% genuine execution and zero mocked injections.[/bold green]\n")
+    console.print(f"\n[bold green]✓ Killer scenario executed in {duration:.2f}s using the project's execution, supervision, recovery, and verification pipeline.[/bold green]\n")
     return {
         "status": "success",
         "duration": duration,
