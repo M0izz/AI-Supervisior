@@ -7,6 +7,7 @@ from core.tasks.manager import TaskManager
 from core.policies.models import PolicyConfig
 
 
+from memory.store import MemoryStore
 from agents.registry import AgentRegistry
 from supervisor.telemetry import TelemetryTracker
 from supervisor.approvals import ApprovalManager
@@ -27,6 +28,7 @@ class AppState:
         self.event_bus._global_subscribers.append(self.event_store.append)
 
         # Control Plane Subsystems
+        self.memory_store = MemoryStore(event_bus=self.event_bus)
         self.agent_registry = AgentRegistry(event_bus=self.event_bus)
         self.telemetry = TelemetryTracker(event_bus=self.event_bus)
         self.approval_manager = ApprovalManager(event_bus=self.event_bus)

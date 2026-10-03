@@ -658,6 +658,62 @@ async def update_policies(new_policy: PolicyConfig):
     return app_state.policy_config
 
 
+# --- Project Memory ---
+class AddMemoryRecordRequest(BaseModel):
+    fact: str
+    source: str
+    created_by: str = "agent"
+    status: str = "OBSERVED"  # OBSERVED, INFERRED, DECIDED, VERIFIED, REJECTED
+    confidence: float = 1.0
+    category: str = "fact"
+    details: Optional[str] = None
+
+
+@app.get("/api/missions/{mission_id}/memory")
+async def get_mission_memory(mission_id: str):
+    summary = await app_state.memory_store.get_structured_summary(mission_id)
+    all_recs = await app_state.memory_store.get_by_mission(mission_id)
+    return {
+        "mission_id": mission_id,
+        "summary": summary,
+        "records": [r.model_dump() for r in all_recs],
+        "count": len(all_recs)
+    }
+
+
+@app.post("/api/missions/{mission_id}/memory")
+async def add_mission_memory(mission_id: str, req: AddMemoryRecordRequest):
+    from memory.provenance import FactStatus
+    try:
+        st = FactStatus(req.status.upper())
+    except ValueError:
+        st = FactStatus.OBSERVED
+
+    record = await app_state.memory_store.add_record(
+        mission_id=mission_id,
+        fact=req.fact,
+        source=req.source,
+        created_by=req.created_by,
+        status=st,
+        confidence=req.confidence,
+        category=req.category,
+        details=req.details
+    )
+    return {"status": "created", "record": record.model_dump()}
+
+
+@app.get("/api/memory")
+async def list_all_memory(mission_id: Optional[str] = None, category: Optional[str] = None):
+    if mission_id:
+        recs = await app_state.memory_store.get_by_mission(mission_id, category=category)
+    else:
+        async with app_state.memory_store._lock:
+            recs = list(app_state.memory_store._records.values())
+            if category:
+                recs = [r for r in recs if r.category == category]
+    return {"records": [r.model_dump() for r in recs], "count": len(recs)}
+
+
 # --- Seed Demo Mission Helper ---
 @app.post("/api/missions/seed-demo")
 async def seed_demo_mission():
@@ -681,6 +737,45 @@ async def seed_demo_mission():
     ]
 
     await app_state.task_manager.initialize_mission_tasks(mission.id, tasks)
+
+    # Seed active agent records
+    await app_state.agent_registry.register_agent("planner_01", "PLANNER", mission_id=mission.id)
+    await app_state.agent_registry.register_agent("worker_01", "WORKER", mission_id=mission.id, task_id="TASK-001")
+    await app_state.agent_registry.register_agent("reviewer_01", "REVIEWER", mission_id=mission.id)
+    await app_state.agent_registry.register_agent("verifier_01", "VERIFIER", mission_id=mission.id)
+
+    # Seed initial project memory records
+    from memory.provenance import FactStatus
+    await app_state.memory_store.add_record(
+        mission_id=mission.id,
+        fact="CSV parser must support UTF-8 BOM encoding without raising UnicodeDecodeError",
+        source="jenkins_build_481",
+        created_by="reviewer_01",
+        status=FactStatus.VERIFIED,
+        confidence=1.0,
+        category="verified_fact",
+        details="Empirical proof: pytest test_parser.py 47/47 passed"
+    )
+    await app_state.memory_store.add_record(
+        mission_id=mission.id,
+        fact="Naive string slicing without stripping BOM character causes header mismatch",
+        source="test_parse_failure_log",
+        created_by="reviewer_01",
+        status=FactStatus.REJECTED,
+        confidence=0.95,
+        category="rejected_approach",
+        details="Disproven in attempt 1 & 2; repeated application blocked by Supervisor"
+    )
+    await app_state.memory_store.add_record(
+        mission_id=mission.id,
+        fact="Database schema in schema.sql is strictly immutable for this mission",
+        source="MissionConstraints",
+        created_by="supervisor",
+        status=FactStatus.DECIDED,
+        confidence=1.0,
+        category="decision",
+        details="Enforced via policy.prevent_modifications_outside_task_scope"
+    )
 
     return {
         "status": "seeded",
