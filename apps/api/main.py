@@ -843,6 +843,24 @@ async def seed_demo_mission():
     }
 
 
+@app.post("/api/demo/reset")
+async def reset_demo_state():
+    """
+    Resets demo workspace, in-memory events, agents, memory records, and tasks
+    ensuring multiple demo runs never corrupt state.
+    """
+    from demo.reset import reset_sample_project, reset_event_logs, reset_in_memory_state
+    from pathlib import Path
+    project_root = Path("./")
+    workspace_root = project_root / "demo" / "sample-project"
+
+    reset_sample_project(workspace_root)
+    reset_event_logs(project_root)
+    reset_in_memory_state()
+
+    return {"status": "reset", "message": "Demo state successfully reset to initial clean baseline"}
+
+
 # --- WebSocket Stream ---
 @app.websocket("/ws/events")
 async def websocket_event_stream(websocket: WebSocket):

@@ -1,72 +1,70 @@
-# Killer Demo Sequence: "Add CSV Import Validation"
+# Killer Demo Sequence: Real Autonomous Supervisory Loop
 
-This scenario showcases real autonomous operation, empirical failure detection, Nemotron reasoning, intervention, reviewer delegation, project memory recording, worker recovery, and independent verification.
-
-## Real Execution Commands
-
-### Mode 1: Local Execution Sandbox (Default)
-```bash
-python demo/scenarios/scenario_01_loop_recovery.py
-```
-
-### Mode 2: Docker Container Isolation Sandbox (Phase 5)
-```bash
-EXECUTION_BACKEND=docker python demo/scenarios/scenario_01_loop_recovery.py
-```
-*(Runs Worker commands inside hardened `ai-work-supervisor-worker:latest` container with `network_mode="none"`, memory limits, and isolated `/workspace` mount).*
-
-
-## Sequence Timeline
-
-| Time | Event | Real System Behavior | Visual Cue |
-|---|---|---|---|
-| `0:00` | Start Mission | Mission initialized in `demo/sample-project/` | Mission card initializes in Control Room |
-| `0:15` | Planner Dispatches | Planner generates 6-step DAG task graph | Tasks illuminate in DAG viewer |
-| `0:40` | Worker Acts | Worker inspects `src/parser.py`, executes real pytest | Live event stream fills with tool calls |
-| `0:55` | Test Failure | Pytest fails: 45 passed, 2 failed (`AssertionError: Expected 'user_id' header`) | Red badge on task, worker retries |
-| `1:10` | Repeated Failure | Worker retries 3 consecutive times with identical failure | Supervisor Rule detects loop ($\ge 3$) |
-| `1:20` | Anomaly Detected | Supervisor flags `LOOP_DETECTED` anomaly and pauses Worker | Amber warning banner flashes |
-| `1:30` | Nemotron Decides | Nemotron analyzes structured context, outputs `DELEGATE` | Reasoning card displays decision |
-| `1:45` | Reviewer Consulted | Reviewer (read-only tools) identifies UTF-8 BOM encoding issue | New verified fact & rejected approach added to Memory |
-| `2:00` | Worker Recovers | Worker receives curated recovery context, edits `src/parser.py` via `edit_file` | Tool completed, real tests re-run |
-| `2:15` | Verifier Validates | Verifier independently checks all 47 tests + diff | Verifier seal: 47 passed, 0 failed |
-| `2:25` | Mission Complete | Supervisor confirms verification and marks mission `COMPLETED` | Green banner with verified memory summary |
+This document details the unified, deterministic killer demonstration for the **AI Work Supervisor**, executing the complete 18-step supervisory lifecycle without mocked event injections.
 
 ---
 
-# Scenario 02: "Premature Completion vs. Independent Jenkins CI Gate" (Phase 6)
+## 1. Quick Demonstration Commands
 
-This scenario demonstrates the central architectural principle: **Worker completion is not verification**.
-A worker claims task completion prematurely. An independent Jenkins CI execution pipeline detects hidden test failures, halts false completion, invokes Nemotron reasoning, and delegates to a Reviewer to guide the worker through recovery until full verification is achieved.
-
-## Execution Commands
-
-### Mode 1: Local / Deterministic Mock Jenkins (Default)
+### Reset Demo Environment to Baseline Clean State
 ```bash
-python demo/scenarios/scenario_02_ci_failure.py
+python -m demo.reset
 ```
-*(Runs against `demo/sample-project` with dynamic workspace inspection; verifies code changes directly without requiring an active Jenkins server).*
+*(Wipes `supervisor_events.jsonl`, clears in-memory API state, and resets `demo/sample-project/src/parser.py` to the naive unpatched baseline).*
 
-### Mode 2: Live Jenkins Server Integration
+### Execute the Unified 18-Step Killer Demo
 ```bash
-JENKINS_ENABLED=true python demo/scenarios/scenario_02_ci_failure.py
+python -m demo.scenarios.killer_scenario
 ```
-*(Requires a running Jenkins server configured with `JENKINS_URL`, `JENKINS_JOB_NAME`, and `JENKINS_API_TOKEN`).*
+*(Or alternatively: `python -m demo.scenarios.scenario_01_loop_recovery`)*
 
-## Sequence Timeline
+### Run with Isolated Docker Sandbox Container (Optional)
+```bash
+EXECUTION_BACKEND=docker python -m demo.scenarios.killer_scenario
+```
+*(Runs Worker commands inside hardened `ai-work-supervisor-worker:latest` container with `network_mode="none"`, memory limits, and isolated `/workspace` mount).*
 
-| Time | Event | Real System Behavior | Verification Status |
-|---|---|---|---|
-| `0:00` | Start Mission | Mission initialized in workspace | `RUNNING` |
-| `0:10` | Planner DAG | Planner creates task graph, assigns `TASK-002` to Worker | `IN_PROGRESS` |
-| `0:25` | Premature Claim | Worker inspects parser, claims `"Implementation complete"` | **UNVERIFIED CLAIM** |
-| `0:45` | Jenkins Run #1 | Jenkins independently triggers and tests workspace: 45 passed, 2 failed | `CI_FAILURE` (Build #481) |
-| `1:10` | Supervisor Gate | Supervisor rejects completion claim, reopens task, pauses worker | **COMPLETION REJECTED** |
-| `1:25` | Nemotron Reasoning | Nemotron analyzes CI contradiction, decides `DELEGATE → Reviewer` | Supervisory Decision |
-| `1:40` | Reviewer Diagnosis | Reviewer discovers UTF-8 BOM encoding mismatch | Failure signature isolated |
-| `1:55` | Memory Provenance | Verified fact stored in Project Memory (`source: jenkins_build_481`) | Provenance attached |
-| `2:10` | Worker Recovers | Worker receives recovery context, applies real fix to `src/parser.py` | Implementation updated |
-| `2:30` | Jenkins Run #2 | Jenkins independently verifies updated code: 47/47 passed | `CI_SUCCESS` (Build #482) |
-| `2:45` | Verifier Handoff | Independent Verifier agent empirically confirms all tests pass | Final verification confirmed |
-| `3:00` | Mission Complete | Supervisor confirms empirical evidence and marks mission `COMPLETED` | `VERIFIED` / `COMPLETED` |
+---
 
+## 2. The 18-Step Full System Path
+
+The killer demo executes the exact supervisory path:
+
+$$\text{Human} \to \text{Mission} \to \text{Planner} \to \text{Worker} \to \text{Docker} \to \text{Jenkins} \to \text{Supervisor} \to \text{Nemotron} \to \text{Reviewer} \to \text{Memory} \to \text{Recovery} \to \text{Worker} \to \text{Jenkins} \to \text{Verifier} \to \text{COMPLETED}$$
+
+| Step | Phase | System Action | Control Room Observable Cue |
+| :--- | :--- | :--- | :--- |
+| **1** | **Mission Creation** | User creates mission `Add CSV Import with UTF-8 BOM Support` in `demo/sample-project`. | Mission status `RUNNING` on active matrix. |
+| **2** | **Planner DAG** | Planner decomposes mission into 6 sequential DAG tasks. | Task DAG visualizer illuminates with nodes and file scopes. |
+| **3** | **Worker Dispatch** | Worker `worker_01` is assigned to `TASK-002` (CSV Parser implementation). | Agent detail shows active task assignment. |
+| **4** | **Docker Execution** | Worker inspects `src/parser.py` within isolated Docker/subprocess sandbox. | Sandbox execution logged with resource limits. |
+| **5** | **Repeated Failure** | Worker runs test suite 3 consecutive times; tests fail on UTF-8 BOM marker (`45 passed / 2 failed`). | Task retry badges increment; test failure counts highlighted. |
+| **6** | **Jenkins CI Gate** | Independent Jenkins CI triggers build #481; confirms `FAILURE` via JUnit test report. | CI status badge shows `JENKINS FAIL (Build #481)`. |
+| **7** | **Supervisor Detection** | Dual-layer Supervisor detects `LOOP_DETECTED` anomaly ($\ge 3$ identical failures). | Amber intervention warning flashes on dashboard. |
+| **8** | **Worker Paused** | Supervisor immediately pauses `worker_01` to prevent budget exhaustion. | Worker status transitions to `PAUSED`. |
+| **9** | **Nemotron Reasoning** | NVIDIA Nemotron on Nebius analyzes context and outputs `DELEGATE` (confidence 92%). | Structured intervention panel displays decision and reason. |
+| **10** | **Reviewer Diagnosis** | Reviewer agent (read-only tools) identifies UTF-8 BOM encoding flaw (`\ufeff` prefix). | Diagnostic findings logged in Reviewer audit trace. |
+| **11** | **Memory Recording** | Diagnosis committed as `VERIFIED_FACT` in Project Memory; naive approach saved as `REJECTED_APPROACH`. | Empirical memory records appear with provenance tags. |
+| **12** | **Recovery Package** | ContextPackager bundles verified facts, rejected approaches, and constraints. | Curated recovery package dispatched to agent. |
+| **13** | **Worker Resumes** | Worker resumes with targeted recovery instructions. | Worker status transitions to `RECOVERING`. |
+| **14** | **Docker Code Fix** | Worker applies genuine code fix to `src/parser.py` stripping BOM; re-runs sandbox tests. | File edit applied; sandbox test reports 47 passed / 0 failed. |
+| **15** | **Jenkins CI Passes** | Jenkins triggers build #482; independently verifies updated code (`47 passed / 0 failed`). | CI status transitions to `JENKINS PASS (Build #482)`. |
+| **16** | **Verifier Handoff** | Independent Verifier agent executes verification suite and confirms completion. | Verifier seal awarded: `47/47 VERIFIED`. |
+| **17** | **Mission Completed** | Supervisor marks mission lifecycle `COMPLETED`. | Green victory banner displays on Control Room cockpit. |
+| **18** | **Timeline Story** | Event store provides complete narrative reconstruction of the loop and recovery. | Dynamic story timeline displays causal chain from failure to fix. |
+
+---
+
+## 3. Supplementary Demonstrations
+
+- **Scenario 02: Independent CI Verification Gate**
+  ```bash
+  python -m demo.scenarios.scenario_02_ci_failure
+  ```
+  *Demonstrates worker premature completion claims blocked by independent Jenkins CI verification.*
+
+- **Scenario 03: Complete Adversarial Failure Matrix**
+  ```bash
+  python -m demo.scenarios.scenario_03_failure_matrix
+  ```
+  *Demonstrates timeouts, scope violations, dangerous command approvals, and network partitions.*
