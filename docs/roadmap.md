@@ -28,7 +28,8 @@ This matrix tracks the real operational status of every agent adapter. An adapte
 PHASE 00 ──► PHASE 01 ──► PHASE 02 ──► PHASE 03 ──► PHASE 04 ──► PHASE 05
 Audit &      Product      Claude Code  Supervisory  Independent  Codex Handoff
 Roadmap      Kernel       Adapter      Watchdogs    Verifier     (MVP Milestone)
-(COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)
+(COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)
+
 
 
     │
@@ -129,11 +130,21 @@ Router       Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (T
 ### Phase 4: Independent Verification Engine
 * **Objective**: Build an independent verification authority that validates claims without trusting the worker.
 * **Deliverables**:
-  - `core/verification/engine.py`: Standalone verifier executing test suites, linters, typecheckers, and git diff audits in a clean verification worktree.
+  - `core/verification/models.py`: `VerificationDecision` (`ACCEPT`, `REJECT`, `REQUIRE_REVIEW`), `VerificationCheck`, `VerificationContext`, and `VerificationResult`.
+  - `core/verification/checks.py`: Modular checks covering Git integrity, scope boundary enforcement, path traversal protection, independent test execution (`shell=False`, bounded output, timeout ceilings), and regression detection.
+  - `core/verification/engine.py`: Standalone `VerificationEngine` executing tests in clean worktrees, persisting records into SQLite `verifications` table, and integrating with `TaskManager`.
+  - `tests/test_verification.py`: 12 automated verification tests covering all check outcomes, restart persistence, and the killer false-claim scenario.
+  - `docs/verification.md`: Complete specification and architecture documentation for independent verification.
 * **Acceptance Criteria**:
-  - Worker signals completion (`agent.completed_claim`).
-  - Verifier runs independent test checks.
-  - Task transitions to `VERIFIED` only if empirical proofs succeed; otherwise, task is rejected and reopened.
+  - [x] Worker signals completion (`task.completed`), which is treated strictly as an unverified claim.
+  - [x] Verifier runs independent test checks in isolated worktrees (`shell=False`, timeout bounded).
+  - [x] Task transitions to `VERIFIED` only if empirical proofs succeed (`ACCEPT`).
+  - [x] If tests fail, scope is violated, or regressions occur, task is REJECTED and reopened.
+  - [x] Missing verifiable criteria produce `REQUIRE_REVIEW`.
+  - [x] Verification reports survive process restart in SQLite WAL storage.
+  - [x] All 12 Phase 4 tests pass; full regression suite passes with 184 passed, 3 skipped, 0 failed.
+* **Status**: ✅ **COMPLETE**
+
 
 ---
 

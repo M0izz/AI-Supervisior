@@ -178,3 +178,18 @@ Phase 3 operationalizes the fundamental invariant: *the agent is not allowed to 
 - **Decoupled Actuation**: Converts `WatchdogDecision` into adapter lifecycle actions (`AgentAdapter.cancel(task_id)`), human approval requests, and audit logs.
 - **Idempotency Guard**: Guarantees that a task receives terminal cancellation at most once, preventing cascaded process kill attempts during shutdown.
 - **Durable Audit Trail**: Persists every intervention to SQLite WAL storage and publishes `supervisor.intervention` events to the `EventBus`.
+
+## 12. Independent Verification Engine (Phase 4)
+
+Phase 4 operationalizes the core axiom: **Agent completion ≠ verified completion**. Worker claims are never trusted blindly; empirical verification gates certified completion:
+
+### 1. Verification Engine (`core/verification/engine.py`)
+- **Deterministic Check Pipeline**: Sequentially runs completion claim structure check, Git worktree integrity check, scope boundary check, independent test execution check, and regression check.
+- **Decision Model**: Returns structured `VerificationDecision` (`ACCEPT`, `REJECT`, or `REQUIRE_REVIEW`).
+- **Test Sandbox Isolation**: Executes verification commands strictly inside the task's isolated Git worktree using `shell=False`, bounded stdout/stderr buffers, and monotonic execution timeout limits.
+- **Task Lifecycle Integration**:
+  - `ACCEPT`: Transitions task to `VERIFIED` via `TaskManager.verify_task`.
+  - `REJECT`: Reopens task to `IN_PROGRESS` or fails task, preventing false completion.
+  - `REQUIRE_REVIEW`: Flags task for operator review when acceptance criteria are ambiguous.
+- **Durable Verification History**: Persists all reports into SQLite WAL `verifications` table via `VerificationRepository`.
+

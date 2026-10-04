@@ -53,6 +53,9 @@ class ProtocolEventType(str, Enum):
     VERIFICATION_STARTED = "verification.started"
     VERIFICATION_PASSED = "verification.passed"
     VERIFICATION_FAILED = "verification.failed"
+    VERIFICATION_COMPLETED = "verification.completed"
+    VERIFICATION_CHECK_COMPLETED = "verification.check.completed"
+
 
     # Human-in-the-loop approvals
     APPROVAL_REQUESTED = "approval.requested"

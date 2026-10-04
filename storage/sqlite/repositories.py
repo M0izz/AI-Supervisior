@@ -693,6 +693,38 @@ class VerificationRepository:
         finally:
             await conn.close()
 
+    async def list_by_task(self, task_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM verifications WHERE task_id = ? ORDER BY created_at ASC;",
+                (task_id,)
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                v = dict(row)
+                v["details"] = _from_json(v.get("details"))
+                records.append(v)
+            return records
+        finally:
+            await conn.close()
+
+    async def list_all(self) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute("SELECT * FROM verifications ORDER BY created_at ASC;")
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                v = dict(row)
+                v["details"] = _from_json(v.get("details"))
+                records.append(v)
+            return records
+        finally:
+            await conn.close()
+
+
 
 async def attach_sqlite_persistence(event_bus: Any, db: DatabaseManager) -> EventRepository:
     """

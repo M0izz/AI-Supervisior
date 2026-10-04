@@ -87,8 +87,18 @@ class AppState:
             event_repo=self.event_repo,
         )
 
+        # Independent Verification Engine (Phase 4)
+        from core.verification.engine import VerificationEngine
+        self.verification_engine = VerificationEngine(
+            event_bus=self.event_bus,
+            repository=self.verification_repo,
+            task_manager=self.task_manager,
+            worktree_manager=self.worktree_manager,
+        )
+
         # Execution Manager (Docker sandboxing + local process fallback)
         self.execution_manager = ExecutionManager(event_bus=self.event_bus)
+
 
         # Reasoning Provider (Nebius Nemotron when API key configured, otherwise deterministic mock)
         if os.getenv("NEBIUS_API_KEY"):
