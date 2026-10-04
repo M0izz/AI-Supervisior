@@ -156,28 +156,31 @@ def run_scope_check(context: VerificationContext) -> VerificationCheck:
             shell=False,
             timeout=5,
         )
-        if st.returncode == 0 and st.stdout.strip():
-            for line in st.stdout.strip().splitlines():
-                if len(line) > 3:
-                    # status format: ' M path/to/file' or '?? path/to/file'
-                    path_part = line[3:].strip().strip('"')
+        if st.returncode == 0:
+            for line in st.stdout.splitlines():
+                if len(line) > 2:
+                    path_part = line[2:].strip().strip('"')
                     if " -> " in path_part:
                         path_part = path_part.split(" -> ")[1].strip()
-                    changed_files.append(path_part)
+                    if path_part and path_part not in changed_files:
+                        changed_files.append(path_part)
 
-        # Check committed files against base ref (HEAD~1 or parent branch)
-        diff_res = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD~1"],
-            cwd=str(ws),
-            capture_output=True,
-            text=True,
-            shell=False,
-            timeout=5,
-        )
-        if diff_res.returncode == 0 and diff_res.stdout.strip():
-            for f in diff_res.stdout.strip().splitlines():
-                if f.strip() and f.strip() not in changed_files:
-                    changed_files.append(f.strip())
+        # Check committed files on this branch against base branch (master / main)
+        for base_ref in ("master", "main"):
+            diff_res = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                cwd=str(ws),
+                capture_output=True,
+                text=True,
+                shell=False,
+                timeout=5,
+            )
+            if diff_res.returncode == 0:
+                if diff_res.stdout.strip():
+                    for f in diff_res.stdout.strip().splitlines():
+                        if f.strip() and f.strip() not in changed_files:
+                            changed_files.append(f.strip())
+                break
     except Exception as e:
         logger.debug(f"Git inspection in scope check had non-fatal error: {e}")
 
@@ -195,6 +198,8 @@ def run_scope_check(context: VerificationContext) -> VerificationCheck:
         cleaned = f.strip().replace("\\", "/")
         if cleaned.startswith("./"):
             cleaned = cleaned[2:]
+        if "__pycache__" in cleaned or cleaned.endswith(".pyc") or ".pytest_cache" in cleaned:
+            continue
         if cleaned:
             norm_changed.append(cleaned)
 
@@ -300,6 +305,7 @@ def run_test_check(context: VerificationContext) -> VerificationCheck:
 
         # Safe command tokenization (shell=False invariant)
         parts = shlex.split(cmd_str, posix=(os.name != "nt"))
+        parts = [p.strip('"\'') for p in parts]
 
         # Windows python/pytest executable normalization
         if parts:

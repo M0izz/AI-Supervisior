@@ -15,6 +15,7 @@ from adapters.models import (
 from adapters.base import AgentAdapter
 from adapters.registry import AdapterRegistry
 from adapters.claude_code import ClaudeCodeAdapter
+from adapters.codex import CodexAdapter
 
 __all__ = [
     "AdapterIdentity",
@@ -26,4 +27,6 @@ __all__ = [
     "AgentAdapter",
     "AdapterRegistry",
     "ClaudeCodeAdapter",
+    "CodexAdapter",
 ]
+

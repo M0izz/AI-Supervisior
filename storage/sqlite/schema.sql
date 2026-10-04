@@ -107,6 +107,24 @@ CREATE TABLE IF NOT EXISTS verifications (
     FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
 );
 
+-- 8. Handoffs Table
+CREATE TABLE IF NOT EXISTS handoffs (
+    handoff_id TEXT PRIMARY KEY,
+    mission_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    source_agent_id TEXT NOT NULL,
+    target_agent_id TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT DEFAULT '',
+    context_package TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    result TEXT,
+    error TEXT,
+    FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
+);
+
 -- Indexes for performance & query lookups
 CREATE INDEX IF NOT EXISTS idx_tasks_mission ON tasks(mission_id);
 CREATE INDEX IF NOT EXISTS idx_events_mission ON events(mission_id);
@@ -115,3 +133,6 @@ CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_memory_mission ON memory_records(mission_id);
 CREATE INDEX IF NOT EXISTS idx_approvals_mission ON approvals(mission_id);
 CREATE INDEX IF NOT EXISTS idx_verifications_mission ON verifications(mission_id);
+CREATE INDEX IF NOT EXISTS idx_handoffs_mission ON handoffs(mission_id);
+CREATE INDEX IF NOT EXISTS idx_handoffs_task ON handoffs(task_id);
+

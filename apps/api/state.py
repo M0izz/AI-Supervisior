@@ -28,6 +28,7 @@ from storage.sqlite import (
     MemoryRepository,
     ApprovalRepository,
     VerificationRepository,
+    HandoffRepository,
 )
 
 
@@ -48,6 +49,7 @@ class AppState:
         self.memory_repo = MemoryRepository(self.db)
         self.approval_repo = ApprovalRepository(self.db)
         self.verification_repo = VerificationRepository(self.db)
+        self.handoff_repo = HandoffRepository(self.db)
 
         self.mission_manager = MissionManager(event_bus=self.event_bus, repository=self.mission_repo)
         self.task_manager = TaskManager(event_bus=self.event_bus, repository=self.task_repo)
@@ -67,7 +69,9 @@ class AppState:
         from execution.worktree import GitWorktreeManager
         from adapters.registry import AdapterRegistry
         from adapters.claude_code import ClaudeCodeAdapter
+        from adapters.codex import CodexAdapter
         from supervisor.watchdogs import WatchdogEngine, InterventionController
+        from core.handoff import HandoffEngine
 
         self.worktree_manager = GitWorktreeManager(repo_root=Path("."))
         self.adapter_registry = AdapterRegistry()
@@ -76,6 +80,12 @@ class AppState:
             worktree_manager=self.worktree_manager,
         )
         self.adapter_registry.register_adapter(self.claude_adapter)
+
+        self.codex_adapter = CodexAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.codex_adapter)
 
         # Supervisory Watchdog Engine & Intervention Controller (Phase 3)
         self.watchdog_engine = WatchdogEngine(policy=self.policy_config)
@@ -94,6 +104,17 @@ class AppState:
             repository=self.verification_repo,
             task_manager=self.task_manager,
             worktree_manager=self.worktree_manager,
+        )
+
+        # Handoff Engine (Phase 5)
+        self.handoff_engine = HandoffEngine(
+            event_bus=self.event_bus,
+            adapter_registry=self.adapter_registry,
+            handoff_repo=self.handoff_repo,
+            task_manager=self.task_manager,
+            worktree_manager=self.worktree_manager,
+            verification_engine=self.verification_engine,
+            max_handoffs_per_task=int(os.getenv("SUPERVISOR_MAX_HANDOFFS_PER_TASK", "3")),
         )
 
         # Execution Manager (Docker sandboxing + local process fallback)

@@ -725,6 +725,118 @@ class VerificationRepository:
             await conn.close()
 
 
+class HandoffRepository:
+    """Repository for task handoff records and context packages."""
+
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    async def save(
+        self,
+        mission_id: str,
+        task_id: str,
+        source_agent_id: str,
+        target_agent_id: str,
+        trigger: str,
+        status: str,
+        reason: str = "",
+        context_package: Optional[Dict[str, Any]] = None,
+        handoff_id: Optional[str] = None,
+        result: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        conn = await self.db.get_connection()
+        try:
+            hid = handoff_id or f"hnd_{uuid.uuid4().hex[:12]}"
+            created_at = datetime.now(timezone.utc).isoformat()
+            ctx_json = _to_json(context_package or {})
+
+            query = """
+            INSERT INTO handoffs (
+                handoff_id, mission_id, task_id, source_agent_id, target_agent_id,
+                trigger, status, reason, context_package, created_at, result, error
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(handoff_id) DO UPDATE SET
+                status = excluded.status,
+                completed_at = CASE WHEN excluded.status IN ('COMPLETED', 'FAILED', 'REJECTED') THEN excluded.created_at ELSE handoffs.completed_at END,
+                result = excluded.result,
+                error = excluded.error,
+                context_package = excluded.context_package;
+            """
+            await conn.execute(
+                query,
+                (hid, mission_id, task_id, source_agent_id, target_agent_id, trigger, status, reason, ctx_json, created_at, result, error)
+            )
+            await conn.commit()
+            return {
+                "handoff_id": hid,
+                "mission_id": mission_id,
+                "task_id": task_id,
+                "source_agent_id": source_agent_id,
+                "target_agent_id": target_agent_id,
+                "trigger": trigger,
+                "status": status,
+                "reason": reason,
+                "context_package": context_package or {},
+                "created_at": created_at,
+                "result": result,
+                "error": error,
+            }
+        finally:
+            await conn.close()
+
+    async def get(self, handoff_id: Any) -> Optional[Dict[str, Any]]:
+        hid = handoff_id.get("handoff_id") if isinstance(handoff_id, dict) else handoff_id
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM handoffs WHERE handoff_id = ?;", (hid,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res["context_package"] = _from_json(res.get("context_package"))
+            return res
+        finally:
+            await conn.close()
+
+    async def list_by_task(self, task_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM handoffs WHERE task_id = ? ORDER BY created_at ASC;",
+                (task_id,)
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                h = dict(row)
+                h["context_package"] = _from_json(h.get("context_package"))
+                records.append(h)
+            return records
+        finally:
+            await conn.close()
+
+    async def list_by_mission(self, mission_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM handoffs WHERE mission_id = ? ORDER BY created_at ASC;",
+                (mission_id,)
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                h = dict(row)
+                h["context_package"] = _from_json(h.get("context_package"))
+                records.append(h)
+            return records
+        finally:
+            await conn.close()
+
+
+
 
 async def attach_sqlite_persistence(event_bus: Any, db: DatabaseManager) -> EventRepository:
     """

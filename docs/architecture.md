@@ -193,3 +193,24 @@ Phase 4 operationalizes the core axiom: **Agent completion ≠ verified completi
   - `REQUIRE_REVIEW`: Flags task for operator review when acceptance criteria are ambiguous.
 - **Durable Verification History**: Persists all reports into SQLite WAL `verifications` table via `VerificationRepository`.
 
+---
+
+## 10. Phase 5: Handoff Engine & Second Production Adapter (Codex)
+
+Phase 5 establishes multi-agent recovery and execution continuity:
+
+- **Universal AgentAdapter Ecosystem**:
+  - `adapters/claude_code.py`: Anthropic Claude Code adapter.
+  - `adapters/codex.py`: OpenAI Codex adapter.
+  - Both share the universal `AgentAdapter` contract (`identity`, `check_availability`, `prepare`, `execute`, `cancel`, `status`, `cleanup`).
+- **Control Plane Invariant**: "A handoff transfers responsibility, not authority."
+  - Agents never directly communicate or negotiate task transfers.
+  - Supervisor halts failing agents, formulates structured context, and commands target agents.
+- **Provenance-Tagged Context Packages**:
+  - `HandoffContextBuilder` constructs packages categorizing facts into `VERIFIED` (empirical repo truths), `UNVERIFIED` (unproven agent claims), and `REJECTED` (failed approaches / error signatures).
+- **Worktree Continuity**: Target agents are dispatched into the exact same isolated Git worktree without touching the primary repository.
+- **Loop Protection & Verification Termination**:
+  - Configurable ceiling (`max_handoffs_per_task`) stops ping-pong loops and triggers `SUPERVISOR_HUMAN_REQUIRED`.
+  - Transferred tasks still terminate strictly via Phase 4 `VerificationEngine` (`ACCEPT`).
+
+

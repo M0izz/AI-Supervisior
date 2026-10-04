@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import time
 from typing import Any, Dict, List, Optional
 
@@ -239,7 +240,7 @@ class ClaudeCodeAdapter(AgentAdapter):
         # Construct argument list safely (NO shell=True)
         # If executable_override is a python command or script, accommodate argument structure
         if executable.endswith(".py"):
-            args = ["python", executable, "-p", prompt]
+            args = [sys.executable, executable, "-p", prompt]
         else:
             args = [executable, "-p", prompt]
 
