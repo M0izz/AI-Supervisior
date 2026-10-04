@@ -118,6 +118,35 @@ class TaskManager:
         )
         return task
 
+    async def route_and_start_task(
+        self,
+        mission_id: str,
+        task_id: str,
+        routing_engine: Any,
+        task_requirements: Optional[Any] = None,
+    ) -> Any:
+        """
+        Dynamically routes task to the best available agent using the RoutingEngine,
+        records the decision, and transitions task to IN_PROGRESS.
+        """
+        task = await self.get_task(mission_id, task_id)
+        if not task:
+            return None, None
+
+        from core.routing.models import RoutingRequest, TaskRequirements, RoutingDecisionType
+        reqs = task_requirements or TaskRequirements.from_task(task)
+        request = RoutingRequest(
+            mission_id=mission_id,
+            task_id=task_id,
+            task_objective=task.title or "",
+            task_requirements=reqs,
+        )
+        decision = await routing_engine.route(request)
+        if decision.decision == RoutingDecisionType.ROUTE and decision.selected_agent_id:
+            started = await self.start_task(mission_id, task_id, decision.selected_agent_id)
+            return started, decision
+        return task, decision
+
     async def complete_task(
         self,
         mission_id: str,

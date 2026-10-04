@@ -350,17 +350,24 @@ MISSION: "Add Stripe Checkout with Webhook Reconciliation"
 └── [TASK-007] (Verifier)Independent end-to-end integration test validation
 ```
 
-### 4.2 Dynamic Capability Router
-Rather than hardcoding static rules, the Router scores candidate agents across 6 dimensions:
+### 4.2 Dynamic Capability Router (Phase 6 Implemented)
+The Router is a Supervisor component. Agents do NOT select themselves or influence their own score.
+Given a task requirement, the Router evaluates all registered adapters through an Eligibility Gate and scores eligible candidates deterministically:
 
-$$\text{Suitability Score} = w_1 C_{\text{match}} + w_2 P_{\text{hist}} + w_3 C_{\text{cost}} + w_4 L_{\text{lat}} + w_5 W_{\text{ctx}} - S_{\text{risk}}$$
+1. **Eligibility Gate (Hard Constraints)**:
+   - **Exclusions**: Evaluates `excluded_agent_ids` (e.g. failing source agent during handoff).
+   - **Availability Probe**: Probes `AgentAdapter.check_availability()`. Any non-`AVAILABLE` status marks the candidate ineligible.
+   - **Required Capabilities**: Missing even one required capability (`code_execution`, `filesystem_write`, `git`, `test_execution`) makes the candidate ineligible. Historical score cannot override this gate.
 
-1. **Capability Alignment ($C_{\text{match}}$)**: Matching task tags (`frontend`, `db_migration`, `refactor`, `security`) to registered agent capabilities.
-2. **Historical Performance ($P_{\text{hist}}$)**: Empirical completion and verification pass rate for this agent on this project.
-3. **Cost Efficiency ($C_{\text{cost}}$)**: Estimated token burn vs budget.
-4. **Latency / Offline Requirement ($L_{\text{lat}}$)**: Offline-first flag forces routing to `qwen-local`.
-5. **Context Capacity ($W_{\text{ctx}}$)**: Required repository AST size vs agent model context limit.
-6. **Risk Penalty ($S_{\text{risk}}$)**: Deduction if agent recently encountered consecutive failures on similar tasks.
+2. **Deterministic Additive Scoring**:
+   $$\text{Score} = \text{Capability Base (10.0)} + \sum \text{Preferred Bonus (2.0)} + \text{Availability Bonus (2.0)} + \text{Bounded Reliability Score}$$
+   Where:
+   $$\text{Net Performance} = (\text{Verified Successes} \times 1.5) - (\text{Verification Failures} \times 2.0) - (\text{Handoffs} \times 1.0)$$
+   $$\text{Reliability Score} = \text{clamp}(\text{Net Performance}, -10.0, 10.0)$$
+
+3. **Cold-Start Policy**: Agents with zero historical tasks receive a neutral reliability score of `0.0` and remain eligible without penalty.
+4. **Deterministic Tie-Breaking**: Breaks ties using total capability count (specialization), fewest historical failures, fewest handoffs, and stable `agent_id` ordering.
+5. **Decisions & Persistence**: Outputs `ROUTE`, `NO_ELIGIBLE_AGENT`, or `REQUIRE_REVIEW` with human-readable rationales, persisted to SQLite WAL table `routing_decisions` and streamed via EventBus.
 
 ### 4.3 Shared Project Memory with 6-Tuple Provenance
 To prevent hallucinated context from becoming permanent project dogma, every memory record enforces explicit provenance:

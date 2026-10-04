@@ -125,6 +125,22 @@ CREATE TABLE IF NOT EXISTS handoffs (
     FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
 );
 
+-- 9. Routing Decisions Table
+CREATE TABLE IF NOT EXISTS routing_decisions (
+    routing_id TEXT PRIMARY KEY,
+    mission_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    selected_agent_id TEXT,
+    selected_adapter_id TEXT,
+    decision TEXT NOT NULL, -- ROUTE, NO_ELIGIBLE_AGENT, REQUIRE_REVIEW
+    score REAL DEFAULT 0.0,
+    decision_reason TEXT NOT NULL,
+    candidates TEXT DEFAULT '[]',
+    requirements TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
+);
+
 -- Indexes for performance & query lookups
 CREATE INDEX IF NOT EXISTS idx_tasks_mission ON tasks(mission_id);
 CREATE INDEX IF NOT EXISTS idx_events_mission ON events(mission_id);
@@ -135,4 +151,6 @@ CREATE INDEX IF NOT EXISTS idx_approvals_mission ON approvals(mission_id);
 CREATE INDEX IF NOT EXISTS idx_verifications_mission ON verifications(mission_id);
 CREATE INDEX IF NOT EXISTS idx_handoffs_mission ON handoffs(mission_id);
 CREATE INDEX IF NOT EXISTS idx_handoffs_task ON handoffs(task_id);
+CREATE INDEX IF NOT EXISTS idx_routing_mission ON routing_decisions(mission_id);
+CREATE INDEX IF NOT EXISTS idx_routing_task ON routing_decisions(task_id);
 

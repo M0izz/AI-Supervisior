@@ -9,6 +9,7 @@ from storage.sqlite import (
     ApprovalRepository,
     VerificationRepository,
     HandoffRepository,
+    RoutingRepository,
     attach_sqlite_persistence,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "ApprovalRepository",
     "VerificationRepository",
     "HandoffRepository",
+    "RoutingRepository",
     "attach_sqlite_persistence",
 ]
 

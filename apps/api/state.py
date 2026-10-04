@@ -29,6 +29,7 @@ from storage.sqlite import (
     ApprovalRepository,
     VerificationRepository,
     HandoffRepository,
+    RoutingRepository,
 )
 
 
@@ -50,6 +51,7 @@ class AppState:
         self.approval_repo = ApprovalRepository(self.db)
         self.verification_repo = VerificationRepository(self.db)
         self.handoff_repo = HandoffRepository(self.db)
+        self.routing_repo = RoutingRepository(self.db)
 
         self.mission_manager = MissionManager(event_bus=self.event_bus, repository=self.mission_repo)
         self.task_manager = TaskManager(event_bus=self.event_bus, repository=self.task_repo)
@@ -106,7 +108,17 @@ class AppState:
             worktree_manager=self.worktree_manager,
         )
 
-        # Handoff Engine (Phase 5)
+        # Dynamic Agent Router (Phase 6)
+        from core.routing import RoutingEngine
+        self.routing_engine = RoutingEngine(
+            adapter_registry=self.adapter_registry,
+            routing_repo=self.routing_repo,
+            verification_repo=self.verification_repo,
+            handoff_repo=self.handoff_repo,
+            event_bus=self.event_bus,
+        )
+
+        # Handoff Engine (Phase 5 + Phase 6 Dynamic Routing Integration)
         self.handoff_engine = HandoffEngine(
             event_bus=self.event_bus,
             adapter_registry=self.adapter_registry,
@@ -114,6 +126,7 @@ class AppState:
             task_manager=self.task_manager,
             worktree_manager=self.worktree_manager,
             verification_engine=self.verification_engine,
+            routing_engine=self.routing_engine,
             max_handoffs_per_task=int(os.getenv("SUPERVISOR_MAX_HANDOFFS_PER_TASK", "3")),
         )
 

@@ -43,6 +43,7 @@ class HandoffEngine:
         task_manager: Optional[Any] = None,
         worktree_manager: Optional[Any] = None,
         verification_engine: Optional[Any] = None,
+        routing_engine: Optional[Any] = None,
         max_handoffs_per_task: int = 3,
     ):
         self.event_bus = event_bus
@@ -51,6 +52,7 @@ class HandoffEngine:
         self.task_manager = task_manager
         self.worktree_manager = worktree_manager
         self.verification_engine = verification_engine
+        self.routing_engine = routing_engine
         self.max_handoffs_per_task = max_handoffs_per_task
 
         # Task handoff tracking: task_id -> list of handoff records
@@ -125,6 +127,53 @@ class HandoffEngine:
         5. Persists the handoff record to SQLite and publishes events.
         """
         handoff_id = f"hnd_{uuid.uuid4().hex[:12]}"
+
+        # 0. Dynamic routing resolution if target_agent_id is unspecified or "auto"
+        if (not target_agent_id or target_agent_id == "auto") and self.routing_engine:
+            from core.routing.models import RoutingRequest, TaskRequirements
+            prior_failed_agents = [
+                h.source_agent_id for h in self._task_handoff_history.get(task_id, [])
+            ]
+            excluded_agents = list(set([source_agent_id] + prior_failed_agents))
+
+            req = RoutingRequest(
+                mission_id=mission_id,
+                task_id=task_id,
+                task_objective=objective,
+                task_requirements=TaskRequirements(
+                    task_type="bug_fix",
+                    excluded_agent_ids=excluded_agents,
+                ),
+            )
+            route_decision = await self.routing_engine.route(req)
+            if route_decision.decision.value == "ROUTE" and route_decision.selected_agent_id:
+                target_agent_id = route_decision.selected_agent_id
+                logger.info(f"[HANDOFF] Dynamically routed handoff target to '{target_agent_id}'")
+            else:
+                deny_reason = f"Routing failed to find target agent: {route_decision.decision_reason}"
+                record = HandoffRecord(
+                    handoff_id=handoff_id,
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    source_agent_id=source_agent_id,
+                    target_agent_id="none",
+                    trigger=trigger,
+                    status=HandoffStatus.REJECTED,
+                    reason=reason,
+                    error=deny_reason,
+                )
+                await self._persist_record(record)
+                await self._emit_handoff_event(record, "handoff.failed", deny_reason)
+                return HandoffResult(
+                    handoff_id=handoff_id,
+                    task_id=task_id,
+                    success=False,
+                    status=HandoffStatus.REJECTED,
+                    source_agent_id=source_agent_id,
+                    target_agent_id="none",
+                    error=deny_reason,
+                )
+
         logger.info(
             f"[HANDOFF] Initiating handoff {handoff_id}: Task {task_id} "
             f"from '{source_agent_id}' to '{target_agent_id}' ({trigger.value}: {reason})"

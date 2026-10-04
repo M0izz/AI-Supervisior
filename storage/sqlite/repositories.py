@@ -836,6 +836,120 @@ class HandoffRepository:
             await conn.close()
 
 
+class RoutingRepository:
+    """Repository for persisting and querying routing decisions in SQLite WAL."""
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    async def save(
+        self,
+        mission_id: str,
+        task_id: str,
+        decision: str,
+        decision_reason: str,
+        selected_agent_id: Optional[str] = None,
+        selected_adapter_id: Optional[str] = None,
+        score: float = 0.0,
+        candidates: Optional[List[Dict[str, Any]]] = None,
+        requirements: Optional[Dict[str, Any]] = None,
+        routing_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        conn = await self.db.get_connection()
+        try:
+            rid = routing_id or f"rtg_{uuid.uuid4().hex[:12]}"
+            created_at = datetime.now(timezone.utc).isoformat()
+            cands_json = _to_json(candidates or [])
+            reqs_json = _to_json(requirements or {})
+
+            query = """
+            INSERT INTO routing_decisions (
+                routing_id, mission_id, task_id, selected_agent_id, selected_adapter_id,
+                decision, score, decision_reason, candidates, requirements, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(routing_id) DO UPDATE SET
+                selected_agent_id = excluded.selected_agent_id,
+                selected_adapter_id = excluded.selected_adapter_id,
+                decision = excluded.decision,
+                score = excluded.score,
+                decision_reason = excluded.decision_reason,
+                candidates = excluded.candidates,
+                requirements = excluded.requirements;
+            """
+            await conn.execute(
+                query,
+                (rid, mission_id, task_id, selected_agent_id, selected_adapter_id, decision, score, decision_reason, cands_json, reqs_json, created_at)
+            )
+            await conn.commit()
+            return {
+                "routing_id": rid,
+                "mission_id": mission_id,
+                "task_id": task_id,
+                "selected_agent_id": selected_agent_id,
+                "selected_adapter_id": selected_adapter_id,
+                "decision": decision,
+                "score": score,
+                "decision_reason": decision_reason,
+                "candidates": candidates or [],
+                "requirements": requirements or {},
+                "created_at": created_at,
+            }
+        finally:
+            await conn.close()
+
+    async def get(self, routing_id: Any) -> Optional[Dict[str, Any]]:
+        rid = routing_id.get("routing_id") if isinstance(routing_id, dict) else routing_id
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM routing_decisions WHERE routing_id = ?;", (rid,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res["candidates"] = _from_json(res.get("candidates"))
+            res["requirements"] = _from_json(res.get("requirements"))
+            return res
+        finally:
+            await conn.close()
+
+    async def list_by_task(self, task_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM routing_decisions WHERE task_id = ? ORDER BY created_at ASC;",
+                (task_id,)
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                r = dict(row)
+                r["candidates"] = _from_json(r.get("candidates"))
+                r["requirements"] = _from_json(r.get("requirements"))
+                records.append(r)
+            return records
+        finally:
+            await conn.close()
+
+    async def list_by_mission(self, mission_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM routing_decisions WHERE mission_id = ? ORDER BY created_at ASC;",
+                (mission_id,)
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                r = dict(row)
+                r["candidates"] = _from_json(r.get("candidates"))
+                r["requirements"] = _from_json(r.get("requirements"))
+                records.append(r)
+            return records
+        finally:
+            await conn.close()
+
+
 
 
 async def attach_sqlite_persistence(event_bus: Any, db: DatabaseManager) -> EventRepository:

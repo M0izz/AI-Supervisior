@@ -213,4 +213,25 @@ Phase 5 establishes multi-agent recovery and execution continuity:
   - Configurable ceiling (`max_handoffs_per_task`) stops ping-pong loops and triggers `SUPERVISOR_HUMAN_REQUIRED`.
   - Transferred tasks still terminate strictly via Phase 4 `VerificationEngine` (`ACCEPT`).
 
+---
+
+## 13. Dynamic Agent Router (Phase 6)
+
+Phase 6 implements capability-based, empirical evidence-aware dynamic task routing:
+
+- **Core Invariant**: "Routing is a Supervisor decision based on task requirements and available agent capabilities. Agents do not self-select."
+- **Routing Engine (`core/routing/engine.py`)**:
+  - Extracts deterministic `TaskRequirements` (required capabilities, preferred capabilities, scope, constraints).
+  - Evaluates candidates against an **Eligibility Gate** (exclusion list, runtime availability probe, hard required capabilities).
+  - Calculates deterministic multi-factor scores:
+    $$\text{Score} = \text{Base Capability (10.0)} + \text{Preferred Bonus (2.0/each)} + \text{Availability (2.0)} + \text{Bounded Historical Reliability} \in [-10, 10]$$
+  - Handles cold-start agents neutrally (reliability score 0.0) without penalty.
+  - Deterministically breaks ties via capability footprint, fewest failures, fewest handoffs, and stable sorting.
+  - Emits structured decisions (`ROUTE`, `NO_ELIGIBLE_AGENT`, `REQUIRE_REVIEW`) with human-readable rationales.
+  - Persists all decisions into SQLite WAL table `routing_decisions`.
+  - Emits real-time EventBus events (`routing.started`, `routing.candidate.evaluated`, `routing.completed`, `routing.failed`).
+- **Handoff Engine Integration**:
+  - Automatically resolves target agents during task handoffs (`target_agent_id="auto"`), strictly excluding the failing source agent to prevent ping-pong loops.
+
+
 

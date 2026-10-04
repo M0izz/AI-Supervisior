@@ -11,7 +11,7 @@ This matrix tracks the real operational status of every agent adapter. An adapte
 | Provider / Agent | Adapter Module | Integration Mechanism | Authentication | Execution Isolation | Event Streaming | Test Coverage | Current Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Claude Code** | `adapters/claude_code.py` | Universal AgentAdapter / CLI | `ANTHROPIC_API_KEY` | Git Worktree | Work Protocol v1 | Unit + Mock E2E (14 Tests) | **Implemented (Phase 2)** |
-| **OpenAI Codex** | `adapters/codex/` | OpenAI Agents SDK / CLI | `OPENAI_API_KEY` | Git Worktree | Work Protocol v1 | Unit + Mock E2E | **Planned (Phase 5 Target)** |
+| **OpenAI Codex** | `adapters/codex.py` | Universal AgentAdapter / CLI | `OPENAI_API_KEY` | Git Worktree | Work Protocol v1 | Unit + Mock E2E (Phase 5) | **Implemented (Phase 5)** |
 | **Google Gemini** | `adapters/gemini/` | Gemini CLI / SDK | `GEMINI_API_KEY` / Google ADC | Git Worktree | Work Protocol v1 | Planned | **Planned (Phase 10 Target)** |
 | **Qwen / Local** | `adapters/qwen/` | Ollama / vLLM / llama.cpp HTTP | Local Loopback (No Auth) | Git Worktree | Work Protocol v1 | Planned | **Planned (Phase 10 Target)** |
 | **Kimi / OpenCode** | `adapters/kimi/` | Moonshot API / CLI Process | API Key | Git Worktree | Work Protocol v1 | Planned | **Planned (Phase 10 Target)** |
@@ -25,18 +25,16 @@ This matrix tracks the real operational status of every agent adapter. An adapte
 ## 2. The 12-Phase Roadmap
 
 ```text
-PHASE 00 ──► PHASE 01 ──► PHASE 02 ──► PHASE 03 ──► PHASE 04 ──► PHASE 05
-Audit &      Product      Claude Code  Supervisory  Independent  Codex Handoff
-Roadmap      Kernel       Adapter      Watchdogs    Verifier     (MVP Milestone)
-(COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)
-
-
+PHASE 00 ──► PHASE 01 ──► PHASE 02 ──► PHASE 03 ──► PHASE 04 ──► PHASE 05 ──► PHASE 06
+Audit &      Product      Claude Code  Supervisory  Independent  Codex Handoff Capability
+Roadmap      Kernel       Adapter      Watchdogs    Verifier     Engine        Router
+(COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)   (COMPLETE)    (COMPLETE)
 
     │
     ▼
-PHASE 06 ──► PHASE 07 ──► PHASE 08 ──► PHASE 09 ──► PHASE 10 ──► PHASE 11 ──► PHASE 12
-Capability   Shared       Floating     Absence      5+ Agent     IDE          Cloud Layer
-Router       Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
+PHASE 07 ──► PHASE 08 ──► PHASE 09 ──► PHASE 10 ──► PHASE 11 ──► PHASE 12
+Shared       Floating     Absence      5+ Agent     IDE          Cloud Layer
+Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
 ```
 
 ---
@@ -175,12 +173,27 @@ Router       Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (T
 ---
 
 ### Phase 6: Dynamic Capability Router
-* **Objective**: Implement intelligent task routing across multiple connected agents.
+* **Objective**: Implement deterministic, capability-aware, empirical evidence-driven agent routing across available production adapters (Claude Code & OpenAI Codex).
 * **Deliverables**:
-  - `core/routing/registry.py`: Agent Capability Registry with static tags and dynamic performance metrics.
-  - `core/routing/scorer.py`: Multi-factor suitability scoring ($C_{\text{match}}, P_{\text{hist}}, C_{\text{cost}}, L_{\text{lat}}, W_{\text{ctx}}$).
+  - `core/routing/models.py`: Structured routing models (`TaskRequirements`, `RoutingCandidate`, `RoutingRequest`, `RoutingDecision`, `RoutingDecisionType`).
+  - `core/routing/scorer.py`: Deterministic scoring model ($C_{\text{match}} = 10.0, P_{\text{match}} = 2.0/\text{each}, A_{\text{avail}} = 2.0, R_{\text{rel}} \in [-10.0, 10.0]$) with cold-start neutrality and deterministic tie-breaking.
+  - `core/routing/engine.py`: Standalone `RoutingEngine` with SQLite WAL persistence (`routing_decisions`), EventBus streaming (`routing.started`, `routing.candidate.evaluated`, `routing.completed`, `routing.failed`), and explainable human-readable decision generation.
+  - `core/handoff/engine.py`: Wired Phase 5 `HandoffEngine` to use dynamic routing when `target_agent_id="auto"`, strictly excluding the failing source agent.
+  - `tests/test_routing.py`: 13 automated tests covering capability matching, missing capability exclusion, preferred capability bonus, offline exclusion, cold start, historical reliability, tie-breakers, persistence, handoff routing, killer scenario, and negative scenario.
+  - `docs/routing.md`: Complete specification, scoring formula, and lifecycle architecture.
 * **Acceptance Criteria**:
-  - Given a multi-task mission, the Router assigns backend tasks to Codex, frontend tasks to Gemini, and private/offline tasks to Qwen based on policy.
+  - [x] Routing domain models exist and enforce invariant: "The Supervisor decides who executes work; agents do not self-select."
+  - [x] Hard capability requirements act as strict eligibility gates; score cannot override missing capabilities.
+  - [x] Preferred capabilities contribute positive additive scoring bonuses.
+  - [x] Adapter availability is strictly respected; unavailable agents are ineligible.
+  - [x] Historical verified success/failure/handoff evidence contributes to bounded reliability score.
+  - [x] Cold-start agents with zero history receive neutral score and remain eligible.
+  - [x] Ties are broken deterministically (capabilities, failures, handoffs, agent_id).
+  - [x] `NO_ELIGIBLE_AGENT` state protects against unsafe execution when no agents qualify.
+  - [x] Routing decisions are fully explainable with structured human-readable text.
+  - [x] Handoff engine integrates routing and excludes failing source agent.
+  - [x] All 13 Phase 6 tests pass; full regression suite passes with 207 passed, 3 skipped, 0 failed.
+* **Status**: ✅ **COMPLETE**
 
 ---
 
