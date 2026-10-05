@@ -11,6 +11,10 @@ class AdapterCapability(str, Enum):
     TERMINAL_EXECUTION = "terminal_execution"
     GIT = "git"
     TEST_EXECUTION = "test_execution"
+    DOCUMENTATION = "documentation"
+    WEB_ACCESS = "web_access"
+    LOCAL_MODEL = "local_model"
+    MULTIMODAL = "multimodal"
 
 
 class AdapterAvailabilityStatus(str, Enum):

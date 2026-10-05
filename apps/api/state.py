@@ -76,6 +76,10 @@ class AppState:
         from adapters.registry import AdapterRegistry
         from adapters.claude_code import ClaudeCodeAdapter
         from adapters.codex import CodexAdapter
+        from adapters.gemini import GeminiAdapter
+        from adapters.qwen import QwenAdapter
+        from adapters.opencode import OpenCodeAdapter
+        from adapters.kimi import KimiAdapter
         from supervisor.watchdogs import WatchdogEngine, InterventionController
         from core.handoff import HandoffEngine
 
@@ -92,6 +96,30 @@ class AppState:
             worktree_manager=self.worktree_manager,
         )
         self.adapter_registry.register_adapter(self.codex_adapter)
+
+        self.gemini_adapter = GeminiAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.gemini_adapter)
+
+        self.qwen_adapter = QwenAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.qwen_adapter)
+
+        self.opencode_adapter = OpenCodeAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.opencode_adapter)
+
+        self.kimi_adapter = KimiAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.kimi_adapter)
 
         # Supervisory Watchdog Engine & Intervention Controller (Phase 3)
         self.watchdog_engine = WatchdogEngine(policy=self.policy_config)

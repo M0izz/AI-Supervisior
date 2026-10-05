@@ -331,6 +331,20 @@ export interface AbsenceSessionInfo {
   updated_at: string;
 }
 
+export interface AdapterInfo {
+  adapter_id: string;
+  provider: string;
+  display_name: string;
+  version: string;
+  capabilities: string[];
+  availability: {
+    status: string;
+    available: boolean;
+    message: string;
+    executable_path?: string | null;
+  };
+}
+
 declare global {
   interface Window {
     supervisor?: SupervisorDesktopBridge;

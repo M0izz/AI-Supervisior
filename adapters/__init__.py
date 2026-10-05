@@ -16,6 +16,10 @@ from adapters.base import AgentAdapter
 from adapters.registry import AdapterRegistry
 from adapters.claude_code import ClaudeCodeAdapter
 from adapters.codex import CodexAdapter
+from adapters.gemini import GeminiAdapter
+from adapters.qwen import QwenAdapter
+from adapters.opencode import OpenCodeAdapter
+from adapters.kimi import KimiAdapter
 
 __all__ = [
     "AdapterIdentity",
@@ -28,5 +32,9 @@ __all__ = [
     "AdapterRegistry",
     "ClaudeCodeAdapter",
     "CodexAdapter",
+    "GeminiAdapter",
+    "QwenAdapter",
+    "OpenCodeAdapter",
+    "KimiAdapter",
 ]
 

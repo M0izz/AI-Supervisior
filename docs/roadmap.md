@@ -279,12 +279,30 @@ Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
 
 ---
 
-### Phase 10: 5+ Agent Fleet Expansion
-* **Objective**: Expand adapter ecosystem to Gemini CLI, Qwen Local, Kimi, and Cursor MCP.
+### Phase 10: Multi-Agent Provider Fleet
+* **Objective**: Expand the provider ecosystem through the existing `AgentAdapter` contract, proving heterogeneous multi-agent fleet operations without modifying Supervisor Core business logic.
 * **Deliverables**:
-  - `adapters/gemini/`, `adapters/qwen/`, `adapters/kimi/`, `adapters/cursor/`.
+  - `adapters/gemini.py`: Production-grade `GeminiAdapter` for Google Gemini CLI runtime.
+  - `adapters/qwen.py`: Production-grade `QwenAdapter` for Qwen local models (Ollama, vLLM, llama.cpp, CLI) enforcing untrusted execution boundaries.
+  - `adapters/opencode.py`: Production-grade `OpenCodeAdapter` for OpenCode CLI runtime.
+  - `adapters/kimi.py`: Production-grade `KimiAdapter` for Moonshot Kimi CLI runtime.
+  - `adapters/models.py`: Expanded capability taxonomy (`DOCUMENTATION`, `WEB_ACCESS`, `LOCAL_MODEL`, `MULTIMODAL`).
+  - `apps/api/`: Added `/api/adapters` endpoint and registered all 6 adapters in `AppState.adapter_registry`.
+  - `apps/control-room/src/pages/ControlRoom.tsx`: Added Provider Fleet status panel displaying live availability and capability badges.
+  - `tests/test_fleet.py`: 16 comprehensive fleet tests covering contract compliance, worktree isolation, mock execution, cancellation, dynamic routing, cross-provider handoff, killer multi-agent scenario, failure handling, and optional real-provider smoke tests.
+  - `docs/adapters/`: Dedicated documentation for all providers (`gemini.md`, `qwen.md`, `opencode.md`, `kimi.md`).
 * **Acceptance Criteria**:
-  - All 6 providers pass the unified Work Protocol conformance test suite.
+  - [x] All 6 providers (Claude Code, Codex, Gemini, Qwen/Local, OpenCode, Kimi) conform strictly to universal `AgentAdapter` contract.
+  - [x] Supervisor Core remains strictly provider-agnostic: zero `if provider == ...` branches in routing, watchdogs, handoff, verification, memory, or absence engines.
+  - [x] Capability model reflects actual enabled capabilities; honest availability probing (`AVAILABLE` vs `UNAVAILABLE`).
+  - [x] Untrusted local execution boundary: Qwen/Local models cannot bypass worktree isolation, scope monitoring, watchdogs, or verification.
+  - [x] Unified Work Protocol normalization: all adapters emit canonical `WorkProtocolEvent` streams.
+  - [x] Dynamic routing evaluates full fleet dynamically with neutral cold-start scoring and capability filtering.
+  - [x] Cross-provider handoff operates cleanly through common adapter interfaces and context packages.
+  - [x] Independent Verification applies universally: agent completion claim != verified completion.
+  - [x] Control Room displays live provider fleet diagnostics and capabilities.
+  - [x] Full regression test suite passes with 249 passed, 7 skipped (4 optional smoke tests gated by env vars), 0 failed.
+* **Status**: ✅ **COMPLETE**
 
 ---
 

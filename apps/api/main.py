@@ -633,6 +633,30 @@ async def resume_agent(agent_id: str):
     return {"status": "resumed", "agent_id": agent_id}
 
 
+# --- Adapter Fleet Registry ---
+@app.get("/api/adapters")
+async def list_adapters():
+    """Lists all registered AgentAdapters, declared capabilities, and runtime availability."""
+    availabilities = await app_state.adapter_registry.check_all_availabilities()
+    adapters_list = []
+    for ident in app_state.adapter_registry.list_adapters():
+        avail = availabilities.get(ident.adapter_id)
+        adapters_list.append({
+            "adapter_id": ident.adapter_id,
+            "provider": ident.provider,
+            "display_name": ident.display_name,
+            "version": ident.version,
+            "capabilities": ident.capabilities,
+            "availability": avail.model_dump() if avail else {
+                "status": "UNKNOWN",
+                "available": False,
+                "message": "Availability probe not executed",
+                "executable_path": None,
+            },
+        })
+    return {"adapters": adapters_list, "count": len(adapters_list)}
+
+
 # --- Human Approvals & Operator Control ---
 @app.post("/api/approvals")
 async def create_approval_endpoint(req: CreateApprovalRequest):

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Terminal, 
   Users, 
@@ -11,7 +11,8 @@ import {
   ArrowRight,
   ExternalLink
 } from 'lucide-react';
-import type { Mission, AgentRecord, InterventionDetail, MissionTelemetry } from '../types';
+import type { Mission, AgentRecord, InterventionDetail, MissionTelemetry, AdapterInfo } from '../types';
+import { getAdapters } from '../api';
 
 interface ControlRoomProps {
   missions: Mission[];
@@ -37,6 +38,28 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
   const activeMissions = safeMissions.filter(m => m.status === 'RUNNING' || m.status === 'INVESTIGATING' || m.status === 'WAITING_APPROVAL' || m.status === 'RECOVERING');
   const runningAgents = safeAgents.filter(a => a.status === 'RUNNING' || a.status === 'BUSY');
   const failedMissions = safeMissions.filter(m => m.status === 'FAILED');
+
+  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchFleet = async () => {
+      try {
+        const res = await getAdapters();
+        if (mounted && res?.adapters) {
+          setAdapters(res.adapters);
+        }
+      } catch (err) {
+        console.error('Failed to fetch adapters fleet:', err);
+      }
+    };
+    fetchFleet();
+    const interval = setInterval(fetchFleet, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const getMissionStatusBadge = (status: string) => {
     switch (status) {
@@ -313,6 +336,71 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({
                     </div>
                     <div>
                       {getAgentStatusBadge(agent.status)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Phase 10: Multi-Agent Fleet (Adapters) */}
+          <div className="cr-panel">
+            <div className="cr-panel-header">
+              <div className="cr-panel-title">
+                <Terminal size={15} color="var(--status-cyan)" />
+                <span>Provider Fleet (Adapters)</span>
+              </div>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                {adapters.filter(a => a.availability?.available).length}/{adapters.length} AVAILABLE
+              </span>
+            </div>
+
+            {adapters.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                LOADING ADAPTER FLEET...
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {adapters.map((ad) => (
+                  <div 
+                    key={ad.adapter_id}
+                    style={{
+                      backgroundColor: 'var(--bg-core)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '3px',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <strong style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-primary)' }}>
+                          {ad.display_name}
+                        </strong>
+                        <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          ({ad.provider})
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                        {ad.capabilities.slice(0, 4).map(c => (
+                          <span key={c} className="badge badge-neutral" style={{ fontSize: '8px', padding: '0px 3px' }}>
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      {ad.availability?.available ? (
+                        <span className="badge badge-emerald" style={{ fontSize: '9px', padding: '2px 5px' }}>
+                          <CheckCircle2 size={8} /> AVAILABLE
+                        </span>
+                      ) : (
+                        <span className="badge badge-neutral" style={{ fontSize: '9px', padding: '2px 5px', opacity: 0.7 }}>
+                          {ad.availability?.status || 'UNAVAILABLE'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -5,7 +5,7 @@
 > *"Agent completion ≠ verified completion."*
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-124%20passed%20%7C%202%20skipped-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-249%20passed%20%7C%207%20skipped-success.svg)]()
 [![Model](https://img.shields.io/badge/model-NVIDIA%20Nemotron--4--340B-76B900.svg)]()
 [![Cloud](https://img.shields.io/badge/inference-Nebius%20AI%20Studio-0052FF.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -243,19 +243,34 @@ python -m demo.scenarios.killer_scenario
 python -m pytest tests/ -v
 ```
 
-> **Exact Test Result**: 126 tests collected: 124 passed, 2 skipped, 0 failed.
+> **Exact Test Result**: 256 tests collected: 249 passed, 7 skipped, 0 failed.
 > 
-> *The 2 skipped tests are environment-dependent external integration tests that activate automatically when a live Jenkins server (`JENKINS_ENABLED=true`) or external endpoint credentials are configured.*
+> *The 7 skipped tests include 3 environment-dependent external integration tests and 4 optional real-provider smoke tests (`RUN_REAL_GEMINI_TESTS`, `RUN_REAL_QWEN_TESTS`, `RUN_REAL_OPENCODE_TESTS`, `RUN_REAL_KIMI_TESTS`).*
 
 ---
 
-## 7. Control Room User Interface
+## 7. Multi-Agent Provider Fleet
+
+AI Supervisor manages a heterogeneous fleet of autonomous engineering agents through a unified supervisory protocol:
+
+| Provider | Adapter ID | Supported Interface | Untrusted Boundary | Docs |
+|---|---|---|---|---|
+| **Anthropic Claude Code** | `claude-code` | CLI Process (`asyncio`, `shell=False`) | Isolated Git Worktree | [Docs](docs/adapters/claude-code.md) |
+| **OpenAI Codex** | `codex` | CLI Process (`asyncio`, `shell=False`) | Isolated Git Worktree | [Docs](docs/adapters/codex.md) |
+| **Google Gemini** | `gemini` | Gemini CLI / SDK | Isolated Git Worktree | [Docs](docs/adapters/gemini.md) |
+| **Qwen / Local Runtime** | `qwen` | Ollama / vLLM / llama.cpp / CLI | Isolated Git Worktree | [Docs](docs/adapters/qwen.md) |
+| **OpenCode** | `opencode` | OpenCode CLI Process | Isolated Git Worktree | [Docs](docs/adapters/opencode.md) |
+| **Moonshot Kimi** | `kimi` | Kimi CLI Process | Isolated Git Worktree | [Docs](docs/adapters/kimi.md) |
+
+---
+
+## 8. Control Room User Interface
 
 The Control Room provides dense, real-time observability across 6 purpose-built pages:
 
 | Page | Purpose |
 | :--- | :--- |
-| **Control Room** | Central operations dashboard with active mission matrix, agent fleet status, real-time interventions, and watchdog readiness. |
+| **Control Room** | Central operations dashboard with active mission matrix, multi-agent fleet availability badges, real-time interventions, and watchdog readiness. |
 | **Mission Detail** | Mission objectives, interactive visual Task DAG, Jenkins JUnit build history, and Docker execution audit log. |
 | **Agent Detail** | Agent profile, assigned DAG task, live tool execution trace, and exclusive file lock monitoring. |
 | **Supervisor Events** | Live WebSocket event stream with dynamic story timeline and raw payload inspector. |
@@ -264,10 +279,17 @@ The Control Room provides dense, real-time observability across 6 purpose-built 
 
 ---
 
-## 8. Documentation Index
+## 9. Documentation Index
 
 - [Architecture Guide](docs/architecture.md) — Comprehensive technical design and data flows.
 - [Absence Mode Specification](docs/absence-mode.md) — Bounded autonomy policy, authority hierarchy, and safety invariants.
+- [Multi-Agent Provider Fleet](docs/roadmap.md#phase-10-multi-agent-provider-fleet) — Heterogeneous fleet architecture and test coverage.
+- [Claude Code Adapter Guide](docs/adapters/claude-code.md) — Anthropic Claude Code adapter specification.
+- [Codex Adapter Guide](docs/adapters/codex.md) — OpenAI Codex adapter specification.
+- [Gemini Adapter Guide](docs/adapters/gemini.md) — Google Gemini CLI adapter specification.
+- [Qwen Local Adapter Guide](docs/adapters/qwen.md) — Qwen local runtime & untrusted boundary guide.
+- [OpenCode Adapter Guide](docs/adapters/opencode.md) — OpenCode CLI adapter specification.
+- [Kimi Adapter Guide](docs/adapters/kimi.md) — Moonshot Kimi CLI adapter specification.
 - [Hackathon Requirements Mapping](docs/hackathon-requirements.md) — Feature-by-feature evaluation matrix.
 - [3-Minute Demo Presentation Script](docs/demo-script.md) — Stage presentation script with timestamps and visual cues.
 - [Killer Demo Detailed Guide](docs/demo.md) — Step-by-step demonstration walkthrough.

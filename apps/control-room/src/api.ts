@@ -8,7 +8,8 @@ import type {
   MemorySummary,
   MissionTelemetry,
   GlobalOverviewTelemetry,
-  ApprovalResolutionAction
+  ApprovalResolutionAction,
+  AdapterInfo
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -296,4 +297,9 @@ export async function cancelAbsenceMode(missionId: string, reason?: string): Pro
     method: 'POST',
     body: JSON.stringify({ reason: reason || 'Emergency stop via UI' })
   });
+}
+
+// Phase 10: Provider Fleet / Adapters API
+export async function getAdapters(): Promise<{ adapters: AdapterInfo[]; count: number }> {
+  return fetchJson(`/api/adapters`);
 }

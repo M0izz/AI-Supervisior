@@ -308,5 +308,41 @@ Phase 9 introduces Absence Mode for safe, unattended operation ("Continue workin
   - Ambient Floating HUD displays active status and remaining time countdown.
   - Operator can trigger immediate Emergency Stop (`cancel`), revoking autonomous continuation and halting running agents safely.
 
+---
+
+## 17. Multi-Agent Provider Fleet (Phase 10)
+
+Phase 10 expands the AI Supervisor provider ecosystem through the existing `AgentAdapter` contract, demonstrating heterogeneous multi-agent operations under a single unified supervisory protocol:
+
+- **Core Invariant**: "Adding a provider must not require modifying Supervisor business logic."
+- **Architectural Boundary**:
+  ```text
+                      ┌─ Claude Code (Anthropic)
+                      │
+  Supervisor ─ Adapter├─ Codex (OpenAI)
+                      │
+                      ├─ Gemini (Google)
+                      │
+                      ├─ Qwen / Local (Open Weights)
+                      │
+                      ├─ OpenCode (CLI Agent)
+                      │
+                      └─ Kimi (Moonshot)
+  ```
+- **Unified Adapter Lifecycle**:
+  - `identity()`, `capabilities()`, `check_availability()`, `prepare()`, `execute()`, `cancel()`, `status()`, `cleanup()`.
+- **Capability Taxonomy**:
+  - `code_execution`, `filesystem_read`, `filesystem_write`, `terminal_execution`, `git`, `test_execution`, `documentation`, `web_access`, `local_model`, `multimodal`.
+  - Capabilities declare what the adapter actually enables, avoiding inflated claims.
+- **Untrusted Local Execution Boundary**:
+  - Local models (e.g. Qwen) are treated as untrusted execution providers. Worktree isolation, scope monitoring, dangerous command interception, and independent verification apply identically.
+- **Unified Work Protocol Normalization**:
+  - All providers map internal telemetry to canonical `WorkProtocolEvent` streams (`agent.started`, `command.started`, `file.edited`, `command.completed`, `agent.completed`).
+- **Dynamic Routing & Cold-Start Fairness**:
+  - Router evaluates newly registered providers dynamically based on declared capabilities and truthful runtime availability (`AVAILABLE` vs `UNAVAILABLE`), with neutral cold-start prior scoring.
+- **Zero-Bypass Verification & Absence**:
+  - No provider can bypass Independent Verification, Watchdogs, or Absence Mode policies.
+
+
 
 
