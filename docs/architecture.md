@@ -338,10 +338,40 @@ Phase 10 expands the AI Supervisor provider ecosystem through the existing `Agen
   - Local models (e.g. Qwen) are treated as untrusted execution providers. Worktree isolation, scope monitoring, dangerous command interception, and independent verification apply identically.
 - **Unified Work Protocol Normalization**:
   - All providers map internal telemetry to canonical `WorkProtocolEvent` streams (`agent.started`, `command.started`, `file.edited`, `command.completed`, `agent.completed`).
-- **Dynamic Routing & Cold-Start Fairness**:
-  - Router evaluates newly registered providers dynamically based on declared capabilities and truthful runtime availability (`AVAILABLE` vs `UNAVAILABLE`), with neutral cold-start prior scoring.
 - **Zero-Bypass Verification & Absence**:
   - No provider can bypass Independent Verification, Watchdogs, or Absence Mode policies.
+
+---
+
+## 18. IDE Integration — Visual Studio Code (Phase 11)
+
+Phase 11 integrates the AI Supervisor control plane into developer IDEs, beginning with Visual Studio Code:
+
+- **Core Architectural Invariant**:
+  > *"The IDE extension is an interface to the Supervisor, NOT another Supervisor, NOT an agent runtime, and NOT the source of truth."*
+- **Tri-Interface Model**:
+  ```text
+               ┌─ Floating HUD (Desktop ambient widget)
+               │
+  Supervisor ──┼─ Control Room (Web cockpit dashboard)
+  Core Backend │
+               └─ IDE Extension (VS Code Activity Bar, Status Bar & Commands)
+  ```
+- **Unified Communication Layer**:
+  - Extension communicates exclusively through standard FastAPI HTTP REST (`/api/missions`, `/api/agents`, `/api/adapters`, `/api/approvals`, `/api/absence`) and WebSocket event streaming (`/ws/events`).
+  - No Python logic embedded in extension; zero local agent process spawning from the editor.
+- **Native Activity Bar & Views**:
+  - `Missions View`: Live DAG progress, active agents, and independent verification status.
+  - `Fleet Providers View`: Real-time truthfulness badges (`AVAILABLE`, `UNAVAILABLE`) and capability chips.
+  - `Attention & Approvals View`: Interactive operator approval queue and active Absence Mode countdowns.
+- **Contextual Editor Integration**:
+  - `Work on Selection`: Packages exact selection lines as untrusted task input.
+  - `Investigate Diagnostics`: Gathers active compiler/linter diagnostics for supervisory investigation.
+- **Security & Workspace Containment**:
+  - `PathValidator` ensures all file navigations and context extractions stay strictly inside workspace roots, blocking traversal attacks.
+  - Respects VS Code Workspace Trust: restricts autonomous mission dispatch in untrusted folders.
+  - Zero-Nag notification manager debounces and surfaces only actionable interventions and approvals.
+
 
 
 

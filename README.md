@@ -282,6 +282,7 @@ The Control Room provides dense, real-time observability across 6 purpose-built 
 ## 9. Documentation Index
 
 - [Architecture Guide](docs/architecture.md) — Comprehensive technical design and data flows.
+- [IDE Integration Guide (VS Code)](docs/ide-integration.md) — Visual Studio Code extension architecture, views, commands, and security.
 - [Absence Mode Specification](docs/absence-mode.md) — Bounded autonomy policy, authority hierarchy, and safety invariants.
 - [Multi-Agent Provider Fleet](docs/roadmap.md#phase-10-multi-agent-provider-fleet) — Heterogeneous fleet architecture and test coverage.
 - [Claude Code Adapter Guide](docs/adapters/claude-code.md) — Anthropic Claude Code adapter specification.

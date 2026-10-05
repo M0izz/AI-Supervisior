@@ -306,12 +306,32 @@ Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
 
 ---
 
-### Phase 11: IDE Integration
-* **Objective**: Integrate AI Supervisor status and controls directly into developer IDEs.
+### Phase 11: IDE Integration (Visual Studio Code)
+* **Objective**: Bring the AI Supervisor control plane into developer IDEs (VS Code) while strictly preserving the backend as the authoritative single source of truth.
 * **Deliverables**:
-  - VS Code Extension streaming mission status, active agents, and approvals into the status bar.
+  - `extensions/vscode/`: Full TypeScript VS Code extension package with native Activity Bar views, compact Status Bar item, and palette commands.
+  - `extensions/vscode/src/client/supervisorClient.ts`: Strongly typed HTTP & WebSocket client with reconnect, backoff, and event deduplication.
+  - `extensions/vscode/src/providers/`: Three native TreeView providers: `MissionsTreeProvider`, `AgentsTreeProvider` (fleet availability), and `AttentionTreeProvider` (approvals & Absence Mode).
+  - `extensions/vscode/src/status/statusBar.ts`: Compact, low-distraction status bar item (`$(shield) Supervisor: Active`, `$(warning) Supervisor: Attention`, `$(circle-slash) Supervisor: Offline`).
+  - `extensions/vscode/src/commands/`: Mission lifecycle commands (`startMission`, `pauseMission`, `resumeMission`, `cancelMission`), context dispatchers (`workOnSelection`, `investigateDiagnostics`), operator approval resolvers (`approveRequest`, `denyRequest`), and Absence Mode arm/cancel.
+  - `extensions/vscode/src/notifications/notificationManager.ts`: Zero-Nag notification manager debouncing routine events and alerting only on actionable interventions.
+  - `extensions/vscode/src/utils/pathValidator.ts`: Security utility enforcing workspace root containment and blocking path traversal (`../`).
+  - `extensions/vscode/tests/extension.test.cjs`: Comprehensive automated test suite (14 tests) covering client contracts, security boundaries, zero-nag filtering, killer scenario, and negative degradation.
+  - `extensions/vscode/ai-supervisor-vscode-1.0.0.vsix`: Locally installable `.vsix` extension package.
+  - `docs/ide-integration.md`: Complete IDE integration architecture, commands, views, and security guide.
 * **Acceptance Criteria**:
-  - Operator can trigger missions and approve actions without leaving their code editor.
+  - [x] Extension connects to Supervisor backend via HTTP REST and WebSocket stream.
+  - [x] Extension is an interface to the Supervisor, not another Supervisor, not an agent runtime, and not the source of truth.
+  - [x] Activity Bar container displays Missions, Fleet Providers, and Attention/Approvals tree views.
+  - [x] Status bar displays live compact status with zero jitter or constant animation.
+  - [x] Missions can be initiated directly from VS Code with detected repository context.
+  - [x] Contextual actions (`workOnSelection`, `investigateDiagnostics`) treat code strictly as untrusted input.
+  - [x] File navigation validates paths against workspace roots; path traversal attacks are strictly blocked.
+  - [x] Zero-Nag notification policy suppresses routine telemetry and surfaces only actionable approvals, interventions, and failures.
+  - [x] Respects VS Code Workspace Trust: restricted in untrusted workspaces.
+  - [x] Truthful degradation: disconnected backend shows `Supervisor: Offline` without fabricating running missions.
+  - [x] All 14 extension tests pass; local `.vsix` packages cleanly.
+* **Status**: ✅ **COMPLETE**
 
 ---
 

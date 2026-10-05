@@ -1,0 +1,211 @@
+{
+  "name": "ai-supervisor-vscode",
+  "displayName": "AI Supervisor",
+  "description": "Operations layer that manages, coordinates, supervises, and independently verifies AI coding agents.",
+  "version": "1.0.0",
+  "publisher": "ai-supervisor",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Testing"
+  ],
+  "keywords": [
+    "ai-supervisor",
+    "claude-code",
+    "codex",
+    "gemini",
+    "qwen",
+    "watchdog",
+    "verification"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "AI Supervisor operates in read-only mode in untrusted workspaces. Starting missions or approving modifications is restricted."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-supervisor",
+          "title": "AI Supervisor",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ai-supervisor": [
+        {
+          "id": "aiSupervisor.missionsView",
+          "name": "Missions & Execution",
+          "icon": "media/icon.svg"
+        },
+        {
+          "id": "aiSupervisor.agentsView",
+          "name": "Fleet Providers & Agents"
+        },
+        {
+          "id": "aiSupervisor.attentionView",
+          "name": "Attention & Approvals"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "aiSupervisor.startMission",
+        "title": "AI Supervisor: Start Mission",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.workOnSelection",
+        "title": "AI Supervisor: Work on Selection",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.investigateDiagnostics",
+        "title": "AI Supervisor: Investigate Current Diagnostics",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.pauseMission",
+        "title": "AI Supervisor: Pause Mission",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.resumeMission",
+        "title": "AI Supervisor: Resume Mission",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.cancelMission",
+        "title": "AI Supervisor: Cancel Mission",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.refresh",
+        "title": "AI Supervisor: Refresh Fleet State",
+        "category": "AI Supervisor",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "aiSupervisor.openControlRoom",
+        "title": "AI Supervisor: Open Control Room Dashboard",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.openHud",
+        "title": "AI Supervisor: Open Floating HUD",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.approveRequest",
+        "title": "AI Supervisor: Approve Action",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.denyRequest",
+        "title": "AI Supervisor: Deny Action",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.armAbsence",
+        "title": "AI Supervisor: Arm Absence Mode",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.cancelAbsence",
+        "title": "AI Supervisor: Emergency Stop (Absence Mode)",
+        "category": "AI Supervisor"
+      },
+      {
+        "command": "aiSupervisor.openFile",
+        "title": "AI Supervisor: Open File at Range",
+        "category": "AI Supervisor"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "aiSupervisor.refresh",
+          "when": "view == aiSupervisor.missionsView || view == aiSupervisor.agentsView || view == aiSupervisor.attentionView",
+          "group": "navigation"
+        },
+        {
+          "command": "aiSupervisor.startMission",
+          "when": "view == aiSupervisor.missionsView",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "aiSupervisor.workOnSelection",
+          "when": "editorHasSelection",
+          "group": "aiSupervisor@1"
+        },
+        {
+          "command": "aiSupervisor.investigateDiagnostics",
+          "when": "editorTextFocus",
+          "group": "aiSupervisor@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AI Supervisor",
+      "properties": {
+        "aiSupervisor.apiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "Base URL of the authoritative AI Supervisor FastAPI backend"
+        },
+        "aiSupervisor.websocketUrl": {
+          "type": "string",
+          "default": "ws://127.0.0.1:8000/ws/events",
+          "description": "WebSocket URL for live supervisory event streaming"
+        },
+        "aiSupervisor.controlRoomUrl": {
+          "type": "string",
+          "default": "http://localhost:5173",
+          "description": "URL of the Control Room web dashboard"
+        },
+        "aiSupervisor.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically connect to the Supervisor backend on workspace launch"
+        },
+        "aiSupervisor.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Surface zero-nag actionable notifications (interventions, pending approvals, verification failures)"
+        },
+        "aiSupervisor.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show compact AI Supervisor health indicator in the VS Code status bar"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node --test tests/*.test.cjs",
+    "package": "vsce package --allow-missing-repository --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.0.0",
+    "typescript": "^5.3.3"
+  }
+}
