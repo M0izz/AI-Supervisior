@@ -35,7 +35,7 @@ Roadmap      Kernel       Adapter      Watchdogs    Verifier     Engine        R
 PHASE 07 ──► PHASE 08 ──► PHASE 09 ──► PHASE 10 ──► PHASE 11 ──► PHASE 12
 Shared       Floating     Absence      5+ Agent     IDE          Cloud Layer
 Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
-(COMPLETE)
+(COMPLETE)   (COMPLETE)   (COMPLETE)
 ```
 
 ---
@@ -252,12 +252,30 @@ Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
 ---
 
 ### Phase 9: Absence Mode & Safety Policies
-* **Objective**: Enable safe unattended execution ("I'm going to sleep. Finish this.").
+* **Objective**: Enable safe unattended execution ("Continue working on this while I'm away") within an explicit, immutable authority policy.
 * **Deliverables**:
-  - `core/policies/absence.py`: Absence Mode policy configuration.
-  - Approval queue with configurable budgets, timeouts, and automatic pause triggers.
+  - `core/absence/models.py`: Bounded `AbsencePolicy`, `AbsenceSession`, `AbsenceSessionState`, `AbsenceDecision`, and approval/verification/failure policies.
+  - `core/absence/engine.py`: Deterministic `AbsencePolicyEngine` enforcing the authority hierarchy, hard time limits, budget/retry/handoff ceilings, and zero agent self-escalation.
+  - `storage/sqlite/schema.sql` & `repositories.py`: Added Table 10 `absence_sessions` and Table 11 `absence_decisions` with full audit logging and indexing.
+  - `apps/api/`: REST endpoints for arming, starting, pausing, resuming, and cancelling (Emergency Stop) absence sessions with startup reconciliation.
+  - `apps/control-room/src/components/FloatingHud.tsx`: Absence Mode indicator banner, remaining duration countdown, and immediate Emergency Stop action.
+  - `apps/desktop/notifications.cjs`: Zero-Nag desktop notification triggers on absence state transitions.
+  - `tests/test_absence.py`: Automated test suite (10 tests) verifying policy snapshot immutability, lifecycle transitions, authority hierarchy, security self-escalation blocks, hard expiration, budget ceilings, restart durability, killer end-to-end scenario, and negative retry ceiling scenario.
+  - `docs/absence-mode.md`: Comprehensive Absence Mode specification, authority hierarchy, and operational guide.
 * **Acceptance Criteria**:
-  - In Absence Mode, safe edits and tests proceed automatically; file deletions or spending spikes immediately pause execution and queue for operator review.
+  - [x] Absence Mode must be explicitly armed by the user; closing the desktop app or going idle does not silently grant autonomy.
+  - [x] Persists immutable policy snapshot on activation; runtime global configuration changes do not mutate active session authority.
+  - [x] Absence Mode expands continuity, not authority: safe repository edits and tests proceed automatically; dangerous commands and protected files are strictly blocked.
+  - [x] Authority hierarchy enforced: Hard safety > User policy > Supervisor rules > Task constraints > Agent request.
+  - [x] Agent cannot increase its own authority (cannot modify policy, extend duration, disable watchdogs, bypass verifier, or grant capabilities).
+  - [x] Hard expiration ceiling stops autonomous continuation when wall-clock time expires.
+  - [x] Budget, retry, and handoff ceilings pause session safely and notify user when exceeded.
+  - [x] Independent Verification remains mandatory: agent claims of completion are untrusted until ground truth tests accept.
+  - [x] Floating HUD clearly displays active Absence Mode, remaining duration, and provides one-click Emergency Stop.
+  - [x] Zero-nag notifications surface actionable absence events (started, paused, expired, completed, blocked).
+  - [x] Restart durability survives backend restarts; expired or corrupted sessions fail closed.
+  - [x] All 10 Phase 9 tests pass; full regression suite passes with 237 passed, 3 skipped, 0 failed.
+* **Status**: ✅ **COMPLETE**
 
 ---
 

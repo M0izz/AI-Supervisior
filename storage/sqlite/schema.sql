@@ -150,6 +150,40 @@ CREATE TABLE IF NOT EXISTS routing_decisions (
     FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
 );
 
+-- 10. Absence Sessions Table (Phase 9)
+CREATE TABLE IF NOT EXISTS absence_sessions (
+    absence_id TEXT PRIMARY KEY,
+    mission_id TEXT NOT NULL,
+    status TEXT NOT NULL, -- DISABLED, ARMED, ACTIVE, PAUSED, EXPIRED, COMPLETED, CANCELLED, BLOCKED
+    policy_snapshot TEXT NOT NULL, -- Frozen JSON of AbsencePolicy
+    started_at TEXT,
+    expires_at TEXT,
+    created_by TEXT DEFAULT 'user',
+    tasks_completed INTEGER DEFAULT 0,
+    retries_count INTEGER DEFAULT 0,
+    handoffs_count INTEGER DEFAULT 0,
+    paused_reason TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
+);
+
+-- 11. Absence Decisions Table (Auditable decision log)
+CREATE TABLE IF NOT EXISTS absence_decisions (
+    decision_id TEXT PRIMARY KEY,
+    absence_id TEXT NOT NULL,
+    mission_id TEXT NOT NULL,
+    task_id TEXT,
+    agent_id TEXT,
+    decision TEXT NOT NULL, -- ALLOW, DENY, PAUSE, REQUIRE_USER
+    rule_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    action TEXT NOT NULL,
+    metadata TEXT DEFAULT '{}',
+    timestamp TEXT NOT NULL,
+    FOREIGN KEY (absence_id) REFERENCES absence_sessions(absence_id) ON DELETE CASCADE
+);
+
 -- Indexes for performance & query lookups
 CREATE INDEX IF NOT EXISTS idx_tasks_mission ON tasks(mission_id);
 CREATE INDEX IF NOT EXISTS idx_events_mission ON events(mission_id);
@@ -166,4 +200,8 @@ CREATE INDEX IF NOT EXISTS idx_handoffs_mission ON handoffs(mission_id);
 CREATE INDEX IF NOT EXISTS idx_handoffs_task ON handoffs(task_id);
 CREATE INDEX IF NOT EXISTS idx_routing_mission ON routing_decisions(mission_id);
 CREATE INDEX IF NOT EXISTS idx_routing_task ON routing_decisions(task_id);
+CREATE INDEX IF NOT EXISTS idx_absence_sessions_mission ON absence_sessions(mission_id);
+CREATE INDEX IF NOT EXISTS idx_absence_sessions_status ON absence_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_absence_decisions_absence ON absence_decisions(absence_id);
+CREATE INDEX IF NOT EXISTS idx_absence_decisions_mission ON absence_decisions(mission_id);
 

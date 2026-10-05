@@ -267,6 +267,7 @@ The Control Room provides dense, real-time observability across 6 purpose-built 
 ## 8. Documentation Index
 
 - [Architecture Guide](docs/architecture.md) — Comprehensive technical design and data flows.
+- [Absence Mode Specification](docs/absence-mode.md) — Bounded autonomy policy, authority hierarchy, and safety invariants.
 - [Hackathon Requirements Mapping](docs/hackathon-requirements.md) — Feature-by-feature evaluation matrix.
 - [3-Minute Demo Presentation Script](docs/demo-script.md) — Stage presentation script with timestamps and visual cues.
 - [Killer Demo Detailed Guide](docs/demo.md) — Step-by-step demonstration walkthrough.

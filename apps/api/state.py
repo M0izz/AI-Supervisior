@@ -30,7 +30,9 @@ from storage.sqlite import (
     VerificationRepository,
     HandoffRepository,
     RoutingRepository,
+    AbsenceRepository,
 )
+from core.absence import AbsencePolicyEngine
 
 
 class AppState:
@@ -52,10 +54,12 @@ class AppState:
         self.verification_repo = VerificationRepository(self.db)
         self.handoff_repo = HandoffRepository(self.db)
         self.routing_repo = RoutingRepository(self.db)
+        self.absence_repo = AbsenceRepository(self.db)
 
         self.mission_manager = MissionManager(event_bus=self.event_bus, repository=self.mission_repo)
         self.task_manager = TaskManager(event_bus=self.event_bus, repository=self.task_repo)
         self.policy_config = PolicyConfig()
+        self.absence_engine = AbsencePolicyEngine(repository=self.absence_repo, event_bus=self.event_bus)
 
         # Wire event store (jsonl) and SQLite event repository to record all published events
         self.event_bus._global_subscribers.append(self.event_store.append)

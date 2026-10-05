@@ -14,6 +14,7 @@ from storage.sqlite.repositories import (
     VerificationRepository,
     HandoffRepository,
     RoutingRepository,
+    AbsenceRepository,
     attach_sqlite_persistence,
 )
 
@@ -28,6 +29,7 @@ __all__ = [
     "VerificationRepository",
     "HandoffRepository",
     "RoutingRepository",
+    "AbsenceRepository",
     "attach_sqlite_persistence",
 ]
 

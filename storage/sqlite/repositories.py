@@ -1052,6 +1052,210 @@ class RoutingRepository:
 
 
 
+class AbsenceRepository:
+    """Repository for Absence Mode sessions, immutable policy snapshots, and auditable decisions."""
+
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    async def save_session(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        conn = await self.db.get_connection()
+        try:
+            aid = session.get("absence_id") or f"abs_{uuid.uuid4().hex[:12]}"
+            mission_id = session.get("mission_id")
+            status = session.get("status", "ARMED")
+            policy_snapshot = _to_json(session.get("policy_snapshot", {}))
+            started_at = session.get("started_at")
+            expires_at = session.get("expires_at")
+            created_by = session.get("created_by", "user")
+            tasks_completed = session.get("tasks_completed", 0)
+            retries_count = session.get("retries_count", 0)
+            handoffs_count = session.get("handoffs_count", 0)
+            paused_reason = session.get("paused_reason")
+            created_at = session.get("created_at") or datetime.now(timezone.utc).isoformat()
+            updated_at = session.get("updated_at") or created_at
+
+            query = """
+            INSERT INTO absence_sessions (
+                absence_id, mission_id, status, policy_snapshot, started_at, expires_at,
+                created_by, tasks_completed, retries_count, handoffs_count, paused_reason,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(absence_id) DO UPDATE SET
+                status = excluded.status,
+                policy_snapshot = excluded.policy_snapshot,
+                started_at = excluded.started_at,
+                expires_at = excluded.expires_at,
+                tasks_completed = excluded.tasks_completed,
+                retries_count = excluded.retries_count,
+                handoffs_count = excluded.handoffs_count,
+                paused_reason = excluded.paused_reason,
+                updated_at = excluded.updated_at;
+            """
+            await conn.execute(
+                query,
+                (
+                    aid, mission_id, status, policy_snapshot, started_at, expires_at,
+                    created_by, tasks_completed, retries_count, handoffs_count, paused_reason,
+                    created_at, updated_at
+                )
+            )
+            await conn.commit()
+            return await self.get_session(aid) # type: ignore
+        finally:
+            await conn.close()
+
+    async def get_session(self, absence_id: str) -> Optional[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM absence_sessions WHERE absence_id = ?;",
+                (absence_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res["policy_snapshot"] = _from_json(res.get("policy_snapshot"))
+            return res
+        finally:
+            await conn.close()
+
+    async def get_active_session(self, mission_id: str) -> Optional[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM absence_sessions WHERE mission_id = ? AND status IN ('ARMED', 'ACTIVE', 'PAUSED') ORDER BY created_at DESC LIMIT 1;",
+                (mission_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res["policy_snapshot"] = _from_json(res.get("policy_snapshot"))
+            return res
+        finally:
+            await conn.close()
+
+    async def list_sessions_by_mission(self, mission_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM absence_sessions WHERE mission_id = ? ORDER BY created_at DESC;",
+                (mission_id,)
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                r = dict(row)
+                r["policy_snapshot"] = _from_json(r.get("policy_snapshot"))
+                records.append(r)
+            return records
+        finally:
+            await conn.close()
+
+    async def list_active_sessions(self) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM absence_sessions WHERE status IN ('ARMED', 'ACTIVE') ORDER BY created_at DESC;"
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                r = dict(row)
+                r["policy_snapshot"] = _from_json(r.get("policy_snapshot"))
+                records.append(r)
+            return records
+        finally:
+            await conn.close()
+
+    async def update_session(self, absence_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            fields = []
+            params = []
+            for k, v in updates.items():
+                if k == "policy_snapshot":
+                    fields.append(f"{k} = ?")
+                    params.append(_to_json(v))
+                elif k != "absence_id":
+                    fields.append(f"{k} = ?")
+                    params.append(v)
+            if not fields:
+                return await self.get_session(absence_id)
+
+            fields.append("updated_at = ?")
+            params.append(datetime.now(timezone.utc).isoformat())
+            params.append(absence_id)
+
+            query = f"UPDATE absence_sessions SET {', '.join(fields)} WHERE absence_id = ?;"
+            await conn.execute(query, tuple(params))
+            await conn.commit()
+            return await self.get_session(absence_id)
+        finally:
+            await conn.close()
+
+    async def save_decision(self, decision: Dict[str, Any]) -> Dict[str, Any]:
+        conn = await self.db.get_connection()
+        try:
+            did = decision.get("decision_id") or f"dec_{uuid.uuid4().hex[:12]}"
+            absence_id = decision.get("absence_id")
+            mission_id = decision.get("mission_id")
+            task_id = decision.get("task_id")
+            agent_id = decision.get("agent_id")
+            dec_type = decision.get("decision", "DENY")
+            rule_id = decision.get("rule_id", "default")
+            reason = decision.get("reason", "")
+            action = decision.get("action", "")
+            metadata = _to_json(decision.get("metadata", {}))
+            timestamp = decision.get("timestamp") or datetime.now(timezone.utc).isoformat()
+
+            query = """
+            INSERT INTO absence_decisions (
+                decision_id, absence_id, mission_id, task_id, agent_id,
+                decision, rule_id, reason, action, metadata, timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """
+            await conn.execute(
+                query,
+                (did, absence_id, mission_id, task_id, agent_id, dec_type, rule_id, reason, action, metadata, timestamp)
+            )
+            await conn.commit()
+            return {
+                "decision_id": did,
+                "absence_id": absence_id,
+                "mission_id": mission_id,
+                "task_id": task_id,
+                "agent_id": agent_id,
+                "decision": dec_type,
+                "rule_id": rule_id,
+                "reason": reason,
+                "action": action,
+                "metadata": decision.get("metadata", {}),
+                "timestamp": timestamp
+            }
+        finally:
+            await conn.close()
+
+    async def list_decisions(self, absence_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM absence_decisions WHERE absence_id = ? ORDER BY timestamp ASC;",
+                (absence_id,)
+            )
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                r = dict(row)
+                r["metadata"] = _from_json(r.get("metadata"))
+                records.append(r)
+            return records
+        finally:
+            await conn.close()
+
+
 async def attach_sqlite_persistence(event_bus: Any, db: DatabaseManager) -> EventRepository:
     """
     Attaches an SQLite WAL event store subscriber to the provided EventBus.

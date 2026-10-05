@@ -280,5 +280,33 @@ Phase 8 introduces the local-first desktop application shell and persistent ambi
 - **System Tray Integration**:
   - Dynamic status indicator (`LIVE` / `DISCONNECTED`), HUD toggling, and quick Control Room access.
 
+---
+
+## 16. Absence Mode & Bounded Autonomy (Phase 9)
+
+Phase 9 introduces Absence Mode for safe, unattended operation ("Continue working on this while I'm away"):
+
+- **Core Invariant**: "Absence Mode expands continuity, not authority."
+- **Strict Authority Hierarchy**:
+  ```text
+  Hard Safety Restrictions > User Absence Policy > Supervisor Rules > Task Constraints > Agent Capabilities > Agent Request
+  ```
+- **Zero Agent Self-Escalation**:
+  - Agents can never broaden their own authority, disable watchdogs, bypass independent verifiers, grant themselves capabilities, or extend duration ceilings.
+  - Any self-escalation attempt is immediately denied with rule `security.self_escalation_blocked`.
+- **Policy Snapshot Immutability**:
+  - Arming Absence Mode freezes an explicit, persisted snapshot (`AbsencePolicy`). Modifying global configurations does not mutate a running session.
+- **Hard Expiration & Bounded Ceilings**:
+  - Sessions enforce hard wall-clock timeouts (`expires_at`). When elapsed, status transitions to `EXPIRED` and agents halt safely.
+  - Hard retry ceilings (`max_retries`) and handoff limits (`max_handoffs`) transition session to `PAUSED` and notify user on failure loops.
+- **Independent Verification Mandatory**:
+  - Agent-reported completion is never treated as verified mission completion. Autonomous continuation to subsequent tasks occurs only when the Independent Verifier returns `ACCEPT`.
+- **Fail-Closed Durability**:
+  - Persisted in SQLite tables `absence_sessions` and `absence_decisions`.
+  - Backend startup reconciliation marks expired sessions as `EXPIRED` and corrupted sessions as `BLOCKED`.
+- **Desktop HUD & Emergency Stop**:
+  - Ambient Floating HUD displays active status and remaining time countdown.
+  - Operator can trigger immediate Emergency Stop (`cancel`), revoking autonomous continuation and halting running agents safely.
+
 
 

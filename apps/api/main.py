@@ -24,6 +24,12 @@ async def lifespan(app: FastAPI):
     # Hook WebSocket broadcaster directly to the EventBus
     await app_state.event_bus.subscribe(ws_hub.broadcast_event)
     logger.info("EventBus -> WebSocket Hub pipeline established.")
+    try:
+        reconciled = await app_state.absence_engine.reconcile_on_startup()
+        if reconciled > 0:
+            logger.info(f"Reconciled {reconciled} absence sessions on startup.")
+    except Exception as e:
+        logger.warning(f"Error during absence session startup reconciliation: {e}")
     yield
     logger.info("Shutting down API server.")
 
@@ -861,6 +867,117 @@ async def reset_demo_state():
     reset_in_memory_state()
 
     return {"status": "reset", "message": "Demo state successfully reset to initial clean baseline"}
+
+
+# --- Phase 9: Absence Mode Endpoints ---
+
+class ArmAbsenceRequest(BaseModel):
+    policy: Optional[Dict[str, Any]] = None
+    created_by: str = "user"
+
+
+class PauseAbsenceRequest(BaseModel):
+    reason: str = "Operator paused via UI"
+
+
+@app.post("/api/missions/{mission_id}/absence/arm")
+async def arm_absence_mode(mission_id: str, req: ArmAbsenceRequest):
+    """Explicitly arms Absence Mode for a mission, freezing an immutable policy snapshot."""
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+
+    from core.absence.models import AbsencePolicy
+    policy_obj = None
+    if req.policy:
+        try:
+            policy_obj = AbsencePolicy(**req.policy)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid absence policy: {e}")
+
+    session = await app_state.absence_engine.arm_session(
+        mission_id=mission_id,
+        policy=policy_obj,
+        created_by=req.created_by
+    )
+    return {"status": "armed", "session": session.model_dump(mode="json")}
+
+
+@app.post("/api/missions/{mission_id}/absence/start")
+async def start_absence_mode(mission_id: str):
+    """Activates an armed absence session, starting the hard expiration countdown."""
+    active = await app_state.absence_repo.get_active_session(mission_id)
+    if not active:
+        raise HTTPException(status_code=404, detail=f"No armed absence session found for mission {mission_id}")
+
+    session = await app_state.absence_engine.start_session(active["absence_id"])
+    return {"status": "active", "session": session.model_dump(mode="json")}
+
+
+@app.post("/api/missions/{mission_id}/absence/pause")
+async def pause_absence_mode(mission_id: str, req: PauseAbsenceRequest = PauseAbsenceRequest()):
+    """Pauses an active absence session, revoking autonomous continuation."""
+    active = await app_state.absence_repo.get_active_session(mission_id)
+    if not active:
+        raise HTTPException(status_code=404, detail=f"No active absence session found for mission {mission_id}")
+
+    session = await app_state.absence_engine.pause_session(active["absence_id"], reason=req.reason)
+    return {"status": "paused", "session": session.model_dump(mode="json")}
+
+
+@app.post("/api/missions/{mission_id}/absence/resume")
+async def resume_absence_mode(mission_id: str):
+    """Resumes a paused absence session if not expired."""
+    active = await app_state.absence_repo.get_active_session(mission_id)
+    if not active:
+        raise HTTPException(status_code=404, detail=f"No paused absence session found for mission {mission_id}")
+
+    session = await app_state.absence_engine.resume_session(active["absence_id"])
+    return {"status": "active", "session": session.model_dump(mode="json")}
+
+
+@app.post("/api/missions/{mission_id}/absence/cancel")
+async def cancel_absence_mode(mission_id: str, req: PauseAbsenceRequest = PauseAbsenceRequest()):
+    """Emergency stop: Cancels the absence session and revokes all autonomous authorization."""
+    active = await app_state.absence_repo.get_active_session(mission_id)
+    if not active:
+        raise HTTPException(status_code=404, detail=f"No active absence session found for mission {mission_id}")
+
+    session = await app_state.absence_engine.cancel_session(active["absence_id"], reason=req.reason)
+    return {"status": "cancelled", "session": session.model_dump(mode="json")}
+
+
+@app.get("/api/missions/{mission_id}/absence")
+async def get_mission_absence_session(mission_id: str):
+    """Returns the current active or latest absence session for a mission."""
+    active = await app_state.absence_repo.get_active_session(mission_id)
+    if not active:
+        sessions = await app_state.absence_repo.list_sessions_by_mission(mission_id)
+        if not sessions:
+            return {"active": False, "session": None}
+        latest = sessions[0]
+        from core.absence.engine import AbsencePolicyEngine
+        model = app_state.absence_engine._to_session_model(latest)
+        return {
+            "active": False,
+            "session": model.model_dump(mode="json"),
+            "remaining_seconds": model.remaining_seconds()
+        }
+
+    model = app_state.absence_engine._to_session_model(active)
+    return {
+        "active": model.status.value == "ACTIVE",
+        "session": model.model_dump(mode="json"),
+        "remaining_seconds": model.remaining_seconds()
+    }
+
+
+@app.get("/api/absence/active")
+async def list_active_absence_sessions():
+    """Lists all active absence sessions across missions."""
+    actives = await app_state.absence_repo.list_active_sessions()
+    models = [app_state.absence_engine._to_session_model(a).model_dump(mode="json") for a in actives]
+    return {"sessions": models, "count": len(models)}
 
 
 # --- WebSocket Stream ---

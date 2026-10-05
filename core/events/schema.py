@@ -101,6 +101,19 @@ class EventType(str, Enum):
     CI_UNAVAILABLE = "ci.unavailable"
     CI_TIMEOUT = "ci.timeout"
 
+    # Phase 9: Absence Mode events
+    ABSENCE_ARMED = "absence.armed"
+    ABSENCE_STARTED = "absence.started"
+    ABSENCE_POLICY_EVALUATED = "absence.policy.evaluated"
+    ABSENCE_ACTION_ALLOWED = "absence.action.allowed"
+    ABSENCE_ACTION_DENIED = "absence.action.denied"
+    ABSENCE_PAUSED = "absence.paused"
+    ABSENCE_RESUMED = "absence.resumed"
+    ABSENCE_EXPIRED = "absence.expired"
+    ABSENCE_CANCELLED = "absence.cancelled"
+    ABSENCE_BLOCKED = "absence.blocked"
+    ABSENCE_COMPLETED = "absence.completed"
+
 
 class EventSeverity(str, Enum):
     INFO = "info"

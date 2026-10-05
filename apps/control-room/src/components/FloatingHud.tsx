@@ -12,7 +12,8 @@ import {
   RefreshCw,
   Cpu,
   Layers,
-  Activity
+  Activity,
+  Clock
 } from 'lucide-react';
 import type {
   Mission,
@@ -28,7 +29,9 @@ import {
   fetchApprovals,
   resolveApproval,
   pauseMission,
-  resumeMission
+  resumeMission,
+  getMissionAbsence,
+  cancelAbsenceMode
 } from '../api';
 import { useWebSocket } from '../useWebSocket';
 
@@ -50,6 +53,11 @@ export const FloatingHud: React.FC = () => {
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [absenceInfo, setAbsenceInfo] = useState<{
+    active: boolean;
+    status: string;
+    remainingSeconds: number;
+  } | null>(null);
 
   // Load authoritative backend state
   const refreshState = useCallback(async () => {
@@ -59,10 +67,35 @@ export const FloatingHud: React.FC = () => {
         fetchAgents().catch(() => []),
         fetchApprovals().catch(() => [])
       ]);
-      setMissions(Array.isArray(mList) ? mList : []);
+      const safeMissions = Array.isArray(mList) ? mList : [];
+      setMissions(safeMissions);
       setAgents(Array.isArray(aList) ? aList : []);
       setApprovals(Array.isArray(apprvList) ? apprvList : []);
       setLastRefreshed(new Date());
+
+      // Query absence session for primary mission if available
+      const targetMission = safeMissions.find(m =>
+        ['RUNNING', 'RECOVERING', 'INVESTIGATING', 'VERIFYING', 'WAITING_APPROVAL'].includes(m.status)
+      ) || safeMissions[0];
+
+      if (targetMission) {
+        try {
+          const absRes = await getMissionAbsence(targetMission.id);
+          if (absRes?.session) {
+            setAbsenceInfo({
+              active: absRes.active,
+              status: absRes.session.status,
+              remainingSeconds: absRes.remaining_seconds
+            });
+          } else {
+            setAbsenceInfo(null);
+          }
+        } catch {
+          setAbsenceInfo(null);
+        }
+      } else {
+        setAbsenceInfo(null);
+      }
     } catch {
       // Backend unavailable; state remains clean
     }
@@ -86,9 +119,45 @@ export const FloatingHud: React.FC = () => {
       eType.includes('AGENT') ||
       eType.includes('APPROVAL') ||
       eType.includes('HANDOFF') ||
-      eType.includes('VERIFICATION')
+      eType.includes('VERIFICATION') ||
+      eType.includes('ABSENCE')
     ) {
       refreshState();
+    }
+
+    // 1.5 Absence Mode Notifications
+    if (eType === 'ABSENCE_STARTED' || eType === 'absence.started') {
+      window.supervisor?.notify({
+        title: 'Absence Mode Active',
+        body: 'Supervisor operating under bounded autonomy policy',
+        severity: 'INFO',
+        type: 'ABSENCE_STARTED',
+        id: event.id
+      });
+    } else if (eType === 'ABSENCE_PAUSED' || eType === 'absence.paused') {
+      window.supervisor?.notify({
+        title: 'Absence Mode Paused',
+        body: payload.reason || 'Autonomous work paused; operator attention required',
+        severity: 'WARNING',
+        type: 'ABSENCE_PAUSED',
+        id: event.id
+      });
+    } else if (eType === 'ABSENCE_EXPIRED' || eType === 'absence.expired') {
+      window.supervisor?.notify({
+        title: 'Absence Mode Expired',
+        body: 'Hard time ceiling reached; autonomous continuation halted',
+        severity: 'WARNING',
+        type: 'ABSENCE_EXPIRED',
+        id: event.id
+      });
+    } else if (eType === 'ABSENCE_COMPLETED' || eType === 'absence.completed') {
+      window.supervisor?.notify({
+        title: 'Absence Mode Completed ✓',
+        body: payload.reason || 'All authorized tasks independently verified and finished',
+        severity: 'INFO',
+        type: 'ABSENCE_COMPLETED',
+        id: event.id
+      });
     }
 
     // 2. Watchdog Interventions
@@ -295,6 +364,17 @@ export const FloatingHud: React.FC = () => {
     }
   };
 
+  const handleEmergencyStopAbsence = async () => {
+    if (!activeMission) return;
+    setIsActionLoading(true);
+    try {
+      await cancelAbsenceMode(activeMission.id, 'Emergency stop via Floating HUD');
+      await refreshState();
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -417,6 +497,51 @@ export const FloatingHud: React.FC = () => {
 
       {/* 2. Main Content Body */}
       <div style={{ flex: 1, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px', overflow: 'hidden' }}>
+        {/* Absence Mode Banner (Phase 9) */}
+        {absenceInfo && (absenceInfo.status === 'ACTIVE' || absenceInfo.status === 'ARMED') && (
+          <div
+            style={{
+              backgroundColor: 'rgba(139, 92, 246, 0.15)',
+              border: '1px solid #7c3aed',
+              borderRadius: '4px',
+              padding: '3px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '10px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Clock size={11} color="#c084fc" />
+              <span style={{ fontWeight: 600, color: '#e9d5ff' }}>
+                ABSENCE MODE: {absenceInfo.status}
+              </span>
+              {absenceInfo.remainingSeconds > 0 && (
+                <span style={{ color: '#c084fc', fontFamily: 'monospace' }}>
+                  ({Math.floor(absenceInfo.remainingSeconds / 60)}m left)
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleEmergencyStopAbsence}
+              disabled={isActionLoading}
+              style={{
+                backgroundColor: '#dc2626',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '3px',
+                padding: '1px 5px',
+                fontSize: '9px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+              title="Emergency Stop: Revoke autonomous execution"
+            >
+              STOP
+            </button>
+          </div>
+        )}
+
         {/* Mission Title & Agent Row */}
         {activeMission ? (
           <div>

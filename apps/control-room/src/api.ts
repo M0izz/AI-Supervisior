@@ -252,3 +252,48 @@ export async function addMissionMemory(
   });
 }
 export const addMemoryRecord = addMissionMemory;
+
+// Phase 9: Absence Mode API
+export async function getMissionAbsence(missionId: string): Promise<{
+  active: boolean;
+  session: any | null;
+  remaining_seconds: number;
+}> {
+  return fetchJson(`/api/missions/${missionId}/absence`);
+}
+
+export async function armAbsenceMode(
+  missionId: string,
+  policy?: Record<string, any>
+): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/arm`, {
+    method: 'POST',
+    body: JSON.stringify({ policy, created_by: 'user' })
+  });
+}
+
+export async function startAbsenceMode(missionId: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/start`, {
+    method: 'POST'
+  });
+}
+
+export async function pauseAbsenceMode(missionId: string, reason?: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/pause`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || 'Operator paused via UI' })
+  });
+}
+
+export async function resumeAbsenceMode(missionId: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/resume`, {
+    method: 'POST'
+  });
+}
+
+export async function cancelAbsenceMode(missionId: string, reason?: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || 'Emergency stop via UI' })
+  });
+}

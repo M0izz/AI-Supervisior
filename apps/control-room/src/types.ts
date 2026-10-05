@@ -290,6 +290,47 @@ export interface SupervisorDesktopBridge {
   onBackendStateChange?: (callback: (state: string) => void) => () => void;
 }
 
+export interface AbsencePolicy {
+  enabled: boolean;
+  max_duration_seconds: number;
+  max_tasks: number;
+  max_handoffs: number;
+  max_retries: number;
+  allowed_capabilities: string[];
+  allowed_actions: string[];
+  prohibited_commands: string[];
+  prohibited_paths: string[];
+  approval_policy: 'ALWAYS_ASK' | 'ASK_IF_UNSAFE' | 'AUTO_APPROVE_WITHIN_POLICY' | 'NEVER_ALLOW';
+  verification_policy: 'STRICT';
+  failure_policy: 'PAUSE_AND_NOTIFY' | 'SAFE_STOP';
+}
+
+export type AbsenceSessionState =
+  | 'DISABLED'
+  | 'ARMED'
+  | 'ACTIVE'
+  | 'PAUSED'
+  | 'EXPIRED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'BLOCKED';
+
+export interface AbsenceSessionInfo {
+  absence_id: string;
+  mission_id: string;
+  status: AbsenceSessionState;
+  policy: AbsencePolicy;
+  started_at?: string | null;
+  expires_at?: string | null;
+  created_by: string;
+  tasks_completed: number;
+  retries_count: number;
+  handoffs_count: number;
+  paused_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 declare global {
   interface Window {
     supervisor?: SupervisorDesktopBridge;
