@@ -1,0 +1,19 @@
+{
+  "name": "ai-supervisor-desktop",
+  "version": "1.0.0",
+  "description": "Desktop Product Shell & Floating HUD for AI Supervisor",
+  "main": "main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/desktop.test.cjs"
+  },
+  "keywords": [
+    "ai-supervisor",
+    "electron",
+    "floating-hud",
+    "control-room"
+  ],
+  "author": "Google DeepMind / AI Supervisor Team",
+  "license": "MIT"
+}

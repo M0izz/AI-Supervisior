@@ -110,6 +110,22 @@ export const Navigation: React.FC<NavigationProps> = ({
           </div>
 
           {/* Quick Actions */}
+          <button
+            className="btn"
+            onClick={() => {
+              if (window.supervisor?.showHud) {
+                window.supervisor.showHud();
+              } else {
+                window.open('#hud', 'AI Supervisor HUD', 'width=380,height=240,menubar=no,toolbar=no,location=no');
+              }
+            }}
+            title="Launch Floating Supervisor HUD"
+            style={{ borderColor: 'var(--border-strong)', color: '#38bdf8' }}
+          >
+            <Radio size={12} />
+            <span>FLOATING HUD</span>
+          </button>
+
           <button 
             className="btn" 
             onClick={onRefresh} 

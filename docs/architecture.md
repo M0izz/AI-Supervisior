@@ -257,5 +257,28 @@ Phase 7 implements authoritative, cross-agent project memory:
   - **Verification Engine**: Directly promotes verified facts on `ACCEPT` and records rejected approaches on `REJECT`.
   - **Routing Engine**: Leverages historical verified successes and failure records as reliability signals.
 
+---
+
+## 15. Desktop Product Shell & Floating HUD (Phase 8)
+
+Phase 8 introduces the local-first desktop application shell and persistent ambient HUD:
+
+- **Desktop-as-Client Invariant**:
+  - The desktop application is strictly an interface and client to the authoritative FastAPI backend.
+  - Electron owns application lifecycle, tray presence, windows, and notifications; it does NOT own business truth, DAG scheduling, routing, or memory state.
+- **Electron Security Baseline**:
+  - `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, and strict navigation filtering.
+  - Narrow typed `window.supervisor` preload bridge via `contextBridge.exposeInMainWorld`.
+  - Zero Node primitives (`fs`, `child_process`, `os`, `process`) exposed to renderers.
+- **Dual-Window Model**:
+  - **Control Room Window**: Full detailed mission dashboard, task DAG visualization, multi-agent metrics, and approval queue. Hides to tray on close to preserve background supervision.
+  - **Floating HUD Window**: Compact (380x240), persistent, always-on-top, low-distraction status layer displaying active mission, current agent, watchdog interventions, verification progress, and approval gates.
+- **Zero-Nag Notification Policy**:
+  - Suppresses all routine operational events (commands executed, files written, tests passing).
+  - Surfaces only actionable interventions, pending approvals, verification rejections, or mission failures.
+  - Debounces duplicate notifications across a 5-second sliding window.
+- **System Tray Integration**:
+  - Dynamic status indicator (`LIVE` / `DISCONNECTED`), HUD toggling, and quick Control Room access.
+
 
 

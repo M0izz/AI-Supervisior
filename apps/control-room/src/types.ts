@@ -236,3 +236,62 @@ export type TabType =
   | 'supervisor_events'
   | 'project_memory'
   | 'approval_queue';
+
+// Phase 8 Desktop & HUD Types
+export type HudVisualState = 
+  | 'IDLE'
+  | 'RUNNING'
+  | 'WAITING'
+  | 'BLOCKED'
+  | 'RECOVERING'
+  | 'VERIFYING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'APPROVAL_REQUIRED'
+  | 'DISCONNECTED';
+
+export interface DesktopStatus {
+  connected: boolean;
+  backendUrl: string;
+  wsUrl: string;
+  hudVisible: boolean;
+  controlRoomOpen: boolean;
+  platform?: string;
+  version?: string;
+}
+
+export interface DesktopConfig {
+  apiUrl: string;
+  wsUrl: string;
+  notificationsEnabled: boolean;
+  hudEnabled: boolean;
+}
+
+export interface DesktopNotificationOptions {
+  title: string;
+  body: string;
+  severity?: 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+  type?: string;
+  id?: string;
+}
+
+export interface SupervisorDesktopBridge {
+  getStatus: () => Promise<DesktopStatus>;
+  openControlRoom: () => Promise<boolean>;
+  hideControlRoom: () => Promise<boolean>;
+  showHud: () => Promise<boolean>;
+  hideHud: () => Promise<boolean>;
+  toggleHud: () => Promise<boolean>;
+  minimizeToTray: () => Promise<boolean>;
+  notify: (options: DesktopNotificationOptions) => Promise<boolean>;
+  getConfig: () => Promise<DesktopConfig>;
+  quit: () => Promise<void>;
+  onHudToggle?: (callback: () => void) => () => void;
+  onBackendStateChange?: (callback: (state: string) => void) => () => void;
+}
+
+declare global {
+  interface Window {
+    supervisor?: SupervisorDesktopBridge;
+  }
+}

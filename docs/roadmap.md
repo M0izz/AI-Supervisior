@@ -225,13 +225,29 @@ Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
 ---
 
 ### Phase 8: Signature Floating Supervisor HUD & Desktop Shell
-* **Objective**: Build the ambient, always-on desktop user experience.
+* **Objective**: Build the ambient, always-on desktop user experience with a persistent Floating HUD, zero-nag notifications, and strict Electron security.
 * **Deliverables**:
-  - `apps/desktop/`: Electron application shell packaging the React cockpit.
-  - `apps/desktop/hud/`: Lightweight, collapsible, always-on-top floating HUD window.
-  - System tray icon and native OS notification integration.
+  - `apps/desktop/main.cjs`: Electron main process managing Control Room and Floating HUD browser windows, single instance lock, and lifecycle.
+  - `apps/desktop/preload.cjs`: Secure typed bridge (`window.supervisor`) with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`.
+  - `apps/desktop/ipc.cjs`: Whitelisted IPC channel handler with payload validation.
+  - `apps/desktop/notifications.cjs`: Zero-Nag Notification Manager suppressing routine operational noise and debouncing actionable alerts.
+  - `apps/desktop/tray.cjs`: Native system tray integration with live connection indicator and window controls.
+  - `apps/desktop/connection.cjs`: Backend health monitor tracking `STARTING` ➔ `CONNECTING` ➔ `LIVE` ➔ `DISCONNECTED`.
+  - `apps/control-room/src/components/FloatingHud.tsx`: Compact, ambient, always-on-top HUD displaying mission, agent, watchdog interventions, verification status, and inline approval actions.
+  - `apps/control-room/src/main.tsx`: Hash router switching between Control Room (`#`) and Floating HUD (`#hud`).
+  - `tests/test_desktop.py`: Automated Python test suite (6 tests) covering health contract, state contracts, approval flow, zero-nag classification, reconnect, and killer end-to-end scenario.
+  - `apps/desktop/tests/desktop.test.cjs`: Automated Node test suite (7 tests) covering security configuration, IPC validation, zero-nag filtering, debounce suppression, backend state machine, and tray coordination.
+  - `docs/desktop.md`: Complete desktop architecture, security boundaries, and running guide.
 * **Acceptance Criteria**:
-  - User can minimize main cockpit; floating HUD stays visible, remaining silent during normal execution and surfacing only actionable alerts (`APPROVAL`, `WARNING`, `COMPLETE`).
+  - [x] Desktop application shell launches and connects to authoritative Supervisor backend.
+  - [x] Control Room window opens and displays detailed supervisory interface.
+  - [x] Floating HUD remains visible, compact (380x240), and always-on-top while developer works in IDE/terminal.
+  - [x] Zero-Nag notification policy suppresses normal events and surfaces only actionable interventions, approvals, and completions.
+  - [x] Electron security baseline verified (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, no leaked Node primitives).
+  - [x] Backend connection drops show clear `DISCONNECTED` state without phantom mock data; reconnect cleanly refreshes state.
+  - [x] System tray provides background persistence; closing Control Room minimizes to tray without killing the app.
+  - [x] All 7 Node tests and 6 Python desktop tests pass; full regression suite remains completely green.
+* **Status**: ✅ **COMPLETE**
 
 ---
 
