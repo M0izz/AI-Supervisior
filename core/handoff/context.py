@@ -41,6 +41,7 @@ class HandoffContextBuilder:
         executed_commands: Optional[List[str]] = None,
         handoff_history: Optional[List[Dict[str, Any]]] = None,
         handoff_count: int = 1,
+        project_memory: Optional[Any] = None,
     ) -> HandoffContextPackage:
         verified_facts: List[ContextFact] = []
         unverified_claims: List[ContextFact] = []
@@ -138,6 +139,54 @@ class HandoffContextBuilder:
                         metadata=source_claim,
                     )
                 )
+
+        # 4.5 Ingest Shared Project Memory (Phase 7)
+        if project_memory:
+            if hasattr(project_memory, "relevant_facts"):
+                facts_list = project_memory.relevant_facts
+                rejected_list = project_memory.rejected_approaches
+                decisions_list = getattr(project_memory, "recent_decisions", [])
+            elif isinstance(project_memory, dict):
+                facts_list = project_memory.get("relevant_facts", [])
+                rejected_list = project_memory.get("rejected_approaches", [])
+                decisions_list = project_memory.get("recent_decisions", [])
+            else:
+                facts_list, rejected_list, decisions_list = [], [], []
+
+            for f in facts_list:
+                stmt = f.get("fact") or f.get("statement", "")
+                if stmt:
+                    verified_facts.append(
+                        ContextFact(
+                            statement=stmt,
+                            provenance=FactProvenance.VERIFIED,
+                            source=f.get("source", "shared_project_memory"),
+                            metadata=f,
+                        )
+                    )
+            for d in decisions_list:
+                stmt = d.get("fact") or d.get("statement", "")
+                if stmt:
+                    verified_facts.append(
+                        ContextFact(
+                            statement=f"DECISION: {stmt}",
+                            provenance=FactProvenance.VERIFIED,
+                            source=d.get("source", "shared_project_memory"),
+                            metadata=d,
+                        )
+                    )
+            for r in rejected_list:
+                approach = r.get("approach", "")
+                reason_str = r.get("reason", "Disproven by prior agent/verification")
+                if approach:
+                    rejected_attempts.append(
+                        ContextFact(
+                            statement=f"DO NOT REPEAT: '{approach}'. Reason: {reason_str}",
+                            provenance=FactProvenance.REJECTED,
+                            source=r.get("provenance", "shared_project_memory"),
+                            metadata=r,
+                        )
+                    )
 
         # 5. Formulate Remaining Work
         remaining = (

@@ -71,12 +71,21 @@ CREATE TABLE IF NOT EXISTS events (
 -- 5. Memory Records Table
 CREATE TABLE IF NOT EXISTS memory_records (
     record_id TEXT PRIMARY KEY,
-    mission_id TEXT NOT NULL,
+    project_id TEXT DEFAULT '',
+    mission_id TEXT,
     task_id TEXT,
     category TEXT NOT NULL,
     content TEXT NOT NULL,
+    memory_type TEXT DEFAULT 'FACT',
+    status TEXT DEFAULT 'OBSERVED',
+    confidence REAL DEFAULT 1.0,
+    source TEXT DEFAULT 'system',
+    source_id TEXT DEFAULT '',
+    created_by TEXT DEFAULT 'system',
+    superseded_by TEXT,
     metadata TEXT DEFAULT '{}',
     created_at TEXT NOT NULL,
+    updated_at TEXT,
     FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
 );
 
@@ -146,7 +155,11 @@ CREATE INDEX IF NOT EXISTS idx_tasks_mission ON tasks(mission_id);
 CREATE INDEX IF NOT EXISTS idx_events_mission ON events(mission_id);
 CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id);
 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_memory_project ON memory_records(project_id);
 CREATE INDEX IF NOT EXISTS idx_memory_mission ON memory_records(mission_id);
+CREATE INDEX IF NOT EXISTS idx_memory_task ON memory_records(task_id);
+CREATE INDEX IF NOT EXISTS idx_memory_status ON memory_records(status);
+CREATE INDEX IF NOT EXISTS idx_memory_type ON memory_records(memory_type);
 CREATE INDEX IF NOT EXISTS idx_approvals_mission ON approvals(mission_id);
 CREATE INDEX IF NOT EXISTS idx_verifications_mission ON verifications(mission_id);
 CREATE INDEX IF NOT EXISTS idx_handoffs_mission ON handoffs(mission_id);

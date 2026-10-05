@@ -233,5 +233,29 @@ Phase 6 implements capability-based, empirical evidence-aware dynamic task routi
 - **Handoff Engine Integration**:
   - Automatically resolves target agents during task handoffs (`target_agent_id="auto"`), strictly excluding the failing source agent to prevent ping-pong loops.
 
+---
+
+## 14. Shared Project Memory (Phase 7)
+
+Phase 7 implements authoritative, cross-agent project memory:
+
+- **Core Invariant**: "Agents are replaceable; project knowledge is not. Memory is not automatically truth; claims from agents remain UNVERIFIED until empirically proven."
+- **Epistemic Model**:
+  - `VERIFIED`: Proven by objective empirical evidence (passing tests, compiler output, git worktree verification).
+  - `INFERRED`: Derived from observations but not directly tested.
+  - `UNVERIFIED`: Agent-reported claims and hypotheses.
+  - `REJECTED`: Disproven hypotheses retained permanently to prevent subsequent agents from repeating failed attempts.
+- **Memory Store (`memory/store.py`)**:
+  - Scoped by `project_id` to guarantee zero cross-project leakage.
+  - Deterministic deduplication via normalized content keys.
+  - Immutability of provenance: supersession tracking preserves audit trails.
+  - Deterministic ranking: Trust Hierarchy Weight + Task Match + Keyword Overlap + Recency.
+  - Automatic secret and API key scrubbing before SQLite persistence.
+  - Persisted in SQLite WAL table `memory_records`.
+- **System Integration**:
+  - **Handoff Engine**: Packages verified facts, decisions, and `DO NOT REPEAT` rejected approaches into receiving agent context packages.
+  - **Verification Engine**: Directly promotes verified facts on `ACCEPT` and records rejected approaches on `REJECT`.
+  - **Routing Engine**: Leverages historical verified successes and failure records as reliability signals.
+
 
 

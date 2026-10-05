@@ -40,11 +40,13 @@ class VerificationEngine:
         repository: Optional[Any] = None,
         task_manager: Optional[Any] = None,
         worktree_manager: Optional[Any] = None,
+        memory_store: Optional[Any] = None,
     ):
         self.event_bus = event_bus
         self.repository = repository
         self.task_manager = task_manager
         self.worktree_manager = worktree_manager
+        self.memory_store = memory_store
         self._lock = asyncio.Lock()
 
     async def verify(self, context: VerificationContext) -> VerificationResult:
@@ -208,6 +210,33 @@ class VerificationEngine:
                     logger.warning(f"[VERIFIER] Task {context.task_id} reopened due to verification failure.")
             except Exception as e:
                 logger.warning(f"[VERIFIER] TaskManager integration encountered error: {e}")
+
+        # 5.5 Promote or Record in Shared Project Memory (Phase 7)
+        if self.memory_store:
+            try:
+                if decision == VerificationDecision.ACCEPT:
+                    await self.memory_store.record_verified_fact(
+                        mission_id=context.mission_id,
+                        task_id=context.task_id,
+                        content=f"Verified: {summary}",
+                        source="verification_engine",
+                        source_id=verification_id,
+                        created_by="verifier",
+                        evidence=[f"check_decision: {decision.value}"] + [str(c.summary) for c in checks if c.status.value == "PASSED"],
+                    )
+                elif decision == VerificationDecision.REJECT:
+                    await self.memory_store.record_rejected_approach(
+                        mission_id=context.mission_id,
+                        task_id=context.task_id,
+                        content=f"Rejected approach: {summary}",
+                        source="verification_engine",
+                        source_id=verification_id,
+                        created_by="verifier",
+                        details=f"Failed verification checks: {[c.summary for c in checks if c.status.value == 'FAILED']}",
+                        evidence=[str(c.summary) for c in checks if c.status.value == "FAILED"],
+                    )
+            except Exception as e:
+                logger.warning(f"[VERIFIER] Non-fatal error updating memory store: {e}")
 
         # 6. Publish outcome events onto EventBus
         if self.event_bus:

@@ -62,7 +62,7 @@ class AppState:
         self.event_bus.subscribe_sync(self._sqlite_event_sink)
 
         # Control Plane Subsystems
-        self.memory_store = MemoryStore(event_bus=self.event_bus)
+        self.memory_store = MemoryStore(event_bus=self.event_bus, repository=self.memory_repo)
         self.agent_registry = AgentRegistry(event_bus=self.event_bus, repository=self.agent_repo)
         self.telemetry = TelemetryTracker(event_bus=self.event_bus)
         self.approval_manager = ApprovalManager(event_bus=self.event_bus)
@@ -99,16 +99,17 @@ class AppState:
             event_repo=self.event_repo,
         )
 
-        # Independent Verification Engine (Phase 4)
+        # Independent Verification Engine (Phase 4 + Phase 7 Memory Integration)
         from core.verification.engine import VerificationEngine
         self.verification_engine = VerificationEngine(
             event_bus=self.event_bus,
             repository=self.verification_repo,
             task_manager=self.task_manager,
             worktree_manager=self.worktree_manager,
+            memory_store=self.memory_store,
         )
 
-        # Dynamic Agent Router (Phase 6)
+        # Dynamic Agent Router (Phase 6 + Phase 7 Memory Integration)
         from core.routing import RoutingEngine
         self.routing_engine = RoutingEngine(
             adapter_registry=self.adapter_registry,
@@ -116,9 +117,10 @@ class AppState:
             verification_repo=self.verification_repo,
             handoff_repo=self.handoff_repo,
             event_bus=self.event_bus,
+            memory_store=self.memory_store,
         )
 
-        # Handoff Engine (Phase 5 + Phase 6 Dynamic Routing Integration)
+        # Handoff Engine (Phase 5 + Phase 6 Dynamic Routing + Phase 7 Memory Integration)
         self.handoff_engine = HandoffEngine(
             event_bus=self.event_bus,
             adapter_registry=self.adapter_registry,
@@ -127,6 +129,7 @@ class AppState:
             worktree_manager=self.worktree_manager,
             verification_engine=self.verification_engine,
             routing_engine=self.routing_engine,
+            memory_store=self.memory_store,
             max_handoffs_per_task=int(os.getenv("SUPERVISOR_MAX_HANDOFFS_PER_TASK", "3")),
         )
 

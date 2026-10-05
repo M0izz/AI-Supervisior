@@ -20,27 +20,35 @@ class ContextPackager:
         goal: str,
         task: Task,
         constraints: List[str],
-        recent_events: List[Dict[str, Any]]
+        recent_events: List[Dict[str, Any]],
+        project_id: str = "",
     ) -> AgentContextPackage:
-        mem_records = await self.memory_store.get_by_mission(mission_id)
+        mem_ctx = await self.memory_store.build_project_memory_context(
+            mission_id=mission_id,
+            project_id=project_id,
+            task_id=task.id,
+            task_objective=f"{task.title} {goal}",
+        )
 
         relevant_memory = [
-            {"fact": r.fact, "status": r.status.value, "confidence": r.confidence}
-            for r in mem_records
-            if r.status in (FactStatus.VERIFIED, FactStatus.DECIDED)
+            {"fact": r["fact"], "status": r["status"], "confidence": r["confidence"]}
+            for r in mem_ctx.relevant_facts
+            if r["status"] in (FactStatus.VERIFIED.value, FactStatus.DECIDED.value)
         ]
 
         rejected = [
-            {"approach": r.fact, "reason": r.details or "Failed during execution"}
-            for r in mem_records
-            if r.status == FactStatus.REJECTED or r.category == "rejected_approach"
+            {"approach": r["approach"], "reason": r.get("reason", "Failed during execution")}
+            for r in mem_ctx.rejected_approaches
         ]
+
+        # Combine configured constraints with memory-retrieved constraints
+        all_constraints = list(set(constraints + mem_ctx.constraints))
 
         return AgentContextPackage(
             mission_id=mission_id,
             objective=goal,
             task=task.model_dump(),
-            constraints=constraints,
+            constraints=all_constraints,
             relevant_memory=relevant_memory,
             rejected_approaches=rejected,
             recent_events=recent_events[-5:],

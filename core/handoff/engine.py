@@ -44,6 +44,7 @@ class HandoffEngine:
         worktree_manager: Optional[Any] = None,
         verification_engine: Optional[Any] = None,
         routing_engine: Optional[Any] = None,
+        memory_store: Optional[Any] = None,
         max_handoffs_per_task: int = 3,
     ):
         self.event_bus = event_bus
@@ -53,6 +54,7 @@ class HandoffEngine:
         self.worktree_manager = worktree_manager
         self.verification_engine = verification_engine
         self.routing_engine = routing_engine
+        self.memory_store = memory_store
         self.max_handoffs_per_task = max_handoffs_per_task
 
         # Task handoff tracking: task_id -> list of handoff records
@@ -241,6 +243,18 @@ class HandoffEngine:
         ]
         handoff_idx = len(prior_history) + 1
 
+        # Query shared project memory if memory store is present
+        project_mem = None
+        if self.memory_store:
+            try:
+                project_mem = await self.memory_store.build_project_memory_context(
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    task_objective=objective,
+                )
+            except Exception as e:
+                logger.warning(f"[HANDOFF] Non-fatal error retrieving project memory: {e}")
+
         context_package = HandoffContextBuilder.build(
             mission_id=mission_id,
             task_id=task_id,
@@ -259,6 +273,7 @@ class HandoffEngine:
             executed_commands=executed_commands,
             handoff_history=prior_history,
             handoff_count=handoff_idx,
+            project_memory=project_mem,
         )
 
         # 4. Create and persist HandoffRecord

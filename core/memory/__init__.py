@@ -1,5 +1,6 @@
 """
-Shared Project Memory package (Phase 7).
+Core Memory Module (Phase 7).
+Re-exports the authoritative Shared Project Memory subsystem.
 """
 
 from memory.models import (

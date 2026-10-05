@@ -37,12 +37,14 @@ class RoutingEngine:
         verification_repo: Optional[Any] = None,
         handoff_repo: Optional[Any] = None,
         event_bus: Optional[EventBus] = None,
+        memory_store: Optional[Any] = None,
     ):
         self.adapter_registry = adapter_registry
         self.repository = repository or routing_repo
         self.verification_repo = verification_repo
         self.handoff_repo = handoff_repo
         self.event_bus = event_bus
+        self.memory_store = memory_store
         self._lock = asyncio.Lock()
 
     async def collect_agent_metrics(self, agent_id: str) -> Dict[str, Any]:
@@ -93,6 +95,20 @@ class RoutingEngine:
                     await conn.close()
             except Exception as e:
                 logger.debug(f"[ROUTER] Non-fatal error reading handoff metrics for {agent_id}: {e}")
+
+        # Augment with memory-derived empirical performance if memory_store is available (Phase 7)
+        if self.memory_store and hasattr(self.memory_store, "query"):
+            try:
+                from memory.models import MemoryQuery, MemoryStatus, MemoryType
+                mem_records = await self.memory_store.query(MemoryQuery(limit=100))
+                for r in mem_records:
+                    if r.provenance.created_by == agent_id or agent_id in r.content or (r.details and agent_id in r.details):
+                        if r.status == MemoryStatus.VERIFIED:
+                            metrics["verified_successes"] += 1
+                        elif r.status == MemoryStatus.REJECTED or r.memory_type == MemoryType.REJECTED_APPROACH:
+                            metrics["verification_failures"] += 1
+            except Exception as e:
+                logger.debug(f"[ROUTER] Non-fatal error querying memory metrics: {e}")
 
         return metrics
 

@@ -35,6 +35,7 @@ Roadmap      Kernel       Adapter      Watchdogs    Verifier     Engine        R
 PHASE 07 ──► PHASE 08 ──► PHASE 09 ──► PHASE 10 ──► PHASE 11 ──► PHASE 12
 Shared       Floating     Absence      5+ Agent     IDE          Cloud Layer
 Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
+(COMPLETE)
 ```
 
 ---
@@ -198,12 +199,28 @@ Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
 ---
 
 ### Phase 7: Shared Project Memory with 6-Tuple Provenance
-* **Objective**: Implement cross-agent empirical project memory backed by SQLite.
+* **Objective**: Implement authoritative, cross-agent empirical project memory backed by SQLite WAL with strict provenance, deduplication, and project isolation.
 * **Deliverables**:
-  - `core/memory/store.py`: Persistent memory store enforcing provenance (`OBSERVED`, `INFERRED`, `DECIDED`, `VERIFIED`, `REJECTED`).
-  - Rejection caching preventing subsequent agents from repeating failed hypotheses.
+  - `memory/models.py` & `core/memory/`: Domain models (`MemoryRecord`, `MemoryProvenance`, `MemoryStatus`, `MemoryType`, `MemoryQuery`, `ProjectMemoryContext`).
+  - `memory/store.py`: Persistent, SQLite WAL-backed `MemoryStore` enforcing deterministic deduplication, epistemic promotion, trust hierarchy ranking, and secret scrubbing.
+  - `storage/sqlite/schema.sql` & `repositories.py`: Enhanced `memory_records` table and `MemoryRepository` supporting project-scoped queries and provenance metadata.
+  - `memory/retrieval.py`: `ContextPackager` constructing bounded agent context packages with project scoping.
+  - `core/handoff/engine.py` & `context.py`: Ingests verified facts, decisions, and `DO NOT REPEAT` rejected approaches into handoff packages.
+  - `core/verification/engine.py`: Promotes verified facts on `ACCEPT` and registers rejected approaches on `REJECT`.
+  - `core/routing/engine.py`: Incorporates memory-derived agent performance metrics into routing evaluations.
+  - `tests/test_memory.py`: 14 focused tests covering provenance, project isolation, deduplication, conflict handling, restart persistence, security redaction, verification integration, handoff integration, killer scenario, and negative quality scenario.
+  - `docs/memory.md`: Complete specification, lifecycle, trust hierarchy, and integration guide.
 * **Acceptance Criteria**:
-  - Fact discovered by Agent A is saved as `VERIFIED` and immediately injected into the context of Agent B without human copy-pasting.
+  - [x] Memory domain model enforces invariant: "Memory is not automatically truth; claims from agents remain UNVERIFIED until empirically proven."
+  - [x] Epistemic statuses (`VERIFIED`, `INFERRED`, `UNVERIFIED`, `REJECTED`) work with deterministic promotion rules.
+  - [x] Strict project scoping guarantees memories from Project A never leak into Project B.
+  - [x] Provenance immutability preserves audit trails; conflicting facts link supersession instead of overwriting history.
+  - [x] Rejected approaches are captured and injected into handoff packages so subsequent agents avoid repeating failed strategies.
+  - [x] Independent verification results (`ACCEPT` / `REJECT`) directly promote or record persistent project memory.
+  - [x] Secrets, tokens (`sk-...`, `ghp_...`), and credentials are automatically sanitized before SQLite persistence.
+  - [x] Memory survives database shutdown and restart.
+  - [x] All 14 Phase 7 tests pass; full regression suite passes with 221 passed, 3 skipped, 0 failed.
+* **Status**: ✅ **COMPLETE**
 
 ---
 

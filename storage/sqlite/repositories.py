@@ -467,7 +467,7 @@ class EventRepository:
 
 
 class MemoryRepository:
-    """Repository for storing persistent memory snippets and learned patterns."""
+    """Repository for storing persistent memory snippets, proven facts, and learned patterns."""
 
     def __init__(self, db: DatabaseManager):
         self.db = db
@@ -478,40 +478,98 @@ class MemoryRepository:
         category: str,
         content: str,
         task_id: Optional[str] = None,
+        project_id: str = "",
+        memory_type: str = "FACT",
+        status: str = "OBSERVED",
+        confidence: float = 1.0,
+        source: str = "system",
+        source_id: str = "",
+        created_by: str = "system",
+        superseded_by: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        record_id: Optional[str] = None
+        record_id: Optional[str] = None,
+        created_at: Optional[str] = None,
+        updated_at: Optional[str] = None,
     ) -> str:
         conn = await self.db.get_connection()
         try:
             rid = record_id or f"mem_{uuid.uuid4().hex[:12]}"
-            created_at = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            c_at = created_at or now_iso
+            u_at = updated_at or now_iso
             meta_json = _to_json(metadata or {})
+            mid = str(mission_id).strip() if (mission_id and str(mission_id).strip()) else None
 
             query = """
             INSERT INTO memory_records (
-                record_id, mission_id, task_id, category, content, metadata, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                record_id, project_id, mission_id, task_id, category, content,
+                memory_type, status, confidence, source, source_id, created_by,
+                superseded_by, metadata, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_id) DO UPDATE SET
+                project_id = excluded.project_id,
+                task_id = excluded.task_id,
                 category = excluded.category,
                 content = excluded.content,
-                metadata = excluded.metadata;
+                memory_type = excluded.memory_type,
+                status = excluded.status,
+                confidence = excluded.confidence,
+                source = excluded.source,
+                source_id = excluded.source_id,
+                created_by = excluded.created_by,
+                superseded_by = excluded.superseded_by,
+                metadata = excluded.metadata,
+                updated_at = excluded.updated_at;
             """
             await conn.execute(
                 query,
-                (rid, mission_id, task_id, category, content, meta_json, created_at)
+                (
+                    rid, project_id, mid, task_id, category, content,
+                    memory_type, status, confidence, source, source_id, created_by,
+                    superseded_by, meta_json, c_at, u_at
+                )
             )
             await conn.commit()
             return rid
         finally:
             await conn.close()
 
-    async def list_by_mission(self, mission_id: str) -> List[Dict[str, Any]]:
+    async def get(self, record_id: str) -> Optional[Dict[str, Any]]:
         conn = await self.db.get_connection()
         try:
             cursor = await conn.execute(
-                "SELECT * FROM memory_records WHERE mission_id = ? ORDER BY created_at ASC;",
-                (mission_id,)
+                "SELECT * FROM memory_records WHERE record_id = ?;",
+                (record_id,)
             )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            r = dict(row)
+            r["metadata"] = _from_json(r.get("metadata"))
+            return r
+        finally:
+            await conn.close()
+
+    async def list_by_mission(
+        self,
+        mission_id: str,
+        status: Optional[str] = None,
+        memory_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            conditions = ["mission_id = ?"]
+            params: List[Any] = [mission_id]
+
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+            if memory_type:
+                conditions.append("memory_type = ?")
+                params.append(memory_type)
+
+            query = f"SELECT * FROM memory_records WHERE {' AND '.join(conditions)} ORDER BY created_at ASC;"
+            cursor = await conn.execute(query, tuple(params))
             rows = await cursor.fetchall()
             records = []
             for row in rows:
@@ -519,6 +577,48 @@ class MemoryRepository:
                 r["metadata"] = _from_json(r.get("metadata"))
                 records.append(r)
             return records
+        finally:
+            await conn.close()
+
+    async def list_by_project(
+        self,
+        project_id: str,
+        status: Optional[str] = None,
+        memory_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            conditions = ["project_id = ?"]
+            params: List[Any] = [project_id]
+
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+            if memory_type:
+                conditions.append("memory_type = ?")
+                params.append(memory_type)
+
+            query = f"SELECT * FROM memory_records WHERE {' AND '.join(conditions)} ORDER BY created_at ASC;"
+            cursor = await conn.execute(query, tuple(params))
+            rows = await cursor.fetchall()
+            records = []
+            for row in rows:
+                r = dict(row)
+                r["metadata"] = _from_json(r.get("metadata"))
+                records.append(r)
+            return records
+        finally:
+            await conn.close()
+
+    async def delete(self, record_id: str) -> bool:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "DELETE FROM memory_records WHERE record_id = ?;",
+                (record_id,)
+            )
+            await conn.commit()
+            return cursor.rowcount > 0
         finally:
             await conn.close()
 
