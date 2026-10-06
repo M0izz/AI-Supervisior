@@ -10,6 +10,9 @@ import type {
   GlobalOverviewTelemetry,
   ApprovalResolutionAction,
   AdapterInfo,
+  ProviderInfo,
+  ModelInfo,
+  CustomAgentRegistrationRequest,
   SyncStatus,
   SyncDevice
 } from './types';
@@ -68,6 +71,8 @@ export interface DraftMissionResponse {
   fallback_agent: string;
   inferred_constraints: Record<string, any>;
   verification_plan: Record<string, any>;
+  detected_invariants?: string[];
+  model_provenance?: string;
 }
 
 export async function draftMission(payload: {
@@ -347,6 +352,21 @@ export async function cancelAbsenceMode(missionId: string, reason?: string): Pro
 // Phase 10: Provider Fleet / Adapters API
 export async function getAdapters(): Promise<{ adapters: AdapterInfo[]; count: number }> {
   return fetchJson(`/api/adapters`);
+}
+
+export async function getProviders(): Promise<{ providers: ProviderInfo[]; count: number }> {
+  return fetchJson('/api/providers');
+}
+
+export async function getModels(): Promise<{ models: ModelInfo[]; count: number }> {
+  return fetchJson('/api/models');
+}
+
+export async function registerCustomAgent(payload: CustomAgentRegistrationRequest): Promise<any> {
+  return fetchJson('/api/custom-agents', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }
 
 // Phase 12: Cloud Sync & Multi-Device API

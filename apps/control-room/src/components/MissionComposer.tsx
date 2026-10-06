@@ -7,7 +7,8 @@ import {
   ChevronDown, 
   ChevronUp, 
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Cpu
 } from 'lucide-react';
 import { draftMission, createMission, type DraftMissionResponse } from '../api';
 import type { Mission } from '../types';
@@ -33,11 +34,19 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
 
   // Interpretation state from Supervisor
   const [draft, setDraft] = useState<DraftMissionResponse | null>(null);
+  const [showConstraints, setShowConstraints] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPlanTasks, setShowPlanTasks] = useState(false);
 
+  // Optional constraints (Section 2)
+  const [noDbSchemaChange, setNoDbSchemaChange] = useState(false);
+  const [frontendOnly, setFrontendOnly] = useState(false);
+  const [backwardsCompatible, setBackwardsCompatible] = useState(true);
+  const [noNewDeps, setNoNewDeps] = useState(false);
+
   // Advanced overrides (progressive disclosure)
-  const [agentPreference, setAgentPreference] = useState('claude-code');
+  const [agentPreference, setAgentPreference] = useState('auto');
+  const [modelPreference, setModelPreference] = useState('auto');
   const [maxTurns, setMaxTurns] = useState(10);
   const [prohibitedFiles, setProhibitedFiles] = useState('.env, secrets.json, id_rsa');
   const [verificationReq, setVerificationReq] = useState('STRICT');
@@ -55,11 +64,11 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
 
   const examplePrompts = [
     "Fix the authentication bug in my app and make sure existing tests pass",
-    "Add dark mode without changing the existing navigation",
-    "Find why the API is returning 500 errors and fix the root cause",
-    "Review this project for obvious security issues and fix anything safe to fix",
-    "Improve the loading performance of the dashboard",
-    "Add CSV import support and validate malformed files"
+    "Build a CSV import system with malformed row validation",
+    "Make the dashboard faster by optimizing heavy renders",
+    "Add dark mode without changing existing navigation",
+    "Review this repository for security issues and fix safe ones",
+    "Get all failing tests passing cleanly"
   ];
 
   const handleInterpretGoal = async (promptToUse?: string) => {
@@ -104,6 +113,10 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
         .split(',')
         .map(f => f.trim())
         .filter(Boolean);
+
+      if (noDbSchemaChange) {
+        prohibitedList.push('migrations/*', 'schema.sql', '*.prisma');
+      }
 
       const missionTitle = draft?.title || goalInput.trim();
       const missionGoal = draft?.goal || goalInput.trim();
@@ -153,7 +166,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
             </div>
             <div>
               <h2 style={{ fontSize: '15px', fontWeight: 600 }}>Start a new mission</h2>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tell Supervisor what you want to accomplish.</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tell Supervisor what outcome you want accomplished.</div>
             </div>
           </div>
 
@@ -187,7 +200,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                 What do you want to get done?
               </label>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Press Enter to interpret · Shift+Enter for newline
+                Press Enter to generate plan
               </span>
             </div>
 
@@ -197,11 +210,11 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
 
             <textarea
               rows={3}
-              placeholder="Fix the authentication bug in my app and make sure the existing tests still pass..."
+              placeholder="Fix the authentication bug in my app and make sure existing tests still pass..."
               value={goalInput}
               onChange={e => {
                 setGoalInput(e.target.value);
-                if (draft) setDraft(null); // Reset draft if user modifies prompt
+                if (draft) setDraft(null);
               }}
               onKeyDown={handleKeyDown}
               autoFocus
@@ -235,6 +248,69 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
             )}
           </div>
 
+          {/* Optional Constraints (Section 2) */}
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ color: 'var(--text-secondary)', fontSize: '12px', padding: '2px 0' }}
+              onClick={() => setShowConstraints(!showConstraints)}
+            >
+              <Sliders size={13} />
+              <span>Optional constraints</span>
+              {showConstraints ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+
+            {showConstraints && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '8px',
+                marginTop: '10px',
+                padding: '12px',
+                borderRadius: '6px',
+                backgroundColor: 'var(--surface-elevated)',
+                border: '1px solid var(--border-subtle)'
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={noDbSchemaChange}
+                    onChange={e => setNoDbSchemaChange(e.target.checked)}
+                  />
+                  <span>Don't modify database schema</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={frontendOnly}
+                    onChange={e => setFrontendOnly(e.target.checked)}
+                  />
+                  <span>Only modify frontend code</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={backwardsCompatible}
+                    onChange={e => setBackwardsCompatible(e.target.checked)}
+                  />
+                  <span>Keep API backwards compatible</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={noNewDeps}
+                    onChange={e => setNoNewDeps(e.target.checked)}
+                  />
+                  <span>Don't add new dependencies</span>
+                </label>
+              </div>
+            )}
+          </div>
+
           {/* Supervisor Will Guarantee List (Shown before plan) */}
           {!draft && !isUnderstanding && (
             <div style={{
@@ -264,7 +340,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <CheckCircle2 size={13} color="var(--success)" />
-                  <span>Monitor execution</span>
+                  <span>Watch & supervise execution</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <CheckCircle2 size={13} color="var(--success)" />
@@ -287,18 +363,18 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
                 <span className="status-dot watching spin" />
-                <span>Supervisor is understanding your mission</span>
+                <span>Supervisor is reasoning about your goal...</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)', paddingLeft: '14px' }}>
-                <div>● Identifying primary goal and edge cases</div>
-                <div>● Detecting repository context: {repositoryPath}</div>
-                <div>○ Building execution task graph</div>
-                <div>○ Selecting primary and fallback agent workers</div>
+                <div>● Decomposing goal with Gemma 4 assistance</div>
+                <div>● Verifying repository invariants: {repositoryPath}</div>
+                <div>○ Formulating execution plan</div>
+                <div>○ Determining agent routing strategy</div>
               </div>
             </div>
           )}
 
-          {/* Smart Preview Before Execution (Section 6) */}
+          {/* Smart Preview Before Execution (Section 3, 6) */}
           {draft && !isUnderstanding && (
             <div style={{
               display: 'flex',
@@ -326,32 +402,45 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                 </div>
               </div>
 
-              {/* Proposed Plan Tree */}
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                  Plan ({draft.proposed_tasks.length} tasks)
+              {/* 3-Phase High-Level Flow (Section 1, 3) */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '8px',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                backgroundColor: 'var(--bg)',
+                border: '1px solid var(--border-subtle)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--success)', fontWeight: 600 }}>✓</span>
+                  <span style={{ color: 'var(--text-primary)' }}>Understand Goal</span>
                 </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
-                  backgroundColor: 'var(--bg)',
-                  padding: '10px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-subtle)',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.6
-                }}>
-                  {draft.proposed_tasks.map((t, i) => {
-                    const isLast = i === draft.proposed_tasks.length - 1;
-                    return (
-                      <div key={t.id || i}>
-                        <span style={{ color: 'var(--text-muted)' }}>{isLast ? '└── ' : '├── '}</span>
-                        <span style={{ color: 'var(--text-primary)' }}>{t.title}</span>
-                      </div>
-                    );
-                  })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                  <span className="status-dot running" style={{ width: '8px', height: '8px' }} />
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Execute Solution</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>○</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Verify Independently</span>
                 </div>
               </div>
+
+              {/* Detected Invariants if present */}
+              {draft.detected_invariants && draft.detected_invariants.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    Preserved Invariants
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {draft.detected_invariants.map((inv: string, idx: number) => (
+                      <span key={idx} className="badge badge-neutral" style={{ fontSize: '11px' }}>
+                        🛡 {inv}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Agent Strategy & Verification Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
@@ -365,12 +454,12 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Verification</div>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--success)', marginTop: '2px' }}>
-                    Tests + Scope + Regression
+                    Independent Tests + Scope Verification
                   </div>
                 </div>
               </div>
 
-              {/* Toggle to inspect decomposed tasks */}
+              {/* Technical Plan Drawer */}
               <div>
                 <button
                   type="button"
@@ -379,27 +468,45 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                   onClick={() => setShowPlanTasks(!showPlanTasks)}
                 >
                   {showPlanTasks ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  <span>{showPlanTasks ? 'Hide task details' : 'Review task graph breakdown'}</span>
+                  <span>{showPlanTasks ? 'Hide task graph' : `Inspect ${draft.proposed_tasks.length} technical execution steps`}</span>
                 </button>
 
                 {showPlanTasks && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                    {draft.proposed_tasks.map((t, i) => (
-                      <div key={t.id || i} style={{ padding: '8px 10px', borderRadius: '4px', backgroundColor: 'var(--bg)', border: '1px solid var(--border-subtle)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <span style={{ fontWeight: 500 }}>{t.title}</span>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t.description}</div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '11px',
+                    backgroundColor: 'var(--bg)',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                    marginTop: '8px'
+                  }}>
+                    {draft.proposed_tasks.map((t, i) => {
+                      const isLast = i === draft.proposed_tasks.length - 1;
+                      return (
+                        <div key={t.id || i}>
+                          <span style={{ color: 'var(--text-muted)' }}>{isLast ? '└── ' : '├── '}</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{t.title}</span>
+                          <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>({t.suggested_agent})</span>
                         </div>
-                        <span className="badge badge-neutral" style={{ fontSize: '10px' }}>{t.suggested_agent}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
+
+              {draft.model_provenance && (
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Cpu size={11} />
+                  <span>{draft.model_provenance}</span>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Progressive Disclosure: Advanced Controls */}
+          {/* Progressive Disclosure: Advanced Controls (Section 5) */}
           <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
             <button
               type="button"
@@ -428,17 +535,39 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    Preferred Agent
+                    Preferred Agent Runtime
                   </label>
                   <select
                     value={agentPreference}
                     onChange={e => setAgentPreference(e.target.value)}
                     style={{ fontSize: '12px' }}
                   >
+                    <option value="auto">Auto-Route (Supervisor Optimal)</option>
                     <option value="claude-code">Claude Code (Anthropic)</option>
                     <option value="codex">OpenAI Codex</option>
+                    <option value="hermes">Hermes Agent (Nous)</option>
+                    <option value="digitalocean_managed">DigitalOcean Managed Agent</option>
                     <option value="gemini">Gemini CLI</option>
+                    <option value="goose">Goose (Block)</option>
+                    <option value="cline">Cline</option>
                     <option value="qwen">Qwen Local</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    Inference Model Preference
+                  </label>
+                  <select
+                    value={modelPreference}
+                    onChange={e => setModelPreference(e.target.value)}
+                    style={{ fontSize: '12px' }}
+                  >
+                    <option value="auto">Auto-Select Model</option>
+                    <option value="gemma-4-31B-it">Google Gemma 4 (DigitalOcean)</option>
+                    <option value="hermes-4-70b-instruct">Nous Hermes 4 (DigitalOcean/Nebius)</option>
+                    <option value="qwen-2.5-coder-32b">Qwen 2.5 Coder (Nebius)</option>
+                    <option value="claude-3-7-sonnet">Claude 3.7 Sonnet</option>
                   </select>
                 </div>
 
@@ -465,7 +594,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                     onChange={e => setVerificationReq(e.target.value)}
                     style={{ fontSize: '12px' }}
                   >
-                    <option value="STRICT">Strict (Isolated sandbox tests + AST)</option>
+                    <option value="STRICT">Strict (Isolated sandbox + Scope diff)</option>
                     <option value="STANDARD">Standard (Unit tests pass)</option>
                   </select>
                 </div>
@@ -481,7 +610,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                     style={{ fontSize: '12px' }}
                   />
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    Watchdog immediately intercepts any agent modifying these paths.
+                    Watchdog intercepts any agent attempting to modify these paths.
                   </span>
                 </div>
               </div>
@@ -503,7 +632,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
               disabled={isUnderstanding || !goalInput.trim()}
             >
               <Sparkles size={13} />
-              <span>{isUnderstanding ? 'Interpreting...' : 'Generate Plan'}</span>
+              <span>{isUnderstanding ? 'Reasoning...' : 'Generate Plan'}</span>
             </button>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

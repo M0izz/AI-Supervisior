@@ -75,14 +75,16 @@ export const Overview: React.FC<OverviewProps> = ({
 
   // Full supported provider catalog for ecosystem strip
   const ecosystemProviders = [
-    { id: 'claude-code', name: 'Claude Code', defaultType: 'Remote Agent' },
-    { id: 'codex', name: 'OpenAI Codex', defaultType: 'Remote Agent' },
-    { id: 'gemini', name: 'Google Gemini', defaultType: 'CLI Provider' },
-    { id: 'qwen', name: 'Qwen 2.5', defaultType: 'Local Model' },
-    { id: 'opencode', name: 'OpenCode', defaultType: 'Open Engine' },
-    { id: 'kimi', name: 'Kimi Moonshot', defaultType: 'Supported' },
-    { id: 'cursor', name: 'Cursor Rules', defaultType: 'IDE Provider' },
-    { id: 'antigravity', name: 'Antigravity', defaultType: 'Operations Hub' }
+    { id: 'claude-code', name: 'Claude Code', defaultType: 'Local Agent', infra: 'LOCAL' },
+    { id: 'codex', name: 'OpenAI Codex', defaultType: 'Local Agent', infra: 'LOCAL' },
+    { id: 'hermes', name: 'Hermes Agent', defaultType: 'Long-session', infra: 'DIGITALOCEAN' },
+    { id: 'digitalocean_managed', name: 'DigitalOcean Managed', defaultType: 'MicroVM Sandbox', infra: 'DIGITALOCEAN' },
+    { id: 'gemini', name: 'Google Gemini', defaultType: 'CLI Provider', infra: 'LOCAL' },
+    { id: 'goose', name: 'Goose', defaultType: 'Open Runtime', infra: 'LOCAL' },
+    { id: 'cline', name: 'Cline', defaultType: 'Coding Agent', infra: 'LOCAL' },
+    { id: 'qwen', name: 'Qwen 2.5', defaultType: 'Local Model', infra: 'LOCAL' },
+    { id: 'opencode', name: 'OpenCode', defaultType: 'Open Engine', infra: 'NEBIUS' },
+    { id: 'kimi', name: 'Kimi Code', defaultType: 'Supported', infra: 'NEBIUS' },
   ];
 
   const handleTogglePause = async (missionId: string, currentStatus: string) => {
@@ -154,6 +156,40 @@ export const Overview: React.FC<OverviewProps> = ({
             <span>Start a Mission</span>
           </button>
         </div>
+      </div>
+
+      {/* Operational Status Strip (Section 28) */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        padding: '10px 16px',
+        borderRadius: '8px',
+        backgroundColor: 'var(--surface)',
+        border: '1px solid var(--border)',
+        fontSize: '12px',
+        color: 'var(--text-secondary)',
+        flexWrap: 'wrap'
+      }}>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '11px' }}>
+          Supervisor Status:
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span className="status-dot active" style={{ width: '6px', height: '6px' }} />
+          <span>Watching {activeMissions.length} mission{activeMissions.length === 1 ? '' : 's'}</span>
+        </span>
+        <span>•</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span className="status-dot running" style={{ width: '6px', height: '6px' }} />
+          <span>{workingAgents.length} agents active</span>
+        </span>
+        <span>•</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span className="status-dot watching" style={{ width: '6px', height: '6px' }} />
+          <span>{interventions.length} intervention{interventions.length === 1 ? '' : 's'}</span>
+        </span>
+        <span>•</span>
+        <span>{pendingApprovals.length} approvals pending</span>
       </div>
 
       {/* 2. Active Mission Dominates (If present) */}

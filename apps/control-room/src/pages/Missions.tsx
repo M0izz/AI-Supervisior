@@ -201,26 +201,71 @@ export const Missions: React.FC<MissionsProps> = ({
             </div>
           </div>
 
-          {/* Progress Bar & Summary Stats */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
-              <span>Supervised Execution Progress</span>
-              <span>{completedTasksCount} of {tasks.length} tasks completed ({progressPercent}%)</span>
+            {/* 5-Phase Story Flow (Section 32) */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--surface-elevated)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: 'var(--success)', fontWeight: 600 }}>✓</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Understand</span>
+              </div>
+              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: completedTasksCount >= 1 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                  {completedTasksCount >= 1 ? '✓' : '●'}
+                </span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Implement</span>
+              </div>
+              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: completedTasksCount >= 2 ? 'var(--success)' : 'var(--primary)', fontWeight: 600 }}>
+                  {completedTasksCount >= 2 ? '✓' : '●'}
+                </span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Test</span>
+              </div>
+              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                  {selectedMission.status === 'COMPLETED' ? '✓' : '○'}
+                </span>
+                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--text-primary)' : 'var(--text-muted)' }}>Verify</span>
+              </div>
+              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+                  {selectedMission.status === 'COMPLETED' ? '✓' : '○'}
+                </span>
+                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--text-primary)' : 'var(--text-muted)' }}>Complete</span>
+              </div>
             </div>
-            <div style={{ height: '6px', backgroundColor: 'var(--surface-elevated)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s ease' }} />
+
+            {/* Progress Bar & Summary Stats */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
+                <span>Supervised Execution Progress</span>
+                <span>{completedTasksCount} of {tasks.length} tasks completed ({progressPercent}%)</span>
+              </div>
+              <div style={{ height: '6px', backgroundColor: 'var(--surface-elevated)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s ease' }} />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Detail Tabs */}
-        <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
-          {[
-            { id: 'story', label: 'Mission Story & Handoffs', icon: Compass },
-            { id: 'tasks', label: `Task Graph (${tasks.length})`, icon: Layers },
-            { id: 'verification', label: 'Independent Verification', icon: ShieldCheck },
-            { id: 'policy', label: 'Autonomy & Policies', icon: Lock }
-          ].map(tab => {
+          {/* Detail Tabs */}
+          <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
+            {[
+              { id: 'story', label: 'Mission Story & Handoffs', icon: Compass },
+              { id: 'tasks', label: `Execution Plan (${tasks.length})`, icon: Layers },
+              { id: 'verification', label: 'Independent Verification', icon: ShieldCheck },
+              { id: 'policy', label: 'Autonomy & Policies', icon: Lock }
+            ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (

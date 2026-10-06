@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
@@ -76,6 +77,8 @@ class DraftMissionResponse(BaseModel):
     fallback_agent: str
     inferred_constraints: Dict[str, Any]
     verification_plan: Dict[str, Any]
+    detected_invariants: List[str] = []
+    model_provenance: str = "Google Gemma 4 (gemma-4-31B-it) via DigitalOcean Inference"
 
 
 class CreateMissionRequest(BaseModel):
@@ -311,6 +314,8 @@ async def draft_mission(req: DraftMissionRequest):
         suggested_agents = ["claude-code", "codex"]
         fallback_agent = "codex"
 
+    gemma_plan = await app_state.gemma_reasoner.decompose_goal(goal, repo)
+
     return DraftMissionResponse(
         title=title,
         goal=goal,
@@ -331,7 +336,9 @@ async def draft_mission(req: DraftMissionRequest):
             "automated_tests": True,
             "scope_diff_check": True,
             "prohibited_modifications_check": True
-        }
+        },
+        detected_invariants=gemma_plan.detected_invariants,
+        model_provenance=gemma_plan.model_provenance
     )
 
 
@@ -815,6 +822,15 @@ async def list_adapters():
             "display_name": ident.display_name,
             "version": ident.version,
             "capabilities": ident.capabilities,
+            "runtime_type": getattr(ident, "runtime_type", "agent_runtime"),
+            "execution_mode": getattr(ident, "execution_mode", "local_process"),
+            "infrastructure_provider": getattr(ident, "infrastructure_provider", "local"),
+            "supported_models": getattr(ident, "supported_models", []),
+            "supported_tools": getattr(ident, "supported_tools", []),
+            "session_support": getattr(ident, "session_support", False),
+            "remote_execution": getattr(ident, "remote_execution", False),
+            "local_execution": getattr(ident, "local_execution", True),
+            "configuration_requirements": getattr(ident, "configuration_requirements", []),
             "availability": avail.model_dump() if avail else {
                 "status": "UNKNOWN",
                 "available": False,
@@ -823,6 +839,106 @@ async def list_adapters():
             },
         })
     return {"adapters": adapters_list, "count": len(adapters_list)}
+
+
+@app.get("/api/providers")
+async def list_providers():
+    """Lists all infrastructure and inference providers (DigitalOcean, Nebius, Local)."""
+    providers = []
+
+    # 1. DigitalOcean Provider
+    do_desc = await app_state.digitalocean_provider.get_descriptor()
+    providers.append(do_desc.model_dump())
+
+    # 2. Nebius Token Factory
+    nebius_key = os.getenv("NEBIUS_API_KEY")
+    nebius_desc = {
+        "provider_id": "nebius",
+        "name": "Nebius Token Factory",
+        "status": "CONNECTED" if nebius_key else "NOT_CONFIGURED",
+        "available": bool(nebius_key),
+        "message": "Nebius Token Factory API connected." if nebius_key else "NEBIUS_API_KEY not configured in environment.",
+        "capabilities": ["serverless_inference", "open_models", "token_factory"],
+        "inference_endpoint": os.getenv("NEBIUS_BASE_URL", "https://api.studio.nebius.ai/v1"),
+        "managed_agents_support": False,
+        "action_gateway_support": False,
+        "supported_models": [
+            "nvidia/nemotron-4-340b-instruct",
+            "nousresearch/hermes-4-70b-instruct",
+            "qwen/qwen-2.5-coder-32b-instruct",
+            "moonshot/kimi-code-latest",
+            "deepseek-ai/deepseek-r1-distill"
+        ]
+    }
+    providers.append(nebius_desc)
+
+    # 3. Local Workstation Substrate
+    providers.append({
+        "provider_id": "local",
+        "name": "Local Workstation",
+        "status": "CONNECTED",
+        "available": True,
+        "message": "Local processes, shell tools, and Git worktrees.",
+        "capabilities": ["local_process", "git_worktrees", "file_system", "cli_runners"],
+        "inference_endpoint": "local://unix-socket",
+        "managed_agents_support": False,
+        "action_gateway_support": False,
+        "supported_models": ["local-ollama", "host-binaries"]
+    })
+
+    return {"providers": providers, "count": len(providers)}
+
+
+@app.get("/api/models")
+async def list_models():
+    """Lists available models from DigitalOcean Inference, Nebius, and Local providers."""
+    from integrations.nebius.provider import NebiusNemotronProvider
+    models = []
+
+    # 1. DigitalOcean models (including Gemma 4)
+    do_models = await app_state.digitalocean_provider.get_models()
+    for m in do_models:
+        models.append(m.model_dump())
+
+    # 2. Nebius Token Factory models
+    nebius_provider = NebiusNemotronProvider()
+    nebius_models = await nebius_provider.query_models()
+    for m in nebius_models:
+        models.append({
+            "model_id": m.get("model_id"),
+            "name": m.get("name"),
+            "developer": m.get("developer"),
+            "infrastructure_provider": "nebius",
+            "parameter_size": m.get("parameter_size"),
+            "specialties": m.get("specialties", []),
+            "available": m.get("available", False),
+            "context_window": 131072
+        })
+
+    return {"models": models, "count": len(models)}
+
+
+@app.post("/api/custom-agents")
+async def register_custom_agent(req: Dict[str, Any]):
+    """Registers a user-defined custom agent adapter with security validation."""
+    from adapters.custom import CustomAgentAdapter, CustomAgentRegistration
+    try:
+        reg = CustomAgentRegistration.model_validate(req)
+        adapter = CustomAgentAdapter(
+            registration=reg,
+            event_bus=app_state.event_bus,
+            worktree_manager=app_state.worktree_manager
+        )
+        app_state.adapter_registry.register_adapter(adapter)
+        return {
+            "status": "registered",
+            "adapter_id": reg.adapter_id,
+            "display_name": reg.name,
+            "identity": adapter.identity.model_dump()
+        }
+    except Exception as e:
+        logger.error(f"Failed to register custom agent: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # --- Human Approvals & Operator Control ---

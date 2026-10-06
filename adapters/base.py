@@ -81,3 +81,24 @@ class AgentAdapter(ABC):
         Releases process handles and internal session tracking resources.
         """
         pass
+
+    # Extended Session Lifecycle (Section 8 for long-lived / remote agents like Hermes)
+    async def attach(self, session_id: str) -> bool:
+        """Attach to an active or detached persistent agent session."""
+        return False
+
+    async def resume(self, session_id: str) -> bool:
+        """Resume execution on a paused or idle session."""
+        return False
+
+    async def pause(self, session_id: str) -> bool:
+        """Pause a running agent session gracefully."""
+        return False
+
+    async def disconnect(self, session_id: str) -> bool:
+        """Disconnect local client without terminating remote session."""
+        return False
+
+    async def reconnect(self, session_id: str) -> bool:
+        """Reconnect to a disconnected remote session."""
+        return False

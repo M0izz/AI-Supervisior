@@ -9,9 +9,8 @@ interface ProviderLogoProps {
 export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, size = 18 }) => {
   const id = ((providerId || name || '') as string).toLowerCase();
 
-  // Normalized color & SVG per provider
-  if (id.includes('claude')) {
-    // Anthropic / Claude warm terracotta mark
+  // 1. Anthropic / Claude Code
+  if (id.includes('claude') || id.includes('anthropic')) {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#D97706" fillOpacity="0.16" />
@@ -20,8 +19,8 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 2. OpenAI / Codex
   if (id.includes('codex') || id.includes('openai')) {
-    // OpenAI / Codex emerald teal mark
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#10B981" fillOpacity="0.16" />
@@ -31,8 +30,8 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
-  if (id.includes('gemini') || id.includes('google')) {
-    // Google Gemini blue-indigo spark
+  // 3. Google Gemini / Gemma
+  if (id.includes('gemini') || id.includes('google') || id.includes('gemma')) {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#3B82F6" fillOpacity="0.16" />
@@ -41,8 +40,44 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 4. DigitalOcean
+  if (id.includes('digitalocean') || id.includes('droplet') || id === 'do') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect width="24" height="24" rx="5" fill="#0080FF" fillOpacity="0.16" />
+        <path d="M12 4C7.58 4 4 7.58 4 12C4 16.42 7.58 20 12 20C16.42 20 20 16.42 20 12H16C16 14.21 14.21 16 12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8V4Z" fill="#0080FF" />
+        <rect x="5.5" y="16.5" width="2.5" height="2.5" fill="#0080FF" />
+        <rect x="3.5" y="19" width="1.8" height="1.8" fill="#0080FF" />
+      </svg>
+    );
+  }
+
+  // 5. Nous Research / Hermes Agent
+  if (id.includes('hermes') || id.includes('nous')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect width="24" height="24" rx="5" fill="#EF4444" fillOpacity="0.16" />
+        <path d="M6 8L12 4L18 8V16L12 20L6 16V8Z" stroke="#EF4444" strokeWidth="1.8" strokeLinejoin="round" />
+        <path d="M12 4V20M6 8L18 16M6 16L18 8" stroke="#EF4444" strokeWidth="1.2" strokeOpacity="0.7" />
+        <circle cx="12" cy="12" r="2.5" fill="#EF4444" />
+      </svg>
+    );
+  }
+
+  // 6. Nebius Token Factory
+  if (id.includes('nebius') || id.includes('nemotron')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect width="24" height="24" rx="5" fill="#A855F7" fillOpacity="0.16" />
+        <path d="M7 6H17V10H11V14H17V18H7V6Z" fill="#A855F7" />
+        <circle cx="17" cy="8" r="1.5" fill="#E9D5FF" />
+        <circle cx="17" cy="16" r="1.5" fill="#E9D5FF" />
+      </svg>
+    );
+  }
+
+  // 7. Qwen / Local model
   if (id.includes('qwen') || id.includes('local')) {
-    // Qwen / Local model violet hex
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#8B5CF6" fillOpacity="0.16" />
@@ -52,8 +87,8 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 8. OpenCode
   if (id.includes('opencode') || id.includes('open')) {
-    // OpenCode cyan terminal brackets
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#06B6D4" fillOpacity="0.16" />
@@ -62,8 +97,8 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 9. Kimi / Moonshot
   if (id.includes('kimi') || id.includes('moonshot')) {
-    // Kimi / Moonshot amber crescent
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#F59E0B" fillOpacity="0.16" />
@@ -72,8 +107,41 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 10. Goose / Block
+  if (id.includes('goose') || id.includes('block')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect width="24" height="24" rx="5" fill="#14B8A6" fillOpacity="0.16" />
+        <path d="M6 14C6 10 9 6 14 6H18V10C18 15 14 18 10 18C8 18 6 16.5 6 14Z" stroke="#14B8A6" strokeWidth="2" strokeLinejoin="round" />
+        <circle cx="14" cy="10" r="1.5" fill="#14B8A6" />
+      </svg>
+    );
+  }
+
+  // 11. Cline
+  if (id.includes('cline')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect width="24" height="24" rx="5" fill="#6366F1" fillOpacity="0.16" />
+        <path d="M12 4L19 12L12 20L5 12L12 4Z" stroke="#6366F1" strokeWidth="2" strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="3" fill="#6366F1" />
+      </svg>
+    );
+  }
+
+  // 12. Custom Agent
+  if (id.includes('custom')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect width="24" height="24" rx="5" fill="#64748B" fillOpacity="0.16" />
+        <circle cx="12" cy="12" r="3" stroke="#64748B" strokeWidth="2" />
+        <path d="M12 4V7M12 17V20M4 12H7M17 12H20" stroke="#64748B" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  // 13. Cursor
   if (id.includes('cursor')) {
-    // Cursor minimal directional pointer
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#EC4899" fillOpacity="0.16" />
@@ -82,8 +150,8 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 14. Antigravity
   if (id.includes('antigravity')) {
-    // Antigravity levitating delta
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <rect width="24" height="24" rx="5" fill="#3B82F6" fillOpacity="0.16" />
@@ -93,7 +161,7 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
-  // Fallback worker mark
+  // Fallback generic operational agent mark
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <rect width="24" height="24" rx="5" fill="#64748B" fillOpacity="0.16" />

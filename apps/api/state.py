@@ -138,6 +138,42 @@ class AppState:
         )
         self.adapter_registry.register_adapter(self.kimi_adapter)
 
+        # Extended Provider Ecosystem (Hermes, DigitalOcean, Goose, Cline)
+        from adapters.hermes import HermesAdapter
+        from adapters.digitalocean_agent import DigitalOceanManagedAgentAdapter
+        from adapters.goose import GooseAdapter
+        from adapters.cline import ClineAdapter
+        from integrations.digitalocean import DigitalOceanProvider, DigitalOceanClient, GemmaReasoner
+
+        self.digitalocean_client = DigitalOceanClient()
+        self.digitalocean_provider = DigitalOceanProvider(client=self.digitalocean_client)
+        self.gemma_reasoner = GemmaReasoner(client=self.digitalocean_client)
+
+        self.hermes_adapter = HermesAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.hermes_adapter)
+
+        self.do_agent_adapter = DigitalOceanManagedAgentAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+            provider=self.digitalocean_provider,
+        )
+        self.adapter_registry.register_adapter(self.do_agent_adapter)
+
+        self.goose_adapter = GooseAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.goose_adapter)
+
+        self.cline_adapter = ClineAdapter(
+            event_bus=self.event_bus,
+            worktree_manager=self.worktree_manager,
+        )
+        self.adapter_registry.register_adapter(self.cline_adapter)
+
         # Supervisory Watchdog Engine & Intervention Controller (Phase 3)
         self.watchdog_engine = WatchdogEngine(policy=self.policy_config)
         self.intervention_controller = InterventionController(

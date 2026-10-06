@@ -7,12 +7,13 @@ import {
   Sliders,
   CheckCircle2,
   FolderGit2,
-  Bot
+  Bot,
+  Server
 } from 'lucide-react';
 import { ProviderLogo } from '../components/ProviderLogo';
 
 export const Settings: React.FC = () => {
-  const [activeSection, setActiveSection] = useState<'workspace' | 'supervision' | 'safety' | 'autonomy' | 'interface' | 'providers' | 'about'>('workspace');
+  const [activeSection, setActiveSection] = useState<'workspace' | 'supervision' | 'safety' | 'autonomy' | 'interface' | 'providers' | 'integrations' | 'about'>('workspace');
   const [watchdogStrictness, setWatchdogStrictness] = useState('STANDARD');
   const [autoVerify, setAutoVerify] = useState(true);
   const [zeroImplicitApproval, setZeroImplicitApproval] = useState(true);
@@ -29,8 +30,9 @@ export const Settings: React.FC = () => {
     { id: 'supervision', label: 'Supervision', icon: Sliders, desc: 'Watchdogs, budgets, interventions' },
     { id: 'safety', label: 'Safety', icon: ShieldCheck, desc: 'Permissions, dangerous actions, approvals' },
     { id: 'autonomy', label: 'Autonomy', icon: Lock, desc: 'Absence mode, retries, handoffs' },
+    { id: 'providers', label: 'Agent Fleet', icon: Bot, desc: 'Agent adapters & CLI detection' },
+    { id: 'integrations', label: 'Integrations', icon: Server, desc: 'DigitalOcean, Nebius & Cloud' },
     { id: 'interface', label: 'Interface', icon: Keyboard, desc: 'Shortcuts, appearance, notifications' },
-    { id: 'providers', label: 'Providers', icon: Bot, desc: 'Agent adapters & CLI detection' },
     { id: 'about', label: 'About', icon: Sparkles, desc: 'Diagnostics, version & system status' }
   ] as const;
 
@@ -255,6 +257,80 @@ export const Settings: React.FC = () => {
                     <span className="badge badge-green" style={{ fontSize: '11px' }}>{p.status}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Integrations */}
+          {activeSection === 'integrations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '16px' }}>Infrastructure & Model Providers</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Configure cloud substrates, remote microVM execution, and token factory inference.
+                </p>
+              </div>
+
+              {/* DigitalOcean */}
+              <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ProviderLogo providerId="digitalocean" size={24} />
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>DigitalOcean</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Managed Agents · Gemma 4 Inference · Action Gateway · MicroVMs</div>
+                    </div>
+                  </div>
+                  <span className="badge badge-amber" style={{ fontSize: '11px' }}>Configuration Optional</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>API Token (DIGITALOCEAN_TOKEN)</label>
+                    <input type="password" placeholder="dop_v1_••••••••••••" style={{ fontSize: '12px' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Region / Endpoint</label>
+                    <input type="text" defaultValue="nyc1 (DigitalOcean US-East)" style={{ fontSize: '12px' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span>✓ Action Gateway: Governed MCP filter</span>
+                  <span>✓ Serverless Gemma 4 reasoning</span>
+                  <span>✓ Hermes isolated runtime</span>
+                </div>
+              </div>
+
+              {/* Nebius */}
+              <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ProviderLogo providerId="nebius" size={24} />
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Nebius Token Factory</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>High-throughput Open-Weights Inference · Nemotron · Qwen · DeepSeek</div>
+                    </div>
+                  </div>
+                  <span className="badge badge-amber" style={{ fontSize: '11px' }}>Configuration Optional</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>API Key (NEBIUS_API_KEY)</label>
+                    <input type="password" placeholder="neb_••••••••••••" style={{ fontSize: '12px' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Base URL</label>
+                    <input type="text" defaultValue="https://api.tokenfactory.nebius.com/v1" style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span>✓ Dynamic catalog discovery</span>
+                  <span>✓ OpenAI-compatible endpoint</span>
+                  <span>✓ Fallback offline safety</span>
+                </div>
               </div>
             </div>
           )}

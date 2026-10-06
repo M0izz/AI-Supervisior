@@ -352,12 +352,55 @@ export interface AdapterInfo {
   display_name: string;
   version: string;
   capabilities: string[];
+  runtime_type?: string;
+  execution_mode?: string;
+  infrastructure_provider?: string;
+  supported_models?: string[];
+  supported_tools?: string[];
+  session_support?: boolean;
+  remote_execution?: boolean;
+  local_execution?: boolean;
+  configuration_requirements?: string[];
   availability: {
     status: string;
     available: boolean;
     message: string;
     executable_path?: string | null;
   };
+}
+
+export interface ProviderInfo {
+  provider_id: string;
+  name: string;
+  status: string;
+  available: boolean;
+  message: string;
+  capabilities: string[];
+  inference_endpoint?: string | null;
+  managed_agents_support: boolean;
+  action_gateway_support: boolean;
+  supported_models: string[];
+}
+
+export interface ModelInfo {
+  model_id: string;
+  name: string;
+  developer: string;
+  infrastructure_provider: string;
+  parameter_size?: string | null;
+  specialties: string[];
+  available: boolean;
+  context_window?: number | null;
+}
+
+export interface CustomAgentRegistrationRequest {
+  name: string;
+  adapter_id: string;
+  command_or_endpoint: string;
+  provider?: string;
+  execution_type?: 'local_process' | 'remote_managed';
+  capabilities?: string[];
+  env_vars?: Record<string, string>;
 }
 
 export type SyncState = 'ONLINE' | 'OFFLINE' | 'SYNCING' | 'SYNCED' | 'ERROR' | 'AUTH_REQUIRED';

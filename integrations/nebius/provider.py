@@ -249,3 +249,87 @@ class NebiusNemotronProvider(BaseReasoningProvider):
         except Exception as e:
             logger.error(f"Exception contacting Nebius Nemotron: {e}")
             return await MockReasoningProvider().reason_about_situation(prompt_context)
+
+    async def query_models(self) -> List[Dict[str, Any]]:
+        """
+        Queries Nebius Token Factory model catalog dynamically.
+        Exposes open models (Kimi, Qwen, Hermes, Llama, Nemotron, DeepSeek, GPT-OSS).
+        """
+        default_catalog = [
+            {
+                "model_id": "nvidia/nemotron-4-340b-instruct",
+                "name": "NVIDIA Nemotron 4",
+                "developer": "NVIDIA",
+                "parameter_size": "340B",
+                "specialties": ["supervisory_reasoning", "decision_making"],
+                "available": bool(self.api_key)
+            },
+            {
+                "model_id": "nousresearch/hermes-4-70b-instruct",
+                "name": "Nous Hermes 4",
+                "developer": "Nous Research",
+                "parameter_size": "70B",
+                "specialties": ["agentic_coding", "tool_use", "long_session"],
+                "available": bool(self.api_key)
+            },
+            {
+                "model_id": "qwen/qwen-2.5-coder-32b-instruct",
+                "name": "Qwen 2.5 Coder",
+                "developer": "Alibaba Cloud",
+                "parameter_size": "32B",
+                "specialties": ["deep_coding", "code_review"],
+                "available": bool(self.api_key)
+            },
+            {
+                "model_id": "moonshot/kimi-code-latest",
+                "name": "Kimi Code",
+                "developer": "Moonshot AI",
+                "parameter_size": "Cloud",
+                "specialties": ["long_context", "complex_refactor"],
+                "available": bool(self.api_key)
+            },
+            {
+                "model_id": "deepseek-ai/deepseek-r1-distill",
+                "name": "DeepSeek R1 Distill",
+                "developer": "DeepSeek",
+                "parameter_size": "70B",
+                "specialties": ["reasoning", "math_and_logic"],
+                "available": bool(self.api_key)
+            },
+            {
+                "model_id": "meta-llama/meta-llama-3.1-70b-instruct",
+                "name": "Meta Llama 3.1",
+                "developer": "Meta",
+                "parameter_size": "70B",
+                "specialties": ["general_purpose", "text_generation"],
+                "available": bool(self.api_key)
+            }
+        ]
+
+        if not self.api_key:
+            return default_catalog
+
+        try:
+            async with httpx.AsyncClient(timeout=min(self.timeout_seconds, 6.0)) as client:
+                res = await client.get(
+                    f"{self.base_url}/models",
+                    headers={"Authorization": f"Bearer {self.api_key}"}
+                )
+                if res.status_code == 200:
+                    raw_data = res.json().get("data", [])
+                    if raw_data:
+                        return [
+                            {
+                                "model_id": m.get("id"),
+                                "name": m.get("id").split("/")[-1].replace("-", " ").title(),
+                                "developer": m.get("id").split("/")[0].title() if "/" in m.get("id") else "Nebius",
+                                "parameter_size": "Token Factory",
+                                "specialties": ["inference"],
+                                "available": True
+                            }
+                            for m in raw_data
+                        ]
+        except Exception as e:
+            logger.debug(f"Could not fetch dynamic Nebius catalog: {e}")
+
+        return default_catalog

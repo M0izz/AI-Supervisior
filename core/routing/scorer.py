@@ -93,6 +93,30 @@ class RoutingScorer:
             # Availability score
             score_breakdown["availability"] = cls.AVAILABILITY_POINTS
 
+            # 4. User Preference & Constraint matching (Section 19)
+            user_pref = requirements.constraints.get("preferred_agent") or requirements.constraints.get("preferred_provider")
+            if user_pref and (user_pref.lower() in agent_id.lower() or user_pref.lower() in adapter.identity.provider.lower()):
+                score_breakdown["user_preference"] = 3.0
+
+            # 5. Local vs Remote execution preference
+            pref_mode = requirements.constraints.get("preferred_execution_mode")
+            if pref_mode:
+                infra = getattr(adapter.identity, "infrastructure_provider", "local")
+                is_remote = getattr(adapter.identity, "remote_execution", False)
+                if pref_mode == "remote" and is_remote:
+                    score_breakdown["execution_mode_match"] = 2.0
+                elif pref_mode == "local" and not is_remote:
+                    score_breakdown["execution_mode_match"] = 2.0
+
+            # 6. Task Specialization fit
+            task_type = (requirements.task_type or "").lower()
+            if "debug" in task_type or "investig" in task_type:
+                if any("reasoning" in m.lower() for m in getattr(adapter.identity, "supported_models", [])):
+                    score_breakdown["specialization_match"] = 1.5
+            elif "code" in task_type or "implement" in task_type:
+                if "claude" in agent_id.lower() or "codex" in agent_id.lower() or "hermes" in agent_id.lower():
+                    score_breakdown["specialization_match"] = 1.5
+
             # Historical Reliability score (Cold start safe)
             successes = float(metrics.get("verified_successes", 0))
             failures = float(metrics.get("verification_failures", 0))
@@ -101,7 +125,7 @@ class RoutingScorer:
 
             total_historical_events = successes + failures + handoffs + interventions
             if total_historical_events == 0:
-                # Cold start: neutral score (Section 12)
+                # Cold start: neutral score (Section 12, 19)
                 reliability_score = 0.0
             else:
                 raw_rel = (
