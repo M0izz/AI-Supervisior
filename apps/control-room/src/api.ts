@@ -17,7 +17,8 @@ import type {
   SyncDevice
 } from './types';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+const API_BASE = rawApiUrl.replace(/\/+$/, '');
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, {
@@ -385,4 +386,30 @@ export async function getSyncDevices(): Promise<{ devices: SyncDevice[]; count: 
 export async function revokeSyncDevice(deviceId: string): Promise<{ status: string; device_id: string }> {
   return fetchJson(`/api/sync/devices/${deviceId}/revoke`, { method: 'POST' });
 }
+
+// Supervisor Decision & Intelligence Layer API
+export async function getSupervisorDecisions(missionId?: string): Promise<{ decisions: any[]; count: number }> {
+  const url = missionId ? `/api/missions/${missionId}/decisions` : '/api/supervisor/decisions';
+  return fetchJson(url);
+}
+
+export async function explainDecision(decisionType: string, context: Record<string, any>): Promise<any> {
+  return fetchJson('/api/supervisor/decisions/explain', {
+    method: 'POST',
+    body: JSON.stringify({ decision_type: decisionType, context })
+  });
+}
+
+export async function analyzeComplexFailure(payload: {
+  task_title: string;
+  stack_trace: string;
+  failure_history?: string[];
+  affected_files?: string[];
+}): Promise<any> {
+  return fetchJson('/api/supervisor/analyze-failure', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 

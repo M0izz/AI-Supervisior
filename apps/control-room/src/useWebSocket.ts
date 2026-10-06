@@ -29,12 +29,36 @@ export function useWebSocket({
   // Compute WebSocket URL
   const getWsUrl = useCallback(() => {
     if (url) return url;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    // Vite proxy handles /ws or connects to localhost:8000
+
+    // 1. Explicit VITE_WS_URL override if supplied
+    const envWsUrl = (import.meta.env.VITE_WS_URL || '').trim();
+    if (envWsUrl) {
+      return envWsUrl.endsWith('/ws/events') ? envWsUrl : `${envWsUrl.replace(/\/+$/, '')}/ws/events`;
+    }
+
+    // 2. Derive from VITE_API_URL (e.g., https://api.onrender.com -> wss://api.onrender.com/ws/events)
+    const envApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+    if (envApiUrl) {
+      try {
+        const parsed = new URL(envApiUrl);
+        const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${wsProto}//${parsed.host}/ws/events`;
+      } catch {
+        if (envApiUrl.startsWith('http://') || envApiUrl.startsWith('https://')) {
+          const wsUrl = envApiUrl.replace(/^http/, 'ws').replace(/\/+$/, '');
+          return `${wsUrl}/ws/events`;
+        }
+      }
+    }
+
+    // 3. Local Vite dev server fallback (e.g., localhost:5173 -> localhost:8000)
     if (window.location.port === '5173') {
       return `ws://${window.location.hostname}:8000/ws/events`;
     }
+
+    // 4. Same-origin fallback for production reverse-proxies
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
     return `${protocol}//${host}/ws/events`;
   }, [url]);
 

@@ -645,14 +645,167 @@ async def get_supervisor_narrative_timeline(mission_id: str):
     }
 
 
+def _event_to_supervisor_decision(e: Event) -> Optional[Dict[str, Any]]:
+    p = e.payload or {}
+    time_str = e.timestamp.strftime("%H:%M:%S") if hasattr(e.timestamp, "strftime") else str(e.timestamp)
+
+    if e.type == EventType.SUPERVISOR_DECISION:
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": (p.get("decision") or "DECISION").upper(),
+            "title": f"Supervisor Decision: {p.get('decision', 'DECIDE')}",
+            "why": p.get("reason") or p.get("rationale") or "Supervisory rule triggered",
+            "evidence": p.get("evidence") or [p.get("anomaly_type")] or ["Policy rule evaluation"],
+            "action": p.get("action", "CONTINUE"),
+            "target_agent": p.get("target_agent") or e.agent_id or "fleet",
+            "result": p.get("result", "Action applied"),
+            "provenance_model": p.get("model_provenance", "Google Gemma 4")
+        }
+    elif e.type == EventType.SUPERVISOR_INTERVENTION:
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": "PAUSE",
+            "title": f"Supervisor Intervened: {p.get('action', 'PAUSE')}",
+            "why": p.get("reason") or "Watchdog detected repeating error loop threshold",
+            "evidence": [p.get("rule_name", "LOOP_DETECTION"), p.get("signature")] if p.get("signature") else ["3 identical failure signatures"],
+            "action": p.get("action", "PAUSE_PROCESS"),
+            "target_agent": p.get("agent_id") or e.agent_id or "worker",
+            "result": "Agent process paused; awaiting handoff or operator review",
+            "provenance_model": "Supervisor Watchdog Engine"
+        }
+    elif e.type in (EventType.SUPERVISOR_ALERT, EventType.SUPERVISOR_ANOMALY_DETECTED):
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": "WARN",
+            "title": f"Anomaly Detected: {p.get('anomaly_type', 'WATCHDOG_ALERT')}",
+            "why": p.get("description") or "Execution anomaly observed by watchdog",
+            "evidence": [f"Turn limit / failure count: {p.get('count', 1)}"],
+            "action": "FLAG_ANOMALY",
+            "target_agent": e.agent_id or "worker",
+            "result": "Logged in supervisory audit trail",
+            "provenance_model": "Supervisor Watchdog Engine"
+        }
+    elif e.type == EventType.AGENT_ACTION and p.get("event_type") in ("routing.selected", "routing.evaluated"):
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": "ROUTE",
+            "title": f"Dynamic Route Selected: {p.get('selected_agent', 'agent')}",
+            "why": p.get("decision") or f"Selected {p.get('selected_agent')} based on multi-factor capability scoring.",
+            "evidence": [f"Routing ID: {p.get('routing_id')}", "Score evaluation with cold-start safety"],
+            "action": "ASSIGN_WORKTREE",
+            "target_agent": p.get("selected_agent"),
+            "result": "Task dispatched to chosen runtime",
+            "provenance_model": "Dynamic Agent Router"
+        }
+    elif e.type == EventType.AGENT_ACTION and p.get("event_type") in ("handoff.initiated", "handoff.completed"):
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": "HANDOFF",
+            "title": f"Agent Handoff: {p.get('source_agent_id')} -> {p.get('target_agent_id')}",
+            "why": f"Handoff triggered by {p.get('trigger', 'FAILURE_LOOP')}: {p.get('detail', '')}",
+            "evidence": [f"Handoff ID: {p.get('handoff_id')}", "Context and verified facts preserved in worktree"],
+            "action": "TRANSFER_TASK_CONTEXT",
+            "target_agent": p.get("target_agent_id"),
+            "result": "Target agent initialized in isolated worktree",
+            "provenance_model": "Handoff Engine"
+        }
+    elif e.type == EventType.VERIFICATION_RESULT:
+        passed = p.get("passed", 0)
+        failed = p.get("failed", 0)
+        is_ok = (failed == 0 and passed > 0)
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": "VERIFY",
+            "title": f"Verification {'PASSED' if is_ok else 'FAILED'} ({passed}/{passed + failed} tests)",
+            "why": "Independent test suite verified in isolated sandbox with clean git diff" if is_ok else f"Verification rejected agent completion claim: {failed} test failures",
+            "evidence": [f"Passed: {passed}", f"Failed: {failed}", "Zero out-of-scope modifications allowed"],
+            "action": "ACCEPT_TASK" if is_ok else "REOPEN_TASK",
+            "target_agent": e.agent_id or "verifier",
+            "result": "Completion accepted by Supervisor" if is_ok else "Task reopened for correction",
+            "provenance_model": "Independent Sandbox Verifier"
+        }
+    elif e.type == EventType.APPROVAL_REQUESTED:
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": "REQUIRE_APPROVAL",
+            "title": f"Human Operator Approval Required: {p.get('action_type', 'ACTION')}",
+            "why": p.get("reason") or "Action exceeds autonomous scope or touches protected resources",
+            "evidence": [f"Target: {p.get('target', 'protected_path')}", f"Risk: {p.get('risk_level', 'MEDIUM')}"],
+            "action": "AWAIT_OPERATOR_DECISION",
+            "target_agent": e.agent_id or "worker",
+            "result": "Execution paused until operator approves or denies",
+            "provenance_model": "Zero Implicit Approval Policy"
+        }
+    elif e.type == EventType.MISSION_COMPLETED:
+        return {
+            "id": getattr(e, "event_id", "dec"),
+            "timestamp": time_str,
+            "decision_type": "COMPLETE",
+            "title": "Mission Completed & Verified",
+            "why": "All generated execution tasks completed and independently verified.",
+            "evidence": ["All sandbox verifications accepted"],
+            "action": "FINALIZE_MISSION",
+            "target_agent": "supervisor",
+            "result": "Mission closed, facts committed to project brain",
+            "provenance_model": "Supervisor Engine"
+        }
+    return None
+
+
 @app.get("/api/missions/{mission_id}/decisions")
 async def get_supervisor_decisions(mission_id: str):
+    """Returns human-readable Supervisor Decisions for a mission."""
     events = await app_state.event_store.query(mission_id=mission_id, limit=300)
-    decisions = [
-        e.payload for e in events
-        if e.type in (EventType.SUPERVISOR_DECISION, EventType.SUPERVISOR_INTERVENTION)
-    ]
-    return {"mission_id": mission_id, "decisions": decisions}
+    decisions = []
+    for e in events:
+        dec = _event_to_supervisor_decision(e)
+        if dec:
+            decisions.append(dec)
+    return {"mission_id": mission_id, "decisions": decisions, "count": len(decisions)}
+
+
+@app.get("/api/supervisor/decisions")
+async def list_all_supervisor_decisions(limit: int = 100):
+    """Returns human-readable Supervisor Decisions across all missions."""
+    events = await app_state.event_store.query(limit=limit)
+    decisions = []
+    for e in events:
+        dec = _event_to_supervisor_decision(e)
+        if dec:
+            decisions.append(dec)
+    return {"decisions": decisions, "count": len(decisions)}
+
+
+@app.post("/api/supervisor/decisions/explain")
+async def explain_supervisor_decision(payload: Dict[str, Any]):
+    """Explains a supervisor decision using Gemma 4 intelligence."""
+    decision_type = payload.get("decision_type", "ROUTE")
+    context = payload.get("context", {})
+    explanation = await app_state.gemma_reasoner.explain_decision(decision_type, context)
+    return {"explanation": explanation, "model_provenance": "Google Gemma 4 (gemma-4-31B-it)"}
+
+
+@app.post("/api/supervisor/analyze-failure")
+async def analyze_complex_failure_endpoint(payload: Dict[str, Any]):
+    """Deep failure diagnosis and recovery analysis via Google Gemini."""
+    task_title = payload.get("task_title", "Unknown Task")
+    stack_trace = payload.get("stack_trace", "")
+    history = payload.get("failure_history", [])
+    files = payload.get("affected_files", [])
+    analysis = await app_state.gemini_reasoner.analyze_complex_failure(
+        task_title=task_title,
+        stack_trace=stack_trace,
+        failure_history=history,
+        affected_files=files
+    )
+    return analysis.model_dump()
 
 
 @app.get("/api/supervisor/events")
@@ -685,16 +838,6 @@ async def query_supervisor_events(
     if ev_sev:
         events = [e for e in events if e.severity == ev_sev]
     return {"events": events, "count": len(events)}
-
-
-@app.get("/api/supervisor/decisions")
-async def list_all_supervisor_decisions(limit: int = 100):
-    events = await app_state.event_store.query(limit=limit)
-    decisions = [
-        e.payload for e in events
-        if e.type in (EventType.SUPERVISOR_DECISION, EventType.SUPERVISOR_INTERVENTION)
-    ]
-    return {"decisions": decisions, "count": len(decisions)}
 
 
 # --- Agent Registry ---
@@ -872,7 +1015,11 @@ async def list_providers():
     }
     providers.append(nebius_desc)
 
-    # 3. Local Workstation Substrate
+    # 3. Google Gemini Provider
+    gemini_desc = await app_state.gemini_provider.get_descriptor()
+    providers.append(gemini_desc.model_dump())
+
+    # 4. Local Workstation Substrate
     providers.append({
         "provider_id": "local",
         "name": "Local Workstation",
@@ -891,7 +1038,7 @@ async def list_providers():
 
 @app.get("/api/models")
 async def list_models():
-    """Lists available models from DigitalOcean Inference, Nebius, and Local providers."""
+    """Lists available models from DigitalOcean Inference, Nebius, Google Gemini, and Local providers."""
     from integrations.nebius.provider import NebiusNemotronProvider
     models = []
 
@@ -914,6 +1061,11 @@ async def list_models():
             "available": m.get("available", False),
             "context_window": 131072
         })
+
+    # 3. Google Gemini models
+    gemini_models = await app_state.gemini_provider.get_models()
+    for m in gemini_models:
+        models.append(m.model_dump())
 
     return {"models": models, "count": len(models)}
 

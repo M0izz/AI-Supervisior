@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Target, 
   Bot, 
@@ -11,11 +11,13 @@ import {
   Pause,
   Sparkles,
   ShieldCheck,
-  Database
+  Database,
+  X
 } from 'lucide-react';
-import type { Mission, AgentRecord, ApprovalRequest, Event, InterventionDetail, AdapterInfo, MemoryRecord } from '../types';
+import type { Mission, AgentRecord, ApprovalRequest, Event, InterventionDetail, AdapterInfo, MemoryRecord, SupervisorDecision } from '../types';
 import { ProviderLogo } from '../components/ProviderLogo';
-import { pauseMission, resumeMission } from '../api';
+import { SupervisorDecisionCard } from '../components/SupervisorDecisionCard';
+import { pauseMission, resumeMission, getSupervisorDecisions, explainDecision } from '../api';
 
 interface OverviewProps {
   missions: Mission[];
@@ -52,6 +54,43 @@ export const Overview: React.FC<OverviewProps> = ({
   const safeEvents = Array.isArray(events) ? events : [];
   const safeAdapters = Array.isArray(adapters) ? adapters : [];
   const safeMemory = Array.isArray(memoryRecords) ? memoryRecords : [];
+
+  const [decisions, setDecisions] = useState<SupervisorDecision[]>([]);
+  const [explainingDecision, setExplainingDecision] = useState<SupervisorDecision | null>(null);
+  const [gemmaExplanation, setGemmaExplanation] = useState<any | null>(null);
+  const [isExplaining, setIsExplaining] = useState(false);
+
+  useEffect(() => {
+    getSupervisorDecisions()
+      .then(res => {
+        if (res?.decisions) setDecisions(res.decisions);
+      })
+      .catch(() => setDecisions([]));
+  }, [events]);
+
+  const handleExplainDecision = async (dec: SupervisorDecision) => {
+    setExplainingDecision(dec);
+    setIsExplaining(true);
+    setGemmaExplanation(null);
+    try {
+      const res = await explainDecision(dec.decision_type, {
+        agent_id: dec.target_agent,
+        task_title: dec.title,
+        reason: dec.why,
+        evidence: dec.evidence
+      });
+      setGemmaExplanation(res?.explanation || null);
+    } catch {
+      setGemmaExplanation({
+        decision: dec.title,
+        rationale: dec.why,
+        evidence: dec.evidence?.join(', ') || 'Supervisory rule evaluation',
+        action: dec.action
+      });
+    } finally {
+      setIsExplaining(false);
+    }
+  };
 
   const verifiedCount = safeMemory.filter(m => {
     const cat = (m.category || m.type || m.status || '').toUpperCase();
@@ -257,6 +296,26 @@ export const Overview: React.FC<OverviewProps> = ({
                   </div>
                 );
               })()}
+
+              {/* Active Mission Radar Story */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Mission Radar
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '3px' }}>UNDERSTAND ✓</span>
+                  <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+                  <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '3px' }}>PLAN ✓</span>
+                  <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>EXECUTE ●</span>
+                  <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>WATCH ●</span>
+                  <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+                  <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '3px' }}>VERIFY ○</span>
+                  <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
+                  <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '3px' }}>COMPLETE ○</span>
+                </div>
+              </div>
 
               {/* Live Progress & Agent Stats Strip */}
               <div style={{
@@ -537,9 +596,19 @@ export const Overview: React.FC<OverviewProps> = ({
           </button>
         </div>
 
-        {safeEvents.length === 0 ? (
+        {decisions.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {decisions.slice(0, 4).map(dec => (
+              <SupervisorDecisionCard 
+                key={dec.id} 
+                decision={dec} 
+                onExplain={handleExplainDecision}
+              />
+            ))}
+          </div>
+        ) : safeEvents.length === 0 ? (
           <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No supervisory events recorded yet. Start a mission to observe real-time decision logging.
+            No supervisory decisions recorded yet. Start a mission to observe real-time decision logging.
           </div>
         ) : (
           <div className="timeline-container">
@@ -567,6 +636,71 @@ export const Overview: React.FC<OverviewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Gemma 4 Explanation Modal */}
+      {explainingDecision && (
+        <div className="modal-backdrop">
+          <div className="modal-container" style={{ maxWidth: '520px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={16} color="var(--primary)" />
+                <h3 style={{ fontSize: '15px' }}>Supervisor Intelligence Explanation</h3>
+              </div>
+              <button className="btn btn-ghost" style={{ padding: '4px' }} onClick={() => setExplainingDecision(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Powered by Google Gemma 4 (gemma-4-31B-it) reasoning layer
+              </div>
+
+              {isExplaining ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  Analyzing supervisor decision context with Gemma 4...
+                </div>
+              ) : gemmaExplanation ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
+                  <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>DECISION</div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: '2px' }}>
+                      {gemmaExplanation.decision}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>RATIONALE</div>
+                    <div style={{ color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.5 }}>
+                      {gemmaExplanation.rationale}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>EVIDENCE</div>
+                    <div style={{ color: 'var(--text-secondary)', marginTop: '2px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                      {gemmaExplanation.evidence}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>ACTION EXECUTED</div>
+                    <div style={{ color: 'var(--primary)', fontWeight: 600, marginTop: '2px' }}>
+                      {gemmaExplanation.action}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setExplainingDecision(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 6. Project Intelligence / Memory Section */}
       <div className="section-group">

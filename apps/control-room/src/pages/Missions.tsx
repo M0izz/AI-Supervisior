@@ -12,19 +12,24 @@ import {
   Lock, 
   Compass,
   AlertTriangle,
-  Code2
+  Code2,
+  Sparkles,
+  X
 } from 'lucide-react';
-import type { Mission, Task } from '../types';
+import type { Mission, Task, SupervisorDecision } from '../types';
 import { 
   pauseMission, 
   resumeMission, 
   getMissionTasks, 
   getMissionEvents,
-  getMissionAbsence
+  getMissionAbsence,
+  getSupervisorDecisions,
+  explainDecision
 } from '../api';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { HandoffSequence } from '../components/HandoffSequence';
 import { TaskDAGView } from '../components/TaskDAGView';
+import { SupervisorDecisionCard } from '../components/SupervisorDecisionCard';
 
 interface MissionsProps {
   missions: Mission[];
@@ -49,11 +54,15 @@ export const Missions: React.FC<MissionsProps> = ({
   const [isActing, setIsActing] = useState(false);
   const [activeTab, setActiveTab] = useState<'story' | 'tasks' | 'verification' | 'policy'>('story');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [missionDecisions, setMissionDecisions] = useState<SupervisorDecision[]>([]);
+  const [explainingDecision, setExplainingDecision] = useState<SupervisorDecision | null>(null);
+  const [gemmaExplanation, setGemmaExplanation] = useState<any | null>(null);
+  const [isExplaining, setIsExplaining] = useState(false);
 
   const safeMissions = Array.isArray(missions) ? missions : [];
   const selectedMission = safeMissions.find(m => m.id === selectedMissionId);
 
-  // Load tasks and events when selected mission changes
+  // Load tasks, events, and decisions when selected mission changes
   useEffect(() => {
     if (!selectedMission) return;
 
@@ -75,6 +84,13 @@ export const Missions: React.FC<MissionsProps> = ({
       })
       .catch(() => setEvents([]));
 
+    // Load mission decisions
+    getSupervisorDecisions(selectedMission.id)
+      .then(res => {
+        if (res?.decisions) setMissionDecisions(res.decisions);
+      })
+      .catch(() => setMissionDecisions([]));
+
     // Load absence mode state
     getMissionAbsence(selectedMission.id)
       .then(res => setAbsenceInfo(res))
@@ -94,6 +110,30 @@ export const Missions: React.FC<MissionsProps> = ({
       onRefresh();
     } finally {
       setIsActing(false);
+    }
+  };
+
+  const handleExplainDecision = async (dec: SupervisorDecision) => {
+    setExplainingDecision(dec);
+    setIsExplaining(true);
+    setGemmaExplanation(null);
+    try {
+      const res = await explainDecision(dec.decision_type, {
+        agent_id: dec.target_agent,
+        task_title: dec.title,
+        reason: dec.why,
+        evidence: dec.evidence
+      });
+      setGemmaExplanation(res?.explanation || null);
+    } catch {
+      setGemmaExplanation({
+        decision: dec.title,
+        rationale: dec.why,
+        evidence: dec.evidence?.join(', ') || 'Supervisory rule evaluation',
+        action: dec.action
+      });
+    } finally {
+      setIsExplaining(false);
     }
   };
 
@@ -258,6 +298,44 @@ export const Missions: React.FC<MissionsProps> = ({
             </div>
           </div>
 
+          {/* What Supervisor Understood (Product Topology Section 10) */}
+          <div className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderLeft: '3px solid var(--primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={15} color="var(--primary)" />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                  What Supervisor Understood
+                </span>
+              </div>
+              <span className="badge badge-neutral" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>Intelligence:</span>
+                <strong style={{ color: 'var(--text-primary)' }}>Google Gemma 4</strong>
+              </span>
+            </div>
+
+            <div style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>
+              &ldquo;{selectedMission.goal}&rdquo;
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px' }}>DETECTED CONSTRAINTS</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--text-secondary)' }}>
+                  <span>• Scope restricted to repository worktree boundaries</span>
+                  <span>• Existing test suites and contract invariants must pass</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px' }}>SUPERVISION STRATEGY</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--text-secondary)' }}>
+                  <span>• Active loop watchdog (pause on 3 repetitive failure signatures)</span>
+                  <span>• Independent verification perimeter before completing</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Detail Tabs */}
           <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
             {[
@@ -285,6 +363,22 @@ export const Missions: React.FC<MissionsProps> = ({
         {/* Tab 1: Timeline Story & Handoffs */}
         {activeTab === 'story' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Structured Supervisor Decisions */}
+            {missionDecisions.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Supervisory Decisions & Interventions ({missionDecisions.length})
+                </div>
+                {missionDecisions.map(dec => (
+                  <SupervisorDecisionCard
+                    key={dec.id}
+                    decision={dec}
+                    onExplain={handleExplainDecision}
+                  />
+                ))}
+              </div>
+            )}
+
             {/* Show Handoff Sequence if handoff occurred or multiple agents assigned */}
             {isHandoffDetected && (
               <HandoffSequence
@@ -519,6 +613,71 @@ export const Missions: React.FC<MissionsProps> = ({
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                   Prevents runaway token or command consumption.
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Gemma 4 Decision Explanation Modal */}
+        {explainingDecision && (
+          <div className="modal-backdrop">
+            <div className="modal-container" style={{ maxWidth: '520px' }}>
+              <div className="modal-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={16} color="var(--primary)" />
+                  <h3 style={{ fontSize: '15px' }}>Supervisor Intelligence Explanation</h3>
+                </div>
+                <button className="btn btn-ghost" style={{ padding: '4px' }} onClick={() => setExplainingDecision(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Powered by Google Gemma 4 (gemma-4-31B-it) reasoning layer
+                </div>
+
+                {isExplaining ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    Analyzing supervisor decision context with Gemma 4...
+                  </div>
+                ) : gemmaExplanation ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>DECISION</div>
+                      <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: '2px' }}>
+                        {gemmaExplanation.decision}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>RATIONALE</div>
+                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.5 }}>
+                        {gemmaExplanation.rationale}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>EVIDENCE</div>
+                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                        {gemmaExplanation.evidence}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>ACTION EXECUTED</div>
+                      <div style={{ color: 'var(--primary)', fontWeight: 600, marginTop: '2px' }}>
+                        {gemmaExplanation.action}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setExplainingDecision(null)}>
+                  Close
+                </button>
               </div>
             </div>
           </div>

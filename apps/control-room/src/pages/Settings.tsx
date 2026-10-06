@@ -105,10 +105,10 @@ export const Settings: React.FC = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  Local Control Plane Port
+                  Control Plane Endpoint
                 </label>
-                <input type="text" readOnly value="127.0.0.1:8000" style={{ fontFamily: 'var(--font-mono)' }} />
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>FastAPI local daemon with WebSocket real-time event pipeline.</span>
+                <input type="text" readOnly value={import.meta.env.VITE_API_URL || "127.0.0.1:8000"} style={{ fontFamily: 'var(--font-mono)' }} />
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>FastAPI control plane daemon with WebSocket real-time event pipeline.</span>
               </div>
             </div>
           )}

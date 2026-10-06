@@ -144,10 +144,15 @@ class AppState:
         from adapters.goose import GooseAdapter
         from adapters.cline import ClineAdapter
         from integrations.digitalocean import DigitalOceanProvider, DigitalOceanClient, GemmaReasoner
+        from integrations.gemini import GeminiProvider, GeminiClient, GeminiReasoner
 
         self.digitalocean_client = DigitalOceanClient()
         self.digitalocean_provider = DigitalOceanProvider(client=self.digitalocean_client)
         self.gemma_reasoner = GemmaReasoner(client=self.digitalocean_client)
+
+        self.gemini_client = GeminiClient()
+        self.gemini_provider = GeminiProvider(client=self.gemini_client)
+        self.gemini_reasoner = GeminiReasoner(client=self.gemini_client)
 
         self.hermes_adapter = HermesAdapter(
             event_bus=self.event_bus,

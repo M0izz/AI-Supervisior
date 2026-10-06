@@ -47,12 +47,14 @@ const FLEET_REGISTRY: FleetItem[] = [
 ];
 
 const INFERENCE_MODELS = [
-  { id: 'gemma-4-31B-it', name: 'Google Gemma 4', developer: 'Google', infra: 'DIGITALOCEAN', size: '31B', focus: 'Supervisor reasoning & lightweight planning' },
-  { id: 'hermes-4-70b-instruct', name: 'Nous Hermes 4', developer: 'Nous Research', infra: 'DIGITALOCEAN', size: '70B', focus: 'Long-session agentic coding & tool use' },
-  { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder', developer: 'Alibaba Cloud', infra: 'NEBIUS', size: '32B', focus: 'Deep syntax repair & algorithm refactoring' },
-  { id: 'nemotron-4-340b', name: 'NVIDIA Nemotron 4', developer: 'NVIDIA', infra: 'NEBIUS', size: '340B', focus: 'Supervisory situation reasoning & anomaly diagnosis' },
+  { id: 'gemma-4-31B-it', name: 'Google Gemma 4', developer: 'Google', infra: 'DIGITALOCEAN', size: '31B', focus: 'Supervisor Intelligence: Bounded planning, goal decomposition, invariant extraction, and decision rationale explanation' },
+  { id: 'gemini-1.5-pro', name: 'Google Gemini 1.5 Pro', developer: 'Google', infra: 'GOOGLE GEMINI', size: 'Multimodal', focus: 'Deep Diagnostic Reasoning: Complex failure analysis, architecture boundary review, multimodal inspection, and incident briefings' },
+  { id: 'gemini-1.5-flash', name: 'Google Gemini 1.5 Flash', developer: 'Google', infra: 'GOOGLE GEMINI', size: 'Fast', focus: 'Rapid Incident Diagnostics: Fast error trace parsing, recovery strategy comparison, and operational status explanations' },
+  { id: 'hermes-4-70b-instruct', name: 'Nous Hermes 4', developer: 'Nous Research', infra: 'DIGITALOCEAN', size: '70B', focus: 'Long-session agentic coding, persistent context, and tool use' },
+  { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder', developer: 'Alibaba Cloud', infra: 'NEBIUS', size: '32B', focus: 'Deep syntax repair, algorithm refactoring, and test generation' },
+  { id: 'nemotron-4-340b', name: 'NVIDIA Nemotron 4', developer: 'NVIDIA', infra: 'NEBIUS', size: '340B', focus: 'Supervisory situation reasoning, anomaly diagnosis, and recovery planning' },
   { id: 'llama-3.3-70b', name: 'Meta Llama 3.3', developer: 'Meta', infra: 'DIGITALOCEAN', size: '70B', focus: 'General code generation and test crafting' },
-  { id: 'deepseek-r1-distill', name: 'DeepSeek R1 Distill', developer: 'DeepSeek', infra: 'NEBIUS', size: '70B', focus: 'Chain-of-thought logic & math invariants' }
+  { id: 'deepseek-r1-distill', name: 'DeepSeek R1 Distill', developer: 'DeepSeek', infra: 'NEBIUS', size: '70B', focus: 'Chain-of-thought logic, math invariants, and test verification' }
 ];
 
 export const Agents: React.FC<AgentsProps> = ({
@@ -500,6 +502,32 @@ export const Agents: React.FC<AgentsProps> = ({
                 <div>✓ Dynamic model catalog queries</div>
                 <div>✓ Supervisory reasoning backend</div>
                 <div>✓ Token Factory high throughput</div>
+              </div>
+
+              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge badge-neutral" style={{ fontSize: '10px' }}>OPTIONAL INTEGRATION</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Configure via Settings</span>
+              </div>
+            </div>
+
+            {/* Google Gemini Card */}
+            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ProviderLogo providerId="gemini" size={24} />
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Google Gemini</h3>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Multimodal Inference & Incident Diagnostics</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Powers deep failure diagnosis, architecture boundary reviews, multimodal UI and diagram analysis, and operational incident briefings.
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <div>✓ Complex failure diagnosis & root-cause isolation</div>
+                <div>✓ Multimodal UI & architecture analysis</div>
+                <div>✓ Operational incident briefings</div>
               </div>
 
               <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

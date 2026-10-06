@@ -201,3 +201,74 @@ async def test_nebius_dynamic_catalog():
     model_ids = [m["model_id"] for m in models]
     assert any("nemotron" in mid.lower() for mid in model_ids)
     assert any("hermes" in mid.lower() for mid in model_ids)
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_and_reasoner():
+    """Verifies Google Gemini provider descriptor, models, deep failure diagnosis, and offline handling."""
+    from integrations.gemini import GeminiProvider, GeminiReasoner
+
+    provider = GeminiProvider()
+    desc = await provider.get_descriptor()
+    assert desc.provider_id == "google_gemini"
+    assert "complex_failure_diagnosis" in desc.capabilities
+
+    models = await provider.get_models()
+    assert len(models) == 3
+    assert any(m.model_id == "gemini-1.5-pro" for m in models)
+
+    # Test deep failure diagnosis
+    reasoner = GeminiReasoner()
+    diagnosis = await reasoner.analyze_complex_failure(
+        task_title="Fix JWT Auth Middleware",
+        stack_trace="jwt.exceptions.ExpiredSignatureError: Signature has expired\n  File auth/jwt.py line 45",
+        failure_history=["Attempt 1 failed", "Attempt 2 failed"],
+        affected_files=["auth/jwt.py", "auth/middleware.py"]
+    )
+    assert "auth" in diagnosis.diagnosis.lower() or "token" in diagnosis.diagnosis.lower()
+    assert diagnosis.confidence >= 0.8
+    assert "Google Gemini" in diagnosis.model_provenance
+
+    # Test incident explanation
+    brief = await reasoner.explain_incident("Repeated token expiration failure in test sandbox")
+    assert isinstance(brief, str)
+    assert len(brief) > 20
+
+
+@pytest.mark.asyncio
+async def test_gemma_bounded_supervisor_intelligence():
+    """Verifies Gemma 4 bounded decision explanation, failure classification, and memory extraction."""
+    gemma = GemmaReasoner()
+
+    # 1. Explain decision
+    route_exp = await gemma.explain_decision(
+        decision_type="ROUTE",
+        context={"agent_id": "codex", "task_title": "Fix TypeScript Null Pointer", "score": 94}
+    )
+    assert "decision" in route_exp
+    assert "rationale" in route_exp
+    assert "evidence" in route_exp
+    assert "action" in route_exp
+    assert "codex" in route_exp["decision"].lower()
+
+    # 2. Classify failure
+    cls = await gemma.classify_failure("AssertionError: expected 200 OK got 401 Unauthorized")
+    assert cls["category"] == "TEST_ASSERTION_FAILURE"
+    assert cls["confidence"] >= 0.9
+
+    # 3. Compress handoff
+    comp = await gemma.compress_handoff(
+        agent_id="claude_code",
+        history=[{"turn": 1, "tool": "edit"}, {"turn": 2, "tool": "test"}]
+    )
+    assert comp["source_agent"] == "claude_code"
+    assert "Google Gemma 4" in comp["model_provenance"]
+
+    # 4. Extract memory candidates
+    mem = await gemma.extract_memory_candidates(
+        task_title="CSV Parser BOM Support",
+        verification_evidence={"passed": True, "failed_attempts": ["Naive slice"]}
+    )
+    assert len(mem) == 2
+    assert any(m["type"] == "VERIFIED_FACT" for m in mem)
+    assert any(m["type"] == "REJECTED_APPROACH" for m in mem)

@@ -427,6 +427,29 @@ export interface SyncDevice {
   last_seen_at: string;
 }
 
+export interface SupervisorDecision {
+  id: string;
+  timestamp: string;
+  decision_type: 'ROUTE' | 'PAUSE' | 'WARN' | 'HANDOFF' | 'VERIFY' | 'REQUIRE_APPROVAL' | 'COMPLETE' | string;
+  title: string;
+  why: string;
+  evidence: string[];
+  action: string;
+  target_agent?: string;
+  result?: string;
+  provenance_model?: string;
+}
+
+export interface GeminiAnalysisResponse {
+  diagnosis: string;
+  root_cause: string;
+  recommended_recovery: string;
+  confidence: number;
+  affected_components: string[];
+  model_provenance: string;
+  is_live: boolean;
+}
+
 declare global {
   interface Window {
     supervisor?: SupervisorDesktopBridge;

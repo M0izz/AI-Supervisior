@@ -118,29 +118,40 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                     </div>
                   </div>
 
-                  {/* Operation Prompt */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      <strong>{req.agent_id || 'Agent'}</strong> wants to execute:
+                  {/* Structured Operational Assessment */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', fontSize: '13px' }}>
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block' }}>1. WHAT IS ABOUT TO HAPPEN?</span>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                        {req.agent_id || 'Agent'} is attempting to execute: <code style={{ color: 'var(--primary)' }}>{actionStr}</code>
+                      </span>
                     </div>
 
-                    <div style={{ 
-                      fontFamily: 'var(--font-mono)', 
-                      fontSize: '12px', 
-                      padding: '10px 14px', 
-                      backgroundColor: 'var(--bg)', 
-                      borderRadius: '6px', 
-                      border: '1px solid var(--border-subtle)',
-                      color: 'var(--text-primary)',
-                      overflowX: 'auto'
-                    }}>
-                      {actionStr || 'Protected command invocation'}
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block' }}>2. WHY?</span>
+                      <span style={{ color: 'var(--text-primary)' }}>
+                        {req.reason || 'Requested operation targets sensitive workspace perimeter or files outside active task scope.'}
+                      </span>
+                    </div>
+
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block' }}>3. WHAT IS ALLOWED?</span>
+                      <span style={{ color: 'var(--success)' }}>
+                        Scoped modifications strictly within task git worktree and non-destructive shell commands.
+                      </span>
+                    </div>
+
+                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block' }}>4. WHAT IS BLOCKED?</span>
+                      <span style={{ color: 'var(--danger)' }}>
+                        Direct modifications of protected paths (.env, git history) or force operations without explicit approval.
+                      </span>
                     </div>
                   </div>
 
-                  {/* Why Section */}
-                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                    <strong style={{ color: 'var(--text-secondary)' }}>Why:</strong> {req.reason || 'This operation touches sensitive workspace boundaries or modifies files outside active task scope.'}
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '8px 12px', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
+                    <strong style={{ color: 'var(--text-primary)' }}>WHAT WILL HAPPEN IF APPROVED? </strong>
+                    Supervisor will grant a one-time execution token for this exact command, log the audit event, and continue watchdog observation.
                   </div>
 
                   {/* Metadata Row */}
