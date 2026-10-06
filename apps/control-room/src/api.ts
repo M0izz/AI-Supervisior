@@ -9,7 +9,9 @@ import type {
   MissionTelemetry,
   GlobalOverviewTelemetry,
   ApprovalResolutionAction,
-  AdapterInfo
+  AdapterInfo,
+  SyncStatus,
+  SyncDevice
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -303,3 +305,21 @@ export async function cancelAbsenceMode(missionId: string, reason?: string): Pro
 export async function getAdapters(): Promise<{ adapters: AdapterInfo[]; count: number }> {
   return fetchJson(`/api/adapters`);
 }
+
+// Phase 12: Cloud Sync & Multi-Device API
+export async function getSyncStatus(): Promise<SyncStatus> {
+  return fetchJson<SyncStatus>('/api/sync/status');
+}
+
+export async function triggerSync(): Promise<{ status: string; result: any }> {
+  return fetchJson('/api/sync/trigger', { method: 'POST' });
+}
+
+export async function getSyncDevices(): Promise<{ devices: SyncDevice[]; count: number }> {
+  return fetchJson('/api/sync/devices');
+}
+
+export async function revokeSyncDevice(deviceId: string): Promise<{ status: string; device_id: string }> {
+  return fetchJson(`/api/sync/devices/${deviceId}/revoke`, { method: 'POST' });
+}
+

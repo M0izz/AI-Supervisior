@@ -31,8 +31,10 @@ from storage.sqlite import (
     HandoffRepository,
     RoutingRepository,
     AbsenceRepository,
+    SyncRepository,
 )
 from core.absence import AbsencePolicyEngine
+from sync import SyncServerStore, SyncEngine, derive_project_id, Device, DeviceStatus
 
 
 class AppState:
@@ -55,6 +57,21 @@ class AppState:
         self.handoff_repo = HandoffRepository(self.db)
         self.routing_repo = RoutingRepository(self.db)
         self.absence_repo = AbsenceRepository(self.db)
+        self.sync_repo = SyncRepository(self.db)
+
+        # Cloud Sync & Multi-Device Subsystem (Phase 12)
+        self.sync_server = SyncServerStore()
+        self.device_id = os.getenv("SUPERVISOR_DEVICE_ID", "dev_local_primary")
+        self.device_token = os.getenv("SUPERVISOR_DEVICE_TOKEN", "tok_local_primary_sec")
+        self.project_id = os.getenv("SUPERVISOR_PROJECT_ID") or derive_project_id()
+        self.sync_engine = SyncEngine(
+            db=self.db,
+            sync_repo=self.sync_repo,
+            server_store=self.sync_server,
+            device_id=self.device_id,
+            device_token=self.device_token,
+            project_id=self.project_id,
+        )
 
         self.mission_manager = MissionManager(event_bus=self.event_bus, repository=self.mission_repo)
         self.task_manager = TaskManager(event_bus=self.event_bus, repository=self.task_repo)

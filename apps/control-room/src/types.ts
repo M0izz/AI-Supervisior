@@ -345,8 +345,33 @@ export interface AdapterInfo {
   };
 }
 
+export type SyncState = 'ONLINE' | 'OFFLINE' | 'SYNCING' | 'SYNCED' | 'ERROR' | 'AUTH_REQUIRED';
+
+export interface SyncStatus {
+  state: SyncState;
+  device_id: string;
+  project_id: string;
+  pending_outbox_count: number;
+  outbox_pending_count?: number;
+  last_synced_at?: string | null;
+  last_pull_cursor?: number;
+  connected_devices_count?: number;
+  error_message?: string | null;
+}
+
+export interface SyncDevice {
+  device_id: string;
+  display_name: string;
+  platform: string;
+  app_version: string;
+  status: 'ACTIVE' | 'REVOKED';
+  created_at: string;
+  last_seen_at: string;
+}
+
 declare global {
   interface Window {
     supervisor?: SupervisorDesktopBridge;
   }
 }
+

@@ -85,6 +85,17 @@ class DatabaseManager:
         await conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
 
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
+        """Provides an asynchronous context manager for database connection."""
+        conn = await self.get_connection()
+        try:
+            yield conn
+        finally:
+            await conn.close()
+
     async def execute_query(self, query: str, parameters: tuple = ()) -> list:
         """Helper to run a read query returning list of row dictionaries."""
         async with aiosqlite.connect(self.db_path) as db:

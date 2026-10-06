@@ -372,6 +372,38 @@ Phase 11 integrates the AI Supervisor control plane into developer IDEs, beginni
   - Respects VS Code Workspace Trust: restricts autonomous mission dispatch in untrusted folders.
   - Zero-Nag notification manager debounces and surfaces only actionable interventions and approvals.
 
+---
+
+## 19. Cloud Sync + Multi-Device (Phase 12)
+
+Phase 12 delivers the final roadmap capability: optional, local-first synchronization and multi-device project continuity:
+
+- **Core Architectural Invariant**:
+  > *"Cloud sync may replicate Supervisor state, but it must never become a higher authority than the local Supervisor."*
+- **Replication Hierarchy**:
+  ```text
+  Developer Machine A (Laptop) ──[Outbox]──> Cloud Sync Service <──[Inbox]── Developer Machine B (Desktop)
+             │                                                                         │
+    100% Authoritative Local DB                                               100% Authoritative Local DB
+  ```
+- **Local-First & Offline-First**:
+  - All missions, watchdogs, handoffs, verifications, and memories commit to local SQLite WAL tables first.
+  - Outbox (`sync_outbox`) and Inbox (`sync_inbox`) queues handle asynchronous background sync without ever blocking operator commands.
+- **Data Boundary & Sanitization**:
+  - `sync.sanitizer.sanitize_payload()` strictly redacts all API keys, private keys, bearer tokens, passwords, and absolute host paths prior to transmission.
+  - Zero secret or raw source code leaks across the network.
+- **Path-Independent Identity**:
+  - Projects are derived canonically from Git remote origin URLs (`repo:github.com/user/project`) or commit roots, ensuring cross-machine portability across Windows, Linux, and macOS.
+- **Deterministic Conflict Resolution**:
+  - Memory epistemic promotion (`VERIFIED` facts cannot be downgraded by stale writes).
+  - Task and verification non-regression (terminal outcomes cannot revert to pending).
+  - Tombstone precedence absorbs equal or lower revision resurrecting writes.
+  - Local security policy always overrides remote suggestions.
+- **Cryptographic Device Security**:
+  - Devices authenticate using salted SHA-256 token hashes.
+  - Instant one-click device revocation immediately blocks compromised hardware.
+
+
 
 
 

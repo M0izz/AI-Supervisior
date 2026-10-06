@@ -205,3 +205,102 @@ CREATE INDEX IF NOT EXISTS idx_absence_sessions_status ON absence_sessions(statu
 CREATE INDEX IF NOT EXISTS idx_absence_decisions_absence ON absence_decisions(absence_id);
 CREATE INDEX IF NOT EXISTS idx_absence_decisions_mission ON absence_decisions(mission_id);
 
+-- ============================================================================
+-- Phase 12: Cloud Sync & Multi-Device Tables
+-- ============================================================================
+
+-- 12. Sync Devices Table
+CREATE TABLE IF NOT EXISTS sync_devices (
+    device_id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    platform TEXT DEFAULT 'unknown',
+    app_version TEXT DEFAULT '1.0.0',
+    protocol_version TEXT DEFAULT 'sync_protocol.v1',
+    device_token_hash TEXT NOT NULL,
+    status TEXT NOT NULL, -- ACTIVE, REVOKED
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL
+);
+
+-- 13. Sync Outbox Table (Local persistent outbound mutations queue)
+CREATE TABLE IF NOT EXISTS sync_outbox (
+    outbox_id TEXT PRIMARY KEY,
+    record_id TEXT NOT NULL,
+    record_type TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    revision INTEGER DEFAULT 1,
+    schema_version TEXT DEFAULT '1.0.0',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL, -- PENDING, IN_FLIGHT, SYNCED, FAILED, BLOCKED
+    retry_count INTEGER DEFAULT 0,
+    error_message TEXT,
+    in_flight_at TEXT
+);
+
+-- 14. Sync Inbox Table (Incoming remote changes queue for deduplication & processing)
+CREATE TABLE IF NOT EXISTS sync_inbox (
+    inbox_id TEXT PRIMARY KEY,
+    record_id TEXT NOT NULL,
+    record_type TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    revision INTEGER DEFAULT 1,
+    schema_version TEXT DEFAULT '1.0.0',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL, -- PENDING, PROCESSED, CONFLICT, REJECTED
+    processed_at TEXT
+);
+
+-- 15. Sync Cursors Table (Tracks pagination cursors per project/device)
+CREATE TABLE IF NOT EXISTS sync_cursors (
+    cursor_key TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    last_cursor INTEGER DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
+-- 16. Sync Tombstones Table (Persistent deletion records)
+CREATE TABLE IF NOT EXISTS sync_tombstones (
+    tombstone_id TEXT PRIMARY KEY,
+    record_id TEXT NOT NULL,
+    record_type TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    revision INTEGER DEFAULT 1,
+    deleted_at TEXT NOT NULL,
+    payload TEXT DEFAULT '{}'
+);
+
+-- 17. Sync Conflicts Audit Log Table
+CREATE TABLE IF NOT EXISTS sync_conflicts (
+    conflict_id TEXT PRIMARY KEY,
+    record_id TEXT NOT NULL,
+    record_type TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    conflict_type TEXT NOT NULL,
+    resolution TEXT NOT NULL,
+    applied_payload TEXT NOT NULL,
+    rejected_payload TEXT,
+    reason TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+-- Sync Indexes
+CREATE INDEX IF NOT EXISTS idx_sync_outbox_status ON sync_outbox(status);
+CREATE INDEX IF NOT EXISTS idx_sync_outbox_project ON sync_outbox(project_id);
+CREATE INDEX IF NOT EXISTS idx_sync_outbox_record ON sync_outbox(record_id);
+CREATE INDEX IF NOT EXISTS idx_sync_inbox_status ON sync_inbox(status);
+CREATE INDEX IF NOT EXISTS idx_sync_inbox_record ON sync_inbox(record_id);
+CREATE INDEX IF NOT EXISTS idx_sync_tombstones_record ON sync_tombstones(record_id);
+CREATE INDEX IF NOT EXISTS idx_sync_tombstones_project ON sync_tombstones(project_id);
+CREATE INDEX IF NOT EXISTS idx_sync_conflicts_project ON sync_conflicts(project_id);
+
+

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Activity, 
   Terminal, 
@@ -8,9 +8,12 @@ import {
   ShieldAlert, 
   Radio, 
   Play, 
-  RefreshCw 
+  RefreshCw,
+  Cloud,
+  CloudOff
 } from 'lucide-react';
-import type { TabType } from '../types';
+import type { TabType, SyncStatus } from '../types';
+import { getSyncStatus, triggerSync } from '../api';
 
 interface NavigationProps {
   activeTab: TabType;
@@ -35,6 +38,39 @@ export const Navigation: React.FC<NavigationProps> = ({
   onRefresh,
   isRefreshing
 }) => {
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchSync = async () => {
+      try {
+        const s = await getSyncStatus();
+        if (mounted && s) setSyncStatus(s);
+      } catch {
+        // quiet fallback
+      }
+    };
+    fetchSync();
+    const interval = setInterval(fetchSync, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleTriggerSync = async () => {
+    setIsSyncing(true);
+    try {
+      await triggerSync();
+      const s = await getSyncStatus();
+      if (s) setSyncStatus(s);
+    } catch (e) {
+      console.error('Manual sync failed:', e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
   const tabs = [
     { id: 'control_room', label: '1. Control Room', icon: Activity },
     { id: 'mission_detail', label: '2. Mission Detail', icon: Terminal },
@@ -107,6 +143,36 @@ export const Navigation: React.FC<NavigationProps> = ({
             {wsLatency !== null && wsConnected && (
               <span style={{ color: 'var(--text-muted)' }}>({wsLatency}ms)</span>
             )}
+          </div>
+
+          {/* Cloud Sync Status */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            borderLeft: '1px solid var(--border-subtle)',
+            paddingLeft: '12px'
+          }}>
+            {syncStatus?.state === 'OFFLINE' ? (
+              <CloudOff size={13} color="var(--status-amber)" />
+            ) : (
+              <Cloud size={13} color="var(--status-cyan)" />
+            )}
+            <span style={{ color: syncStatus?.state === 'OFFLINE' ? 'var(--status-amber)' : 'var(--status-cyan)' }}>
+              {syncStatus?.state ? `CLOUD: ${syncStatus.state}` : 'CLOUD: SYNCED'}
+            </span>
+            <button
+              className="btn btn-sm"
+              onClick={handleTriggerSync}
+              disabled={isSyncing}
+              title="Trigger immediate Cloud Sync cycle"
+              style={{ padding: '2px 8px', fontSize: '10px', height: '22px', border: '1px solid var(--border-subtle)' }}
+            >
+              <RefreshCw size={10} className={isSyncing ? 'spin' : ''} />
+              <span>{isSyncing ? 'SYNCING...' : 'SYNC NOW'}</span>
+            </button>
           </div>
 
           {/* Quick Actions */}

@@ -5,7 +5,7 @@
 > *"Agent completion ≠ verified completion."*
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-249%20passed%20%7C%207%20skipped-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-263%20Python%20%7C%207%20Desktop%20%7C%2014%20VS%20Code-success.svg)]()
 [![Model](https://img.shields.io/badge/model-NVIDIA%20Nemotron--4--340B-76B900.svg)]()
 [![Cloud](https://img.shields.io/badge/inference-Nebius%20AI%20Studio-0052FF.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -264,13 +264,15 @@ AI Supervisor manages a heterogeneous fleet of autonomous engineering agents thr
 
 ---
 
+---
+
 ## 8. Control Room User Interface
 
 The Control Room provides dense, real-time observability across 6 purpose-built pages:
 
 | Page | Purpose |
 | :--- | :--- |
-| **Control Room** | Central operations dashboard with active mission matrix, multi-agent fleet availability badges, real-time interventions, and watchdog readiness. |
+| **Control Room** | Central operations dashboard with active mission matrix, multi-agent fleet availability badges, real-time interventions, live Cloud Sync status, and watchdog readiness. |
 | **Mission Detail** | Mission objectives, interactive visual Task DAG, Jenkins JUnit build history, and Docker execution audit log. |
 | **Agent Detail** | Agent profile, assigned DAG task, live tool execution trace, and exclusive file lock monitoring. |
 | **Supervisor Events** | Live WebSocket event stream with dynamic story timeline and raw payload inspector. |
@@ -279,9 +281,23 @@ The Control Room provides dense, real-time observability across 6 purpose-built 
 
 ---
 
-## 9. Documentation Index
+## 9. Cloud Sync & Multi-Device Continuity (Phase 12)
+
+AI Supervisor features an optional, secure, local-first synchronization engine enabling seamless project continuity between developer workstations (e.g. laptop to office desktop):
+- **Local Authority Invariant**: Cloud sync replicates state but is never a higher authority than the local Supervisor. Local safety policy always wins.
+- **Offline-First Outbox/Inbox**: Full supervisory execution operates 100% offline; changes queue locally and flush asynchronously when online.
+- **Zero-Secret Data Boundary**: All API keys, private keys, passwords, and machine-specific host paths are scrubbed into redactions and relative tokens before leaving the workstation.
+- **Deterministic Conflict Resolution**: Epistemic promotion rules protect verified facts from stale downgrades; task and verification outcomes never regress.
+
+---
+
+## 10. Documentation Index
 
 - [Architecture Guide](docs/architecture.md) — Comprehensive technical design and data flows.
+- [Cloud Sync Architecture](docs/sync-architecture.md) — Local-first synchronization engine design.
+- [Sync Protocol v1 Specification](docs/sync-protocol.md) — Versioned request/response sync protocol models.
+- [Device Security & Data Boundary](docs/device-security.md) — Cryptographic auth, instant revocation, and sanitizer guarantees.
+- [Multi-Device Continuity Guide](docs/multi-device.md) — Multi-workstation project continuity and pairing guide.
 - [IDE Integration Guide (VS Code)](docs/ide-integration.md) — Visual Studio Code extension architecture, views, commands, and security.
 - [Absence Mode Specification](docs/absence-mode.md) — Bounded autonomy policy, authority hierarchy, and safety invariants.
 - [Multi-Agent Provider Fleet](docs/roadmap.md#phase-10-multi-agent-provider-fleet) — Heterogeneous fleet architecture and test coverage.

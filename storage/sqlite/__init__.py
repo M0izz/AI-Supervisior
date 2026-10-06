@@ -17,6 +17,7 @@ from storage.sqlite.repositories import (
     AbsenceRepository,
     attach_sqlite_persistence,
 )
+from storage.sqlite.sync_repo import SyncRepository
 
 __all__ = [
     "DatabaseManager",
@@ -30,6 +31,7 @@ __all__ = [
     "HandoffRepository",
     "RoutingRepository",
     "AbsenceRepository",
+    "SyncRepository",
     "attach_sqlite_persistence",
 ]
 

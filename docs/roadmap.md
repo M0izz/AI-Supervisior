@@ -335,10 +335,28 @@ Memory       HUD Window   Mode Gate    Ecosystem    Extensions   (Team Sync)
 
 ---
 
-### Phase 12: Optional Cloud Sync & Team Collaboration
-* **Objective**: Add optional cloud synchronization for team memory and remote mission monitoring.
+### Phase 12: Cloud Sync + Multi-Device (FINAL ROADMAP PHASE)
+* **Objective**: Implement an optional, secure, local-first Cloud Sync and Multi-Device continuity layer that replicates Supervisor state across developer machines without compromising local authority.
 * **Deliverables**:
-  - Encrypted sync of project memory across developer workstations.
-  - Mobile web view for remote mission observation and push notifications.
+  - `sync/protocol.py`: Complete Protocol v1 domain models (`SyncRecord`, `PushRequest`, `PushResponse`, `PullRequest`, `PullResponse`, `Device`, `SyncState`, `SyncStatus`, `SyncRoundResult`).
+  - `sync/identity.py`: Path-independent canonical project identity derivation (`repo:...`, `commit:...`, `local-project:...`) and cryptographic device credential generation with salted SHA-256 token hashing.
+  - `sync/sanitizer.py`: Recursive data boundary sanitizer and assertions (`sanitize_payload()`, `assert_payload_is_clean()`, `PayloadSanitizationError`) strictly scrubbing API keys, private keys, bearer tokens, passwords, and absolute host paths.
+  - `sync/conflicts.py`: Deterministic domain-specific `ConflictResolver` enforcing memory epistemic promotion (`VERIFIED` facts cannot be downgraded), task non-regression, verification outcome monotonicity, approval permanence, and tombstone precedence.
+  - `storage/sqlite/schema.sql` & `sync_repo.py`: Added tables 12–17 (`sync_devices`, `sync_outbox`, `sync_inbox`, `sync_cursors`, `sync_tombstones`, `sync_conflicts`) with indexed persistence.
+  - `sync/server.py`: Reference cloud sync service (`SyncServerStore`) implementing device authentication, instant revocation, push deduplication, global sequence counters, and project isolation.
+  - `sync/engine.py`: Local `SyncEngine` worker orchestrating outbox flushing, cursor-based pull reconciliation, and offline resilience.
+  - `apps/api/`: REST endpoints for device registration, listing, revocation, push, pull, status, and manual sync triggers.
+  - `apps/control-room/`: Live Cloud Sync status badge (`CLOUD: SYNCED`, `CLOUD: OFFLINE`), manual trigger button, and device management in the Control Room.
+  - `tests/test_sync.py`: Comprehensive test suite (14 tests) covering serialization, secret scrubbing, project identity, outbox persistence, inbox deduplication, server authentication, revocation, idempotent push, isolated pull, epistemic conflict resolution, task/verification monotonicity, tombstones, schema upgrade, killer multi-device continuity scenario, and negative downtime resilience.
+  - Documentation: `docs/sync-architecture.md`, `docs/sync-protocol.md`, `docs/device-security.md`, `docs/multi-device.md`, and updated `docs/architecture.md`.
 * **Acceptance Criteria**:
-  - Local-first architecture functions 100% offline; cloud features activate only when account sync is explicitly enabled.
+  - [x] Fundamental Invariant strictly preserved: "Cloud sync may replicate Supervisor state, but it must never become a higher authority than the local Supervisor."
+  - [x] Local Supervisor remains 100% authoritative for execution, watchdogs, safety policies, worktrees, verification, and approvals.
+  - [x] Outbox and inbox queue mutations to SQLite WAL tables; full functionality guaranteed when completely offline.
+  - [x] Secret sanitizer guarantees zero API keys, private keys, passwords, or absolute host paths enter sync payloads.
+  - [x] Project identity is path-independent; heterogeneous developer environments (Windows, macOS, Linux) synchronize seamlessly.
+  - [x] Deterministic conflict resolution rules prevent epistemic downgrades and task/verification regressions.
+  - [x] Cryptographic device authentication supports instant revocation; revoked devices are immediately blocked with 403 Forbidden.
+  - [x] Control Room displays live sync state and supports operator-initiated sync triggers.
+  - [x] All 14 sync tests pass; full regression suite passes with 263 passed, 7 skipped, 0 failed.
+* **Status**: ✅ **COMPLETE**

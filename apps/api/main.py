@@ -1004,6 +1004,126 @@ async def list_active_absence_sessions():
     return {"sessions": models, "count": len(models)}
 
 
+# --- Phase 12: Cloud Sync & Multi-Device Endpoints ---
+
+class DeviceRegistrationRequest(BaseModel):
+    display_name: str
+    platform: Optional[str] = "unknown"
+    app_version: Optional[str] = "1.0.0"
+
+
+@app.post("/api/sync/devices/register")
+async def register_sync_device(req: DeviceRegistrationRequest):
+    """Registers a new device for synchronization, issuing an authenticated device token."""
+    from sync.identity import generate_device_credentials, hash_device_token
+    from sync.protocol import Device, DeviceStatus
+    from datetime import datetime, timezone
+
+    device_id, device_token = generate_device_credentials()
+    now = datetime.now(timezone.utc).isoformat()
+    device = Device(
+        device_id=device_id,
+        display_name=req.display_name,
+        platform=req.platform or "unknown",
+        app_version=req.app_version or "1.0.0",
+        status=DeviceStatus.ACTIVE,
+        created_at=now,
+        last_seen_at=now,
+    )
+
+    await app_state.sync_server.register_device(device, device_token)
+    await app_state.sync_repo.register_device(device, hash_device_token(device_token))
+
+    return {
+        "status": "registered",
+        "device": device.model_dump(),
+        "device_token": device_token,
+    }
+
+
+@app.get("/api/sync/devices")
+async def list_sync_devices():
+    """Lists all registered devices and their synchronization status."""
+    devices = await app_state.sync_server.list_devices()
+    if not devices:
+        devices = await app_state.sync_repo.list_devices()
+    return {"devices": [d.model_dump() for d in devices], "count": len(devices)}
+
+
+@app.post("/api/sync/devices/{device_id}/revoke")
+async def revoke_sync_device(device_id: str):
+    """Revokes a device, immediately blocking all further push and pull access."""
+    server_res = await app_state.sync_server.revoke_device(device_id)
+    repo_res = await app_state.sync_repo.revoke_device(device_id)
+    if not (server_res or repo_res):
+        raise HTTPException(status_code=404, detail=f"Device '{device_id}' not found")
+    return {"status": "revoked", "device_id": device_id}
+
+
+@app.post("/api/sync/push")
+async def sync_push_endpoint(req: Dict[str, Any]):
+    """Idempotent push endpoint processing outbound client mutation records."""
+    from sync.protocol import PushRequest
+    from sync.server import SyncAuthError, DeviceRevokedError
+
+    try:
+        push_req = PushRequest(**req)
+        push_resp = await app_state.sync_server.push(push_req)
+        return push_resp.model_dump()
+    except SyncAuthError as sae:
+        raise HTTPException(status_code=401, detail=str(sae))
+    except DeviceRevokedError as dre:
+        raise HTTPException(status_code=403, detail=str(dre))
+    except Exception as e:
+        logger.error(f"Error processing sync push: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/sync/pull")
+async def sync_pull_endpoint(
+    device_id: str,
+    device_token: str,
+    project_id: str,
+    cursor: int = 0,
+    limit: int = 100,
+):
+    """Incremental pull endpoint returning project-scoped records beyond cursor."""
+    from sync.protocol import PullRequest
+    from sync.server import SyncAuthError, DeviceRevokedError
+
+    try:
+        pull_req = PullRequest(
+            device_id=device_id,
+            device_token=device_token,
+            project_id=project_id,
+            cursor=cursor,
+            limit=limit,
+        )
+        pull_resp = await app_state.sync_server.pull(pull_req)
+        return pull_resp.model_dump()
+    except SyncAuthError as sae:
+        raise HTTPException(status_code=401, detail=str(sae))
+    except DeviceRevokedError as dre:
+        raise HTTPException(status_code=403, detail=str(dre))
+    except Exception as e:
+        logger.error(f"Error processing sync pull: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/sync/status")
+async def get_sync_status():
+    """Returns the local sync engine's current state, pending outbox count, and cursor."""
+    status = await app_state.sync_engine.get_status()
+    return status.model_dump()
+
+
+@app.post("/api/sync/trigger")
+async def trigger_sync():
+    """Manually triggers an immediate synchronization round."""
+    status = await app_state.sync_engine.sync_now()
+    return {"status": "triggered", "sync_status": status.model_dump()}
+
+
 # --- WebSocket Stream ---
 @app.websocket("/ws/events")
 async def websocket_event_stream(websocket: WebSocket):
@@ -1020,3 +1140,4 @@ async def websocket_event_stream(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket connection error: {e}")
         await ws_hub.disconnect(websocket)
+
