@@ -74,7 +74,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     { id: 'nav-settings', label: 'Go to Settings', icon: Settings, group: 'Navigation', action: () => { onNavigate('settings'); onClose(); } },
     { id: 'nav-tour', label: 'Open Product Tour & Architecture', icon: Sparkles, group: 'Navigation', action: () => { onNavigate('landing'); onClose(); } },
     // Actions
-    { id: 'act-new', label: 'Create New Supervised Mission', icon: Plus, group: 'Actions', action: () => { onOpenCreateMission(); onClose(); } },
+    { id: 'act-new', label: 'Start a Mission (Natural Language Composer)', icon: Plus, group: 'Actions', action: () => { onOpenCreateMission(); onClose(); } },
     { id: 'act-demo', label: 'Run Demo Scenario (Loop & Handoff)', icon: FlaskConical, group: 'Actions', action: () => { onSeedDemo(); onClose(); } },
     { id: 'act-sync', label: 'Open Cloud Sync & Devices', icon: Cloud, group: 'Actions', action: () => { onOpenSync(); onClose(); } },
     // Active Missions

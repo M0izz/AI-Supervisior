@@ -50,11 +50,42 @@ export async function getMission(missionId: string): Promise<Mission> {
   return fetchJson<Mission>(`/api/missions/${missionId}`);
 }
 
+export interface DraftMissionResponse {
+  title: string;
+  goal: string;
+  repository_path: string;
+  interpreted_steps: string[];
+  proposed_tasks: Array<{
+    id: string;
+    title: string;
+    description: string;
+    suggested_agent: string;
+    expected_files: string[];
+    dependencies: string[];
+    order: number;
+  }>;
+  suggested_agents: string[];
+  fallback_agent: string;
+  inferred_constraints: Record<string, any>;
+  verification_plan: Record<string, any>;
+}
+
+export async function draftMission(payload: {
+  goal: string;
+  repository_path?: string;
+}): Promise<DraftMissionResponse> {
+  return fetchJson<DraftMissionResponse>('/api/missions/draft', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function createMission(payload: {
   title: string;
   goal: string;
   repository_path?: string;
   constraints?: any;
+  tasks?: any[];
 }): Promise<Mission> {
   return fetchJson<Mission>('/api/missions', {
     method: 'POST',

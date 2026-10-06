@@ -408,7 +408,7 @@ while True:
     )
 
     exec_task = asyncio.create_task(adapter.execute(dispatch))
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.8)
 
     cancelled = await adapter.cancel("tsk_cancel")
     assert cancelled is True

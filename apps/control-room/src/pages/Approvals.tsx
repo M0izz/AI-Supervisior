@@ -4,10 +4,14 @@ import {
   ShieldAlert, 
   CheckCircle2, 
   XCircle, 
-  Clock 
+  Clock,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import type { ApprovalRequest } from '../types';
 import { resolveApproval } from '../api';
+import { ProviderLogo } from '../components/ProviderLogo';
 
 interface ApprovalsProps {
   approvals: ApprovalRequest[];
@@ -20,6 +24,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
 }) => {
   const [actingId, setActingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [expandedDetailsId, setExpandedDetailsId] = useState<string | null>(null);
 
   const safeApprovals = Array.isArray(approvals) ? approvals : [];
   const pending = safeApprovals.filter(a => a.status === 'PENDING');
@@ -46,7 +51,7 @@ export const Approvals: React.FC<ApprovalsProps> = ({
         <div className="page-header-title">
           <h1>Approvals</h1>
           <p>
-            Human-in-the-loop safety gates. Review operations requested by autonomous agents before execution.
+            Safety control center. Review operations requested by autonomous agents before execution.
           </p>
         </div>
       </div>
@@ -60,24 +65,27 @@ export const Approvals: React.FC<ApprovalsProps> = ({
       {/* Pending Approvals */}
       <div className="section-group">
         <div className="section-title">
-          <ShieldAlert size={14} color="var(--warning)" />
+          <ShieldAlert size={14} color={pending.length > 0 ? 'var(--warning)' : 'var(--text-secondary)'} />
           <span>Pending Decisions ({pending.length})</span>
         </div>
 
         {pending.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">
-              <ShieldCheck size={18} color="var(--success)" />
+              <ShieldCheck size={20} color="var(--success)" />
             </div>
-            <div className="empty-state-title">No pending approval requests</div>
-            <div className="empty-state-desc">
-              All agent operations are within normal policy boundaries. Protected file edits or destructive commands will appear here for one-time signoff.
+            <div className="empty-state-title" style={{ fontSize: '16px', fontWeight: 600 }}>You're clear.</div>
+            <div className="empty-state-desc" style={{ maxWidth: '440px' }}>
+              No agent is waiting for permission. All current agent tasks remain within policy boundaries and sandbox safety constraints.
             </div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {pending.map(req => {
-              const isDestructive = (req.action || '').includes('reset') || (req.action || '').includes('delete');
+              const actionStr = req.action || '';
+              const isHighRisk = actionStr.includes('rm') || actionStr.includes('delete') || actionStr.includes('drop') || actionStr.includes('reset') || actionStr.includes('force');
+              const isExpanded = expandedDetailsId === req.id;
+
               return (
                 <div 
                   key={req.id} 
@@ -86,39 +94,87 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '14px',
-                    borderColor: isDestructive ? 'var(--danger-border)' : 'var(--warning-border)'
+                    padding: '20px',
+                    borderColor: isHighRisk ? 'var(--danger-border)' : 'var(--warning-border)',
+                    backgroundColor: isHighRisk ? 'rgba(239, 68, 68, 0.03)' : 'var(--surface)'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className={`badge ${isDestructive ? 'badge-red' : 'badge-amber'}`}>
-                          {isDestructive ? 'High Risk Action' : 'Approval Required'}
-                        </span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                          id: {req.id}
-                        </span>
-                      </div>
+                  {/* Top Bar: Action Requires Your Approval & Risk Tag */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertTriangle size={16} color={isHighRisk ? 'var(--danger)' : 'var(--warning)'} />
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        ACTION REQUIRES YOUR APPROVAL
+                      </span>
+                    </div>
 
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px' }}>
-                        Agent wants to execute:
-                      </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className={`badge ${isHighRisk ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: '10px' }}>
+                        Risk: {isHighRisk ? 'HIGH' : 'MEDIUM'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        req-{req.id.slice(0, 8)}
+                      </span>
+                    </div>
+                  </div>
 
-                      <div style={{ 
-                        fontFamily: 'var(--font-mono)', 
-                        fontSize: '12px', 
-                        padding: '8px 12px', 
-                        backgroundColor: 'var(--surface-elevated)', 
-                        borderRadius: '6px', 
-                        border: '1px solid var(--border)',
-                        color: 'var(--text-primary)',
-                        marginTop: '4px'
-                      }}>
-                        {req.action || 'Protected command invocation'}
+                  {/* Operation Prompt */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      <strong>{req.agent_id || 'Agent'}</strong> wants to execute:
+                    </div>
+
+                    <div style={{ 
+                      fontFamily: 'var(--font-mono)', 
+                      fontSize: '12px', 
+                      padding: '10px 14px', 
+                      backgroundColor: 'var(--bg)', 
+                      borderRadius: '6px', 
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                      overflowX: 'auto'
+                    }}>
+                      {actionStr || 'Protected command invocation'}
+                    </div>
+                  </div>
+
+                  {/* Why Section */}
+                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                    <strong style={{ color: 'var(--text-secondary)' }}>Why:</strong> {req.reason || 'This operation touches sensitive workspace boundaries or modifies files outside active task scope.'}
+                  </div>
+
+                  {/* Metadata Row */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    paddingTop: '10px', 
+                    borderTop: '1px solid var(--border-subtle)' 
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <ProviderLogo providerId={req.agent_id} size={14} />
+                        <span>Agent: <strong style={{ color: 'var(--text-primary)' }}>{req.agent_id || 'Worker'}</strong></span>
+                      </div>
+                      <div>
+                        Mission: <strong style={{ color: 'var(--text-primary)' }}>{req.mission_id || 'General'}</strong>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: '11px', color: 'var(--text-muted)' }}
+                        onClick={() => setExpandedDetailsId(isExpanded ? null : req.id)}
+                      >
+                        <span>{isExpanded ? 'Hide Details' : 'View Details'}</span>
+                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
+
                       <button
                         className="btn btn-danger btn-sm"
                         disabled={actingId === req.id}
@@ -134,20 +190,25 @@ export const Approvals: React.FC<ApprovalsProps> = ({
                         onClick={() => handleResolve(req.id, 'APPROVE_ONCE')}
                       >
                         <CheckCircle2 size={13} />
-                        <span>Allow Once</span>
+                        <span>Approve Once</span>
                       </button>
                     </div>
                   </div>
 
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    <strong>Reason:</strong> {req.reason || 'Operation touches safety perimeter or restricted repository resource'}
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-                    <span>Agent: {req.agent_id || 'unknown'}</span>
-                    <span>Mission: {req.mission_id || 'unassigned'}</span>
-                    <span>Requested: {new Date(req.created_at || Date.now()).toLocaleTimeString()}</span>
-                  </div>
+                  {/* Expandable Technical Details */}
+                  {isExpanded && (
+                    <div style={{
+                      padding: '12px',
+                      borderRadius: '6px',
+                      backgroundColor: 'var(--surface-elevated)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      <pre>{JSON.stringify(req, null, 2)}</pre>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -167,23 +228,25 @@ export const Approvals: React.FC<ApprovalsProps> = ({
             {resolved.map(req => {
               const isApproved = req.status === 'APPROVED';
               return (
-                <div key={req.id} className="item-row" style={{ cursor: 'default' }}>
-                  <div className="item-row-primary">
+                <div key={req.id} className="surface-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {isApproved ? <CheckCircle2 size={15} color="var(--success)" /> : <XCircle size={15} color="var(--danger)" />}
                     <div>
-                      <div style={{ fontSize: '13px', fontWeight: 500 }}>{req.action || 'Protected action'}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                        {req.action || 'Protected action'}
+                      </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Resolved by: {req.resolved_by || 'human_supervisor'}
+                        Resolved by: {req.resolved_by || 'human_supervisor'} &bull; {req.agent_id || 'agent'}
                       </div>
                     </div>
                   </div>
 
-                  <div className="item-row-meta">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span className={`badge ${isApproved ? 'badge-green' : 'badge-red'}`}>
                       {req.status.toLowerCase()}
                     </span>
-                    <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
-                      {new Date(req.created_at || Date.now()).toLocaleDateString()}
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {req.created_at ? new Date(req.created_at).toLocaleDateString() : 'Recent'}
                     </span>
                   </div>
                 </div>

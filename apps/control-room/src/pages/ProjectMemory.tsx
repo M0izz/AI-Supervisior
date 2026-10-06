@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { 
   Database, 
   Plus, 
-  Search 
+  Search,
+  AlertTriangle,
+  FileCode,
+  ShieldCheck
 } from 'lucide-react';
 import type { MemoryRecord, Mission } from '../types';
 import { addMemoryRecord } from '../api';
@@ -22,19 +25,35 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newContent, setNewContent] = useState('');
-  const [newCategory, setNewCategory] = useState<'VERIFIED_FACT' | 'REJECTED_APPROACH' | 'DECISION'>('VERIFIED_FACT');
+  const [newCategory, setNewCategory] = useState<'VERIFIED_FACT' | 'REJECTED_APPROACH' | 'DECISION' | 'FAILURE' | 'DISCOVERY'>('VERIFIED_FACT');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const safeRecords = Array.isArray(memoryRecords) ? memoryRecords : [];
   const safeMissions = Array.isArray(missions) ? missions : [];
 
+  const filterTabs = [
+    { id: 'ALL', label: 'All' },
+    { id: 'VERIFIED', label: 'Verified' },
+    { id: 'DECISION', label: 'Decisions' },
+    { id: 'REJECTED', label: 'Rejected' },
+    { id: 'FAILURE', label: 'Failures' },
+    { id: 'DISCOVERY', label: 'Discoveries' }
+  ];
+
   const filteredRecords = safeRecords.filter(rec => {
     const cat = (rec.category || rec.type || rec.status || '').toUpperCase();
-    if (selectedCategory !== 'ALL' && !cat.includes(selectedCategory)) return false;
+    if (selectedCategory !== 'ALL') {
+      if (selectedCategory === 'VERIFIED' && !cat.includes('VERIF')) return false;
+      if (selectedCategory === 'DECISION' && !cat.includes('DECIS')) return false;
+      if (selectedCategory === 'REJECTED' && !cat.includes('REJECT')) return false;
+      if (selectedCategory === 'FAILURE' && !cat.includes('FAIL')) return false;
+      if (selectedCategory === 'DISCOVERY' && !cat.includes('DISCOV')) return false;
+    }
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       const content = (rec.fact || rec.content || '').toLowerCase();
-      return content.includes(q);
+      const missionId = (rec.mission_id || '').toLowerCase();
+      return content.includes(q) || missionId.includes(q);
     }
     return true;
   });
@@ -47,12 +66,12 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
       const primaryMissionId = safeMissions[0]?.id || 'global';
       await addMemoryRecord(primaryMissionId, {
         fact: newContent.trim(),
-        source: 'supervisor_operator',
+        source: 'supervisor_verification',
         created_by: 'human_operator',
         category: newCategory.toLowerCase(),
         status: newCategory === 'VERIFIED_FACT' ? 'VERIFIED' : 'OBSERVED',
         confidence: 1.0,
-        details: 'Manually verified architectural constraint'
+        details: 'Verified architectural knowledge'
       });
       setNewContent('');
       setIsAdding(false);
@@ -69,7 +88,7 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
         <div className="page-header-title">
           <h1>Project Memory</h1>
           <p>
-            Facts, architectural decisions, and rejected approaches that persist across agents and missions.
+            What Supervisor has learned about this project. Facts, decisions, and failure patterns that persist across agents.
           </p>
         </div>
 
@@ -86,24 +105,26 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
         <form onSubmit={handleCreateMemory} className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', borderColor: 'var(--primary-border)' }}>
           <div style={{ fontWeight: 600, fontSize: '13px' }}>Record Knowledge for Agent Fleet</div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '200px' }}>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '220px' }}>
               <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Category</label>
               <select
                 value={newCategory}
                 onChange={e => setNewCategory(e.target.value as any)}
               >
                 <option value="VERIFIED_FACT">Verified Fact</option>
-                <option value="REJECTED_APPROACH">Rejected Approach</option>
                 <option value="DECISION">Architecture Decision</option>
+                <option value="REJECTED_APPROACH">Rejected Approach</option>
+                <option value="FAILURE">Known Failure Mode</option>
+                <option value="DISCOVERY">Codebase Discovery</option>
               </select>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
-              <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Description</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '240px' }}>
+              <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Statement</label>
               <input
                 type="text"
-                placeholder="e.g. CSV parser requires UTF-8 without BOM due to header parsing bug"
+                placeholder="e.g. CSV parser must support UTF-8 BOM encoding without corruption"
                 value={newContent}
                 onChange={e => setNewContent(e.target.value)}
                 autoFocus
@@ -123,15 +144,10 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
         </form>
       )}
 
-      {/* Filter and Search */}
+      {/* Filter and Search Bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {[
-            { id: 'ALL', label: 'All Knowledge' },
-            { id: 'VERIF', label: 'Verified Facts' },
-            { id: 'REJECT', label: 'Rejected Approaches' },
-            { id: 'DECISION', label: 'Decisions' }
-          ].map(f => (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {filterTabs.map(f => (
             <button
               key={f.id}
               className={`btn btn-sm ${selectedCategory === f.id ? 'btn-secondary' : 'btn-ghost'}`}
@@ -146,7 +162,7 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
         <div style={{ position: 'relative', width: '260px' }}>
           <input
             type="text"
-            placeholder="Search memory records..."
+            placeholder="Search memory..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{ width: '100%', paddingLeft: '32px' }}
@@ -161,17 +177,46 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
           <div className="empty-state-icon">
             <Database size={18} />
           </div>
-          <div className="empty-state-title">No memory records found</div>
+          <div className="empty-state-title">Nothing learned yet</div>
           <div className="empty-state-desc">
-            Project memory is automatically accumulated as agents execute tasks and verification discovers facts, or you can record custom facts manually.
+            {searchTerm 
+              ? `No memory records match "${searchTerm}".` 
+              : 'Verified facts, architectural decisions, and rejected approaches will appear here as Supervisor works.'}
           </div>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
           {filteredRecords.map(rec => {
             const cat = (rec.category || rec.type || rec.status || '').toUpperCase();
-            const isVerified = cat.includes('VERIF');
             const isRejected = cat.includes('REJECT');
+            const isFailure = cat.includes('FAIL');
+            const isDecision = cat.includes('DECIS');
+
+            let typeLabel = 'VERIFIED FACT';
+            let badgeClass = 'badge-green';
+            let borderColor = 'var(--success)';
+            let Icon = ShieldCheck;
+
+            if (isRejected) {
+              typeLabel = 'REJECTED APPROACH';
+              badgeClass = 'badge-amber';
+              borderColor = 'var(--warning)';
+              Icon = AlertTriangle;
+            } else if (isFailure) {
+              typeLabel = 'FAILURE MODE';
+              badgeClass = 'badge-red';
+              borderColor = 'var(--danger)';
+              Icon = AlertTriangle;
+            } else if (isDecision) {
+              typeLabel = 'ARCHITECTURE DECISION';
+              badgeClass = 'badge-blue';
+              borderColor = 'var(--primary)';
+              Icon = FileCode;
+            }
+
+            // Find related mission title
+            const relatedMission = safeMissions.find(m => m.id === rec.mission_id);
+            const missionDisplay = relatedMission?.title || (rec.mission_id ? `Mission #${rec.mission_id.slice(0, 8)}` : 'Global Project');
 
             return (
               <div 
@@ -181,16 +226,18 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  gap: '12px',
-                  borderLeft: isVerified ? '3px solid var(--success)' : isRejected ? '3px solid var(--danger)' : '3px solid var(--primary)'
+                  gap: '14px',
+                  borderLeft: `3px solid ${borderColor}`,
+                  padding: '16px 18px'
                 }}
               >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span className={`badge ${isVerified ? 'badge-green' : isRejected ? 'badge-red' : 'badge-blue'}`}>
-                      {isVerified ? 'Verified Fact' : isRejected ? 'Rejected Approach' : 'Architecture Decision'}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span className={`badge ${badgeClass}`} style={{ fontSize: '10px', letterSpacing: '0.04em' }}>
+                      <Icon size={11} />
+                      <span>{typeLabel}</span>
                     </span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                       {new Date(rec.created_at).toLocaleDateString()}
                     </span>
                   </div>
@@ -200,9 +247,34 @@ export const ProjectMemory: React.FC<ProjectMemoryProps> = ({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-                  <span>Source: {rec.source || 'supervisor_verification'}</span>
-                  <span>Confidence: {Math.round((rec.confidence || 1) * 100)}%</span>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '8px',
+                  paddingTop: '10px',
+                  borderTop: '1px solid var(--border-subtle)',
+                  fontSize: '11px'
+                }}>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Confidence</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
+                      {Math.round((rec.confidence || 1) * 100)}%
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Verified By</div>
+                    <div style={{ color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {rec.source === 'supervisor_verification' ? 'Test suite' : rec.source || 'Supervisor'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>Related Mission</div>
+                    <div style={{ color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {missionDisplay}
+                    </div>
+                  </div>
                 </div>
               </div>
             );

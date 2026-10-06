@@ -46,3 +46,38 @@ def test_seed_demo_and_query_endpoints(client):
     pause_res = client.post(f"/api/missions/{mission_id}/pause", json={"reason": "Operator test pause"})
     assert pause_res.status_code == 200
     assert pause_res.json()["status"] == "paused"
+
+
+def test_natural_language_draft_mission(client):
+    # Test drafting with natural language goal
+    goal = "Fix the authentication failures and handle expired session tokens properly"
+    draft_res = client.post("/api/missions/draft", json={"goal": goal})
+    assert draft_res.status_code == 200
+    draft = draft_res.json()
+
+    assert draft["goal"] == goal
+    assert "Authentication" in draft["title"] or "Fix" in draft["title"]
+    assert len(draft["proposed_tasks"]) >= 3
+    assert len(draft["suggested_agents"]) >= 1
+    assert "Claude Code" in draft["suggested_agents"][0] or "claude" in draft["suggested_agents"][0].lower()
+    assert draft["verification_plan"]["isolated_sandbox"] is True
+    assert draft["verification_plan"]["automated_tests"] is True
+
+    # Test creating mission directly with the draft's decomposed tasks
+    create_res = client.post("/api/missions", json={
+        "title": draft["title"],
+        "goal": draft["goal"],
+        "repository_path": draft["repository_path"],
+        "tasks": draft["proposed_tasks"]
+    })
+    assert create_res.status_code == 200
+    created = create_res.json()
+    assert created["title"] == draft["title"]
+    assert created["status"] in ["CREATED", "PLANNING", "RUNNING"]
+
+    # Verify initialized tasks exist on the mission
+    tasks_res = client.get(f"/api/missions/{created['id']}/tasks")
+    assert tasks_res.status_code == 200
+    tasks_data = tasks_res.json()
+    assert len(tasks_data["tasks"]) == len(draft["proposed_tasks"])
+

@@ -64,14 +64,14 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span>{isSeeding ? 'Seeding demo...' : 'Demo Scenario'}</span>
         </button>
 
-        {/* Create Mission Button */}
+        {/* Start Mission Button */}
         <button
           className="btn btn-primary btn-sm"
           onClick={onOpenCreateMission}
           title="Start a new supervised mission"
         >
           <Plus size={14} />
-          <span>New Mission</span>
+          <span>Start a Mission</span>
         </button>
 
         {/* HUD Launcher (if supported) */}

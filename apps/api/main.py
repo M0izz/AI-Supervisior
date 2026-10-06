@@ -51,11 +51,39 @@ app.add_middleware(
 
 
 # Request schemas
+class ProposedTaskDraft(BaseModel):
+    id: str
+    title: str
+    description: str
+    suggested_agent: str = "claude-code"
+    expected_files: List[str] = []
+    dependencies: List[str] = []
+    order: int = 1
+
+
+class DraftMissionRequest(BaseModel):
+    goal: str
+    repository_path: Optional[str] = "./demo/sample-project"
+
+
+class DraftMissionResponse(BaseModel):
+    title: str
+    goal: str
+    repository_path: str
+    interpreted_steps: List[str]
+    proposed_tasks: List[ProposedTaskDraft]
+    suggested_agents: List[str]
+    fallback_agent: str
+    inferred_constraints: Dict[str, Any]
+    verification_plan: Dict[str, Any]
+
+
 class CreateMissionRequest(BaseModel):
     title: str
     goal: str
     repository_path: Optional[str] = "./demo/sample-project"
     constraints: Optional[MissionConstraints] = None
+    tasks: Optional[List[Dict[str, Any]]] = None
 
 
 class PauseMissionRequest(BaseModel):
@@ -184,6 +212,129 @@ async def execution_health_check():
 
 
 # --- Missions ---
+@app.post("/api/missions/draft", response_model=DraftMissionResponse)
+async def draft_mission(req: DraftMissionRequest):
+    """
+    Natural Language Mission Composer:
+    Interprets natural language goal into structured steps, proposed tasks,
+    suggested agents, constraints, and verification plan.
+    """
+    goal = req.goal.strip()
+    repo = req.repository_path or "./demo/sample-project"
+    goal_lower = goal.lower()
+    
+    words = goal.split()
+    if len(words) <= 7:
+        title = " ".join([w.capitalize() for w in words])
+    else:
+        title = " ".join([w.capitalize() for w in words[:6]]) + "..."
+
+    if any(k in goal_lower for k in ["auth", "login", "jwt", "session", "token"]):
+        title = "Fix Authentication & Expired Session Handling"
+        interpreted_steps = [
+            "Inspect current authentication session flow and token refresh",
+            "Identify expired-session and error handling boundaries",
+            "Implement resilient token validation and renewal",
+            "Add/update regression test suite for session edge cases",
+            "Run authentication test suite in isolated sandbox",
+            "Verify that only authentication-scoped files were changed"
+        ]
+        tasks = [
+            ProposedTaskDraft(id="TASK-001", title="Inspect session flow & model", description="Audit session timeout handling and token decoding", suggested_agent="claude-code", expected_files=["src/auth/session.py"], order=1),
+            ProposedTaskDraft(id="TASK-002", title="Implement session renewal fix", description="Ensure expired tokens refresh cleanly without 500 error", suggested_agent="claude-code", dependencies=["TASK-001"], expected_files=["src/auth/handler.py"], order=2),
+            ProposedTaskDraft(id="TASK-003", title="Add regression tests", description="Coverage for expired tokens and malformed signatures", suggested_agent="claude-code", dependencies=["TASK-002"], expected_files=["tests/test_auth.py"], order=3),
+            ProposedTaskDraft(id="TASK-004", title="Independent verification", description="Run pytest test_auth.py and verify git diff scope", suggested_agent="codex", dependencies=["TASK-003"], expected_files=["tests/test_auth.py"], order=4),
+        ]
+        suggested_agents = ["claude-code", "codex"]
+        fallback_agent = "codex"
+    elif any(k in goal_lower for k in ["dark", "mode", "theme", "ui", "css", "color"]):
+        title = "Implement Dark Mode Theme & Settings Persistence"
+        interpreted_steps = [
+            "Audit CSS design tokens and theme variables",
+            "Implement dark theme palettes and contrast tokens",
+            "Wire preference toggle and local persistence in settings",
+            "Verify visual consistency and accessibility contrast",
+            "Verify zero breaking changes in surrounding layout"
+        ]
+        tasks = [
+            ProposedTaskDraft(id="TASK-001", title="Audit CSS tokens", description="Define surface, text, and border CSS custom properties", suggested_agent="claude-code", expected_files=["src/theme.css"], order=1),
+            ProposedTaskDraft(id="TASK-002", title="Add theme switcher & storage", description="Integrate theme toggle into settings UI", suggested_agent="claude-code", dependencies=["TASK-001"], expected_files=["src/settings.tsx"], order=2),
+            ProposedTaskDraft(id="TASK-003", title="Test accessibility & contrast", description="Ensure WCAG AA compliance across components", suggested_agent="codex", dependencies=["TASK-002"], expected_files=["tests/test_theme.py"], order=3),
+        ]
+        suggested_agents = ["claude-code", "gemini"]
+        fallback_agent = "gemini"
+    elif any(k in goal_lower for k in ["500", "error", "bug", "failing", "crash", "fix"]):
+        title = f"Resolve Defect: {title}"
+        interpreted_steps = [
+            "Capture error signatures and inspect relevant log traces",
+            "Locate root cause in codebase",
+            "Implement targeted defect patch",
+            "Run regression tests to verify bug resolution",
+            "Independent verification of workspace cleanliness"
+        ]
+        tasks = [
+            ProposedTaskDraft(id="TASK-001", title="Analyze error logs & traces", description="Identify failing code paths and exception roots", suggested_agent="claude-code", expected_files=["src/errors.py"], order=1),
+            ProposedTaskDraft(id="TASK-002", title="Apply targeted code patch", description="Fix issue without altering public contracts", suggested_agent="claude-code", dependencies=["TASK-001"], expected_files=["src/service.py"], order=2),
+            ProposedTaskDraft(id="TASK-003", title="Run regression test suite", description="Ensure bug fix passes and no regressions introduced", suggested_agent="codex", dependencies=["TASK-002"], expected_files=["tests/test_service.py"], order=3),
+        ]
+        suggested_agents = ["claude-code", "codex"]
+        fallback_agent = "codex"
+    elif any(k in goal_lower for k in ["refactor", "clean", "rewrite", "payment"]):
+        title = f"Refactor Module: {title}"
+        interpreted_steps = [
+            "Map existing module public interfaces and invariants",
+            "Refactor internal implementation for clarity and maintainability",
+            "Preserve backwards compatibility and public signatures",
+            "Run full regression suite to ensure zero behavior divergence",
+            "Perform independent diff and scope check"
+        ]
+        tasks = [
+            ProposedTaskDraft(id="TASK-001", title="Map interface invariants", description="Document public function signatures and expected behavior", suggested_agent="claude-code", expected_files=["src/module.py"], order=1),
+            ProposedTaskDraft(id="TASK-002", title="Refactor internal implementation", description="Clean up architectural complexity", suggested_agent="claude-code", dependencies=["TASK-001"], expected_files=["src/module.py"], order=2),
+            ProposedTaskDraft(id="TASK-003", title="Run parity tests", description="Verify contract adherence and regression coverage", suggested_agent="codex", dependencies=["TASK-002"], expected_files=["tests/test_module.py"], order=3),
+        ]
+        suggested_agents = ["claude-code", "codex"]
+        fallback_agent = "codex"
+    else:
+        interpreted_steps = [
+            f"Analyze requirements for outcome: {goal[:60]}",
+            "Decompose implementation into modular execution tasks",
+            "Execute changes via autonomous worker agent",
+            "Run automated test verification",
+            "Independently certify task completion and diff scope"
+        ]
+        tasks = [
+            ProposedTaskDraft(id="TASK-001", title="Analyze requirements & context", description="Inspect relevant files and plan changes", suggested_agent="claude-code", expected_files=["src/main.py"], order=1),
+            ProposedTaskDraft(id="TASK-002", title="Implement core changes", description="Apply requested functionality", suggested_agent="claude-code", dependencies=["TASK-001"], expected_files=["src/app.py"], order=2),
+            ProposedTaskDraft(id="TASK-003", title="Test & verify output", description="Run automated test suite and check scope", suggested_agent="codex", dependencies=["TASK-002"], expected_files=["tests/test_app.py"], order=3),
+        ]
+        suggested_agents = ["claude-code", "codex"]
+        fallback_agent = "codex"
+
+    return DraftMissionResponse(
+        title=title,
+        goal=goal,
+        repository_path=repo,
+        interpreted_steps=interpreted_steps,
+        proposed_tasks=tasks,
+        suggested_agents=suggested_agents,
+        fallback_agent=fallback_agent,
+        inferred_constraints={
+            "max_turns": 10,
+            "timeout_seconds": 3600,
+            "prohibited_files": [".env", "secrets.json", "id_rsa", "config/credentials.json"],
+            "allowed_commands": ["pytest", "git status", "git diff", "npm test", "python -m unittest"]
+        },
+        verification_plan={
+            "policy": "STRICT",
+            "isolated_sandbox": True,
+            "automated_tests": True,
+            "scope_diff_check": True,
+            "prohibited_modifications_check": True
+        }
+    )
+
+
 @app.post("/api/missions", response_model=Mission)
 async def create_mission(req: CreateMissionRequest):
     mission = await app_state.mission_manager.create_mission(
@@ -192,6 +343,23 @@ async def create_mission(req: CreateMissionRequest):
         repository_path=req.repository_path or "./demo/sample-project",
         constraints=req.constraints
     )
+
+    if req.tasks:
+        from core.tasks.models import Task as CoreTask
+        task_objs = []
+        for i, t in enumerate(req.tasks):
+            t_id = t.get("id") or f"TASK-{str(i+1).zfill(3)}"
+            task_objs.append(CoreTask(
+                id=t_id,
+                mission_id=mission.id,
+                title=t.get("title", f"Task {i+1}"),
+                description=t.get("description", ""),
+                dependencies=t.get("dependencies", []),
+                order=t.get("order", i+1),
+                expected_files=t.get("expected_files", [])
+            ))
+        await app_state.task_manager.initialize_mission_tasks(mission.id, task_objs)
+
     return mission
 
 

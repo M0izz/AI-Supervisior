@@ -26,7 +26,7 @@ import { useWebSocket } from './useWebSocket';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { CommandPalette } from './components/CommandPalette';
-import { CreateMissionModal } from './components/CreateMissionModal';
+import { MissionComposer } from './components/MissionComposer';
 import { SyncModal } from './components/SyncModal';
 
 // Reconstructed Pages
@@ -265,6 +265,7 @@ export const App: React.FC = () => {
               }}
               onNavigateToTab={setActiveTab}
               onOpenCreateMission={() => setIsCreateMissionOpen(true)}
+              onRefresh={loadData}
             />
           )}
 
@@ -336,10 +337,10 @@ export const App: React.FC = () => {
         onSelectAgent={setSelectedAgentId}
       />
 
-      <CreateMissionModal
+      <MissionComposer
         isOpen={isCreateMissionOpen}
         onClose={() => setIsCreateMissionOpen(false)}
-        onMissionCreated={(newMission) => {
+        onMissionStarted={(newMission) => {
           setSelectedMissionId(newMission.id);
           setActiveTab('missions');
           loadData();
