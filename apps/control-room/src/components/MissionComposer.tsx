@@ -6,7 +6,8 @@ import {
   Sliders, 
   ChevronDown, 
   ChevronUp, 
-  AlertCircle
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { draftMission, createMission, type DraftMissionResponse } from '../api';
 import type { Mission } from '../types';
@@ -39,6 +40,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
   const [agentPreference, setAgentPreference] = useState('claude-code');
   const [maxTurns, setMaxTurns] = useState(10);
   const [prohibitedFiles, setProhibitedFiles] = useState('.env, secrets.json, id_rsa');
+  const [verificationReq, setVerificationReq] = useState('STRICT');
 
   useEffect(() => {
     if (isOpen) {
@@ -52,11 +54,12 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
   if (!isOpen) return null;
 
   const examplePrompts = [
-    "Fix the failing authentication tests",
-    "Add dark mode to the settings page",
-    "Find why the API is returning 500 errors",
-    "Refactor the payment module without changing its public API",
-    "Review this repository for security issues and vulnerable dependencies"
+    "Fix the authentication bug in my app and make sure existing tests pass",
+    "Add dark mode without changing the existing navigation",
+    "Find why the API is returning 500 errors and fix the root cause",
+    "Review this project for obvious security issues and fix anything safe to fix",
+    "Improve the loading performance of the dashboard",
+    "Add CSV import support and validate malformed files"
   ];
 
   const handleInterpretGoal = async (promptToUse?: string) => {
@@ -138,8 +141,8 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
         <div className="modal-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{
-              width: '24px',
-              height: '24px',
+              width: '26px',
+              height: '26px',
               borderRadius: '6px',
               backgroundColor: 'var(--primary-subtle)',
               display: 'flex',
@@ -149,7 +152,8 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
               <Sparkles size={14} color="var(--primary)" />
             </div>
             <div>
-              <h2 style={{ fontSize: '16px', fontWeight: 600 }}>Mission Composer</h2>
+              <h2 style={{ fontSize: '15px', fontWeight: 600 }}>Start a new mission</h2>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tell Supervisor what you want to accomplish.</div>
             </div>
           </div>
 
@@ -158,7 +162,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
           </button>
         </div>
 
-        <div className="modal-body" style={{ padding: '20px', gap: '20px', overflowY: 'auto' }}>
+        <div className="modal-body" style={{ padding: '20px', gap: '18px', overflowY: 'auto' }}>
           {error && (
             <div style={{
               display: 'flex',
@@ -180,16 +184,20 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
               <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                What do you want your agents to get done?
+                What do you want to get done?
               </label>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 Press Enter to interpret · Shift+Enter for newline
               </span>
             </div>
 
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '2px' }}>
+              Describe the outcome in your own words. Supervisor will break it down, choose the right agents, and verify the result.
+            </div>
+
             <textarea
               rows={3}
-              placeholder="Tell Supervisor what you want done (e.g., Fix the failing authentication tests)..."
+              placeholder="Fix the authentication bug in my app and make sure the existing tests still pass..."
               value={goalInput}
               onChange={e => {
                 setGoalInput(e.target.value);
@@ -209,7 +217,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
             {/* Clickable Example Prompts (only when draft not generated) */}
             {!draft && !isUnderstanding && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Or choose an outcome example:</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Examples:</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {examplePrompts.map(ex => (
                     <button
@@ -226,6 +234,45 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
               </div>
             )}
           </div>
+
+          {/* Supervisor Will Guarantee List (Shown before plan) */}
+          {!draft && !isUnderstanding && (
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--surface-elevated)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Supervisor will:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={13} color="var(--success)" />
+                  <span>Understand the goal</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={13} color="var(--success)" />
+                  <span>Break it into tasks</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={13} color="var(--success)" />
+                  <span>Choose best available agent</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={13} color="var(--success)" />
+                  <span>Monitor execution</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={13} color="var(--success)" />
+                  <span>Verify result independently</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Supervisor Understanding State */}
           {isUnderstanding && (
@@ -251,7 +298,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
             </div>
           )}
 
-          {/* Supervisor Interpretation Preview */}
+          {/* Smart Preview Before Execution (Section 6) */}
           {draft && !isUnderstanding && (
             <div style={{
               display: 'flex',
@@ -266,51 +313,59 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Sparkles size={15} color="var(--primary)" />
                   <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
-                    Supervisor Interpretation
+                    Supervisor understood:
                   </span>
                 </div>
                 <span className="badge badge-blue">Plan Ready</span>
               </div>
 
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                {draft.title}
-              </div>
-
-              {/* Interpretation Steps */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Supervisor Understood
-                </span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {draft.interpreted_steps.map((st, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                      <span style={{ color: 'var(--primary)' }}>•</span>
-                      <span>{st}</span>
-                    </div>
-                  ))}
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Goal</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
+                  {draft.title}
                 </div>
               </div>
 
-              {/* Grid of Key Strategy Attributes */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Execution Plan</div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
-                    {draft.proposed_tasks.length} tasks
-                  </div>
+              {/* Proposed Plan Tree */}
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Plan ({draft.proposed_tasks.length} tasks)
                 </div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  backgroundColor: 'var(--bg)',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6
+                }}>
+                  {draft.proposed_tasks.map((t, i) => {
+                    const isLast = i === draft.proposed_tasks.length - 1;
+                    return (
+                      <div key={t.id || i}>
+                        <span style={{ color: 'var(--text-muted)' }}>{isLast ? '└── ' : '├── '}</span>
+                        <span style={{ color: 'var(--text-primary)' }}>{t.title}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
+              {/* Agent Strategy & Verification Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Assigned Agents</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Agent strategy</div>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
-                    {draft.suggested_agents.join(' → ')}
+                    {draft.suggested_agents[0] || 'Claude Code'} &rarr; {draft.fallback_agent || 'Codex'} (fallback)
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Independent Verifier</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Verification</div>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--success)', marginTop: '2px' }}>
-                    Strict (Isolated Sandbox)
+                    Tests + Scope + Regression
                   </div>
                 </div>
               </div>
@@ -324,7 +379,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                   onClick={() => setShowPlanTasks(!showPlanTasks)}
                 >
                   {showPlanTasks ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  <span>{showPlanTasks ? 'Hide task graph breakdown' : 'Review task graph breakdown'}</span>
+                  <span>{showPlanTasks ? 'Hide task details' : 'Review task graph breakdown'}</span>
                 </button>
 
                 {showPlanTasks && (
@@ -353,7 +408,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
               onClick={() => setShowAdvanced(!showAdvanced)}
             >
               <Sliders size={13} />
-              <span>Advanced mission controls & perimeter</span>
+              <span>Advanced controls</span>
               {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             </button>
 
@@ -373,7 +428,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    Primary Execution Agent
+                    Preferred Agent
                   </label>
                   <select
                     value={agentPreference}
@@ -389,7 +444,7 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    Max Turns Budget
+                    Turn Budget Limit
                   </label>
                   <input
                     type="number"
@@ -399,6 +454,20 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                     onChange={e => setMaxTurns(parseInt(e.target.value, 10) || 10)}
                     style={{ fontSize: '12px' }}
                   />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    Verification Strictness
+                  </label>
+                  <select
+                    value={verificationReq}
+                    onChange={e => setVerificationReq(e.target.value)}
+                    style={{ fontSize: '12px' }}
+                  >
+                    <option value="STRICT">Strict (Isolated sandbox tests + AST)</option>
+                    <option value="STANDARD">Standard (Unit tests pass)</option>
+                  </select>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: '1 / -1' }}>
@@ -437,15 +506,26 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
               <span>{isUnderstanding ? 'Interpreting...' : 'Generate Plan'}</span>
             </button>
           ) : (
-            <button 
-              type="button" 
-              className="btn btn-primary" 
-              onClick={handleStartMission}
-              disabled={isStarting}
-            >
-              <Target size={13} />
-              <span>{isStarting ? 'Starting Supervision...' : 'Start Mission'}</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setDraft(null)}
+                disabled={isStarting}
+              >
+                Edit Request
+              </button>
+
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={handleStartMission}
+                disabled={isStarting}
+              >
+                <Target size={13} />
+                <span>{isStarting ? 'Starting Supervision...' : 'Start Mission →'}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>

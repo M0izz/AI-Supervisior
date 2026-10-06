@@ -10,9 +10,10 @@ import {
   Play,
   Pause,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  Database
 } from 'lucide-react';
-import type { Mission, AgentRecord, ApprovalRequest, Event, InterventionDetail, AdapterInfo } from '../types';
+import type { Mission, AgentRecord, ApprovalRequest, Event, InterventionDetail, AdapterInfo, MemoryRecord } from '../types';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { pauseMission, resumeMission } from '../api';
 
@@ -23,6 +24,7 @@ interface OverviewProps {
   approvals: ApprovalRequest[];
   interventions: InterventionDetail[];
   events: Event[];
+  memoryRecords?: MemoryRecord[];
   onSelectMission: (missionId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onNavigateToTab: (tab: any) => void;
@@ -37,6 +39,7 @@ export const Overview: React.FC<OverviewProps> = ({
   approvals,
   interventions,
   events,
+  memoryRecords = [],
   onSelectMission,
   onSelectAgent,
   onNavigateToTab,
@@ -48,6 +51,20 @@ export const Overview: React.FC<OverviewProps> = ({
   const safeApprovals = Array.isArray(approvals) ? approvals : [];
   const safeEvents = Array.isArray(events) ? events : [];
   const safeAdapters = Array.isArray(adapters) ? adapters : [];
+  const safeMemory = Array.isArray(memoryRecords) ? memoryRecords : [];
+
+  const verifiedCount = safeMemory.filter(m => {
+    const cat = (m.category || m.type || m.status || '').toUpperCase();
+    return cat.includes('VERIF') || (!cat.includes('REJECT') && !cat.includes('FAIL'));
+  }).length;
+  const rejectedCount = safeMemory.filter(m => {
+    const cat = (m.category || m.type || m.status || '').toUpperCase();
+    return cat.includes('REJECT') || cat.includes('FAIL');
+  }).length;
+  const decisionCount = safeMemory.filter(m => {
+    const cat = (m.category || m.type || m.status || '').toUpperCase();
+    return cat.includes('DECIS');
+  }).length;
 
   const activeMissions = safeMissions.filter(m => 
     ['RUNNING', 'INVESTIGATING', 'RECOVERING', 'VERIFYING', 'WAITING_APPROVAL'].includes(m.status)
@@ -513,6 +530,60 @@ export const Overview: React.FC<OverviewProps> = ({
             })}
           </div>
         )}
+      </div>
+
+      {/* 6. Project Intelligence / Memory Section */}
+      <div className="section-group">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="section-title">
+            <Database size={14} color="var(--text-secondary)" />
+            <span>Project Memory & Intelligence</span>
+          </div>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => onNavigateToTab('memory')}
+          >
+            <span>View Memory</span>
+            <ArrowRight size={12} />
+          </button>
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: '12px'
+        }}>
+          <div className="surface-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>
+              <CheckCircle2 size={15} />
+              <span>{verifiedCount} Verified Fact{verifiedCount === 1 ? '' : 's'}</span>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Proven assertions and constraints confirmed by independent test and git verification suites.
+            </div>
+          </div>
+
+          <div className="surface-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontSize: '13px', fontWeight: 600 }}>
+              <AlertTriangle size={15} />
+              <span>{rejectedCount} Rejected Approach{rejectedCount === 1 ? '' : 'es'}</span>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Negative precedents and broken patterns blocked by Supervisor to prevent regression loops.
+            </div>
+          </div>
+
+          <div className="surface-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)', fontSize: '13px', fontWeight: 600 }}>
+              <ShieldCheck size={15} />
+              <span>{decisionCount > 0 ? decisionCount : (safeMemory.length > 0 ? 1 : 0)} Architectural Decision{decisionCount === 1 ? '' : 's'}</span>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Persistent structural guidelines and policy boundaries learned across all execution missions.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

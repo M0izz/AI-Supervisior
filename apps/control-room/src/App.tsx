@@ -255,6 +255,7 @@ export const App: React.FC = () => {
               approvals={approvals}
               interventions={interventions}
               events={events}
+              memoryRecords={memoryRecords}
               onSelectMission={(id) => {
                 setSelectedMissionId(id);
                 setActiveTab('missions');
