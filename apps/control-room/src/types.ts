@@ -230,6 +230,15 @@ export interface InterventionDetail {
 }
 
 export type TabType = 
+  | 'overview'
+  | 'missions'
+  | 'agents'
+  | 'memory'
+  | 'activity'
+  | 'approvals'
+  | 'settings'
+  | 'landing'
+  // Legacy aliases for backward compatibility
   | 'control_room'
   | 'mission_detail'
   | 'agent_detail'
@@ -288,6 +297,12 @@ export interface SupervisorDesktopBridge {
   quit: () => Promise<void>;
   onHudToggle?: (callback: () => void) => () => void;
   onBackendStateChange?: (callback: (state: string) => void) => () => void;
+}
+
+declare global {
+  interface Window {
+    supervisorDesktop?: SupervisorDesktopBridge;
+  }
 }
 
 export interface AbsencePolicy {

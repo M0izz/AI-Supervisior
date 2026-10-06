@@ -50,6 +50,18 @@ export async function getMission(missionId: string): Promise<Mission> {
   return fetchJson<Mission>(`/api/missions/${missionId}`);
 }
 
+export async function createMission(payload: {
+  title: string;
+  goal: string;
+  repository_path?: string;
+  constraints?: any;
+}): Promise<Mission> {
+  return fetchJson<Mission>('/api/missions', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function getMissionState(missionId: string): Promise<{
   mission_id: string;
   title: string;

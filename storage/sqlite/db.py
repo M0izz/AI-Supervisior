@@ -42,6 +42,29 @@ class DatabaseManager:
                 # Read and execute schema
                 if SCHEMA_FILE.exists():
                     schema_sql = SCHEMA_FILE.read_text(encoding="utf-8")
+                    # Migration: ensure memory_records has Phase 7+ columns if created by earlier versions
+                    try:
+                        cursor = await db.execute("PRAGMA table_info(memory_records);")
+                        existing_cols = [c[1] for c in await cursor.fetchall()]
+                        if existing_cols and "project_id" not in existing_cols:
+                            additions = [
+                                ("project_id", "TEXT DEFAULT ''"),
+                                ("memory_type", "TEXT DEFAULT 'FACT'"),
+                                ("status", "TEXT DEFAULT 'OBSERVED'"),
+                                ("confidence", "REAL DEFAULT 1.0"),
+                                ("source", "TEXT DEFAULT 'system'"),
+                                ("source_id", "TEXT DEFAULT ''"),
+                                ("created_by", "TEXT DEFAULT 'system'"),
+                                ("superseded_by", "TEXT"),
+                                ("updated_at", "TEXT")
+                            ]
+                            for col_name, col_def in additions:
+                                if col_name not in existing_cols:
+                                    await db.execute(f"ALTER TABLE memory_records ADD COLUMN {col_name} {col_def};")
+                            await db.commit()
+                    except Exception as me:
+                        logger.debug(f"Migration check completed: {me}")
+
                     await db.executescript(schema_sql)
                     await db.commit()
                 else:
