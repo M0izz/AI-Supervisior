@@ -116,8 +116,8 @@ export const Overview: React.FC<OverviewProps> = ({
   const ecosystemProviders = [
     { id: 'claude-code', name: 'Claude Code', defaultType: 'Local Agent', infra: 'LOCAL' },
     { id: 'codex', name: 'OpenAI Codex', defaultType: 'Local Agent', infra: 'LOCAL' },
-    { id: 'hermes', name: 'Hermes Agent', defaultType: 'Long-session', infra: 'NEBIUS' },
-    { id: 'gemma', name: 'Google Gemma 4', defaultType: 'Supervisor AI', infra: 'GOOGLE' },
+    { id: 'hermes', name: 'Hermes Agent', defaultType: 'Long-session', infra: 'DIGITALOCEAN' },
+    { id: 'digitalocean_managed', name: 'DigitalOcean Managed', defaultType: 'MicroVM Sandbox', infra: 'DIGITALOCEAN' },
     { id: 'gemini', name: 'Google Gemini', defaultType: 'CLI Provider', infra: 'LOCAL' },
     { id: 'goose', name: 'Goose', defaultType: 'Open Runtime', infra: 'LOCAL' },
     { id: 'cline', name: 'Cline', defaultType: 'Coding Agent', infra: 'LOCAL' },

@@ -33,7 +33,7 @@ class HermesAdapter(AgentAdapter):
     """
     Universal Agent Adapter for Nous Research Hermes Agent.
     Supports both local execution (CLI) and remote managed execution
-    via Nebius Token Factory or custom remote endpoint.
+    via DigitalOcean Managed Agents or Nebius Token Factory.
     Features persistent session lifecycle (attach, resume, pause, reconnect).
     """
 
@@ -55,9 +55,11 @@ class HermesAdapter(AgentAdapter):
 
     @property
     def identity(self) -> AdapterIdentity:
-        # Check if backed by Nebius or local
+        # Check if backed by DigitalOcean or Nebius or local
         infra = "local"
-        if os.getenv("NEBIUS_API_KEY"):
+        if os.getenv("DIGITALOCEAN_TOKEN") or os.getenv("DO_API_TOKEN"):
+            infra = "digitalocean"
+        elif os.getenv("NEBIUS_API_KEY"):
             infra = "nebius"
 
         return AdapterIdentity(
@@ -88,7 +90,7 @@ class HermesAdapter(AgentAdapter):
             session_support=True,
             remote_execution=(infra != "local"),
             local_execution=True,
-            configuration_requirements=["HERMES_API_URL or local 'hermes' binary or NEBIUS_API_KEY"]
+            configuration_requirements=["HERMES_API_URL or local 'hermes' binary or DIGITALOCEAN_TOKEN"]
         )
 
     async def check_availability(self) -> AdapterAvailability:
@@ -108,7 +110,7 @@ class HermesAdapter(AgentAdapter):
                 diagnostics={"mode": "local_cli", "path": resolved_path}
             )
 
-        # Check remote API endpoint
+        # Check remote DigitalOcean Managed Agents or API endpoint
         if self.remote_endpoint:
             return AdapterAvailability(
                 status=AdapterAvailabilityStatus.AVAILABLE,
@@ -118,20 +120,21 @@ class HermesAdapter(AgentAdapter):
                 diagnostics={"mode": "remote_endpoint", "url": self.remote_endpoint}
             )
 
-        if os.getenv("NEBIUS_API_KEY"):
+        has_do_token = bool(os.getenv("DIGITALOCEAN_TOKEN") or os.getenv("DO_API_TOKEN"))
+        if has_do_token:
             return AdapterAvailability(
                 status=AdapterAvailabilityStatus.AVAILABLE,
                 available=True,
-                message="Hermes available via Nebius AI Studio inference backend.",
+                message="Hermes available via DigitalOcean Managed Agents infrastructure.",
                 executable_path=None,
-                diagnostics={"mode": "nebius_inference", "provider": "nebius"}
+                diagnostics={"mode": "digitalocean_managed", "provider": "digitalocean"}
             )
 
         # Truthful reporting when not available (Never fabricate!)
         return AdapterAvailability(
             status=AdapterAvailabilityStatus.NOT_INSTALLED,
             available=False,
-            message="Hermes CLI not detected in local PATH. Install 'hermes' or configure NEBIUS_API_KEY / HERMES_API_URL.",
+            message="Hermes CLI not detected in local PATH. Install 'hermes' or connect DigitalOcean Managed Agents.",
             executable_path=None,
             diagnostics={"mode": "unconfigured"}
         )

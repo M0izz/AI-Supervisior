@@ -27,7 +27,7 @@ interface FleetItem {
   provider: string;
   role: string;
   category: 'Coding' | 'Research' | 'Local' | 'Cloud' | 'Open Source';
-  infrastructure: 'LOCAL' | 'NEBIUS' | 'GOOGLE' | 'RENDER';
+  infrastructure: 'LOCAL' | 'DIGITALOCEAN' | 'NEBIUS';
   defaultCaps: string[];
   supportedModels?: string[];
   sessionSupport?: boolean;
@@ -36,7 +36,8 @@ interface FleetItem {
 const FLEET_REGISTRY: FleetItem[] = [
   { id: 'claude_code', name: 'Claude Code', provider: 'Anthropic', role: 'Autonomous Code Editing & Terminal', category: 'Coding', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution', 'git'], supportedModels: ['Claude 3.7 Sonnet'] },
   { id: 'codex', name: 'OpenAI Codex', provider: 'OpenAI', role: 'Precision Code Repair & Fallback Handoff', category: 'Coding', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'test_execution', 'git'], supportedModels: ['Codex / GPT-4o'] },
-  { id: 'hermes', name: 'Hermes Agent', provider: 'Nous Research', role: 'Long-running Autonomous Agent Sessions', category: 'Open Source', infrastructure: 'NEBIUS', defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'governed_tools'], supportedModels: ['Hermes-4-70B', 'Gemma-4-31B'], sessionSupport: true },
+  { id: 'hermes', name: 'Hermes Agent', provider: 'Nous Research', role: 'Long-running Autonomous Agent Sessions', category: 'Open Source', infrastructure: 'DIGITALOCEAN', defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'governed_tools'], supportedModels: ['Hermes-4-70B', 'Gemma-4-31B'], sessionSupport: true },
+  { id: 'digitalocean_managed', name: 'DigitalOcean Managed Agent', provider: 'DigitalOcean', role: 'MicroVM Cloud Sandbox & Action Gateway', category: 'Cloud', infrastructure: 'DIGITALOCEAN', defaultCaps: ['remote_execution', 'microvm_isolation', 'governed_tools', 'git'], supportedModels: ['Hermes 4', 'Gemma 4', 'Llama 3.3'], sessionSupport: true },
   { id: 'gemini', name: 'Gemini CLI', provider: 'Google', role: 'Multimodal Analysis & Architecture Planning', category: 'Research', infrastructure: 'LOCAL', defaultCaps: ['documentation', 'code_review', 'planning'], supportedModels: ['Gemini 2.5 Flash', 'Gemini 2.5 Pro'] },
   { id: 'goose', name: 'Goose', provider: 'Block', role: 'Open Extensible On-machine Agent', category: 'Open Source', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'terminal_execution', 'developer_tools'], supportedModels: ['Open Weights'] },
   { id: 'cline', name: 'Cline', provider: 'Cline', role: 'Autonomous Coding & File Patching', category: 'Coding', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution'], supportedModels: ['Claude 3.7', 'DeepSeek'] },
@@ -46,13 +47,13 @@ const FLEET_REGISTRY: FleetItem[] = [
 ];
 
 const INFERENCE_MODELS = [
-  { id: 'gemma-4-31B-it', name: 'Google Gemma 4', developer: 'Google', infra: 'GOOGLE', size: '31B', focus: 'Supervisor Intelligence: Bounded planning, goal decomposition, invariant extraction, and decision rationale explanation' },
+  { id: 'gemma-4-31B-it', name: 'Google Gemma 4', developer: 'Google', infra: 'DIGITALOCEAN', size: '31B', focus: 'Supervisor Intelligence: Bounded planning, goal decomposition, invariant extraction, and decision rationale explanation' },
   { id: 'gemini-1.5-pro', name: 'Google Gemini 1.5 Pro', developer: 'Google', infra: 'GOOGLE GEMINI', size: 'Multimodal', focus: 'Deep Diagnostic Reasoning: Complex failure analysis, architecture boundary review, multimodal inspection, and incident briefings' },
   { id: 'gemini-1.5-flash', name: 'Google Gemini 1.5 Flash', developer: 'Google', infra: 'GOOGLE GEMINI', size: 'Fast', focus: 'Rapid Incident Diagnostics: Fast error trace parsing, recovery strategy comparison, and operational status explanations' },
-  { id: 'hermes-4-70b-instruct', name: 'Nous Hermes 4', developer: 'Nous Research', infra: 'NEBIUS', size: '70B', focus: 'Long-session agentic coding, persistent context, and tool use' },
+  { id: 'hermes-4-70b-instruct', name: 'Nous Hermes 4', developer: 'Nous Research', infra: 'DIGITALOCEAN', size: '70B', focus: 'Long-session agentic coding, persistent context, and tool use' },
   { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder', developer: 'Alibaba Cloud', infra: 'NEBIUS', size: '32B', focus: 'Deep syntax repair, algorithm refactoring, and test generation' },
   { id: 'nemotron-4-340b', name: 'NVIDIA Nemotron 4', developer: 'NVIDIA', infra: 'NEBIUS', size: '340B', focus: 'Supervisory situation reasoning, anomaly diagnosis, and recovery planning' },
-  { id: 'llama-3.3-70b', name: 'Meta Llama 3.3', developer: 'Meta', infra: 'NEBIUS', size: '70B', focus: 'General code generation and test crafting' },
+  { id: 'llama-3.3-70b', name: 'Meta Llama 3.3', developer: 'Meta', infra: 'DIGITALOCEAN', size: '70B', focus: 'General code generation and test crafting' },
   { id: 'deepseek-r1-distill', name: 'DeepSeek R1 Distill', developer: 'DeepSeek', infra: 'NEBIUS', size: '70B', focus: 'Chain-of-thought logic, math invariants, and test verification' }
 ];
 
@@ -124,7 +125,7 @@ export const Agents: React.FC<AgentsProps> = ({
       if (selectedCategory === 'Coding' && item.category !== 'Coding') return false;
       if (selectedCategory === 'Research' && item.category !== 'Research') return false;
       if (selectedCategory === 'Local' && item.infrastructure !== 'LOCAL') return false;
-      if (selectedCategory === 'Cloud' && item.infrastructure !== 'NEBIUS' && item.infrastructure !== 'RENDER') return false;
+      if (selectedCategory === 'Cloud' && item.infrastructure !== 'DIGITALOCEAN' && item.infrastructure !== 'NEBIUS') return false;
       if (selectedCategory === 'Open Source' && item.category !== 'Open Source') return false;
     }
     if (searchQuery) {
@@ -373,7 +374,7 @@ export const Agents: React.FC<AgentsProps> = ({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Execution Substrate</span>
                       <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {selectedItem.infrastructure === 'LOCAL' ? 'Local Workstation (Host PATH)' : 'Nebius Token Factory / Cloud'}
+                        {selectedItem.infrastructure === 'LOCAL' ? 'Local Workstation (Host PATH)' : selectedItem.infrastructure === 'DIGITALOCEAN' ? 'DigitalOcean MicroVM / Action Gateway' : 'Nebius Token Factory'}
                       </span>
                     </div>
 
@@ -421,7 +422,7 @@ export const Agents: React.FC<AgentsProps> = ({
       {activeTab === 'models' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Underlying language models accessed through infrastructure providers (Nebius Token Factory, Google Gemini, Google Gemma, and Local).
+            Underlying language models accessed through infrastructure providers (DigitalOcean Inference, Nebius, and Local).
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '12px' }}>
@@ -457,29 +458,29 @@ export const Agents: React.FC<AgentsProps> = ({
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px' }}>
-            {/* Google Gemma 4 Card */}
+            {/* DigitalOcean Card */}
             <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="gemini" size={24} />
+                <ProviderLogo providerId="digitalocean" size={24} />
                 <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Google Gemma 4</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Lightweight Supervisory Intelligence</div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>DigitalOcean</h3>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Cloud Infrastructure & Inference</div>
                 </div>
               </div>
 
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Provides lightweight supervisory intelligence: bounded planning, goal decomposition, invariant extraction, and operator decision explanations.
+                Provides Managed Agents in isolated microVMs, Action Gateway governed MCP tool access, and Serverless Inference with Google Gemma 4.
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Bounded mission decomposition</div>
-                <div>✓ Invariant extraction & safety guards</div>
-                <div>✓ Decision rationale & handoff compression</div>
+                <div>✓ Managed Agents & Droplets</div>
+                <div>✓ Action Gateway governed tools</div>
+                <div>✓ Serverless Gemma 4 Inference</div>
               </div>
 
               <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-success" style={{ fontSize: '10px' }}>INTEGRATED</span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Local & Cloud Models</span>
+                <span className="badge badge-neutral" style={{ fontSize: '10px' }}>OPTIONAL INTEGRATION</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Configure via Settings</span>
               </div>
             </div>
 

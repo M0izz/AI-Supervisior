@@ -19,10 +19,11 @@ from adapters.qwen import QwenAdapter
 from adapters.opencode import OpenCodeAdapter
 from adapters.kimi import KimiAdapter
 from adapters.hermes import HermesAdapter
+from adapters.digitalocean_agent import DigitalOceanManagedAgentAdapter
 from adapters.goose import GooseAdapter
 from adapters.cline import ClineAdapter
 from adapters.custom import CustomAgentAdapter, CustomAgentRegistration
-from integrations.gemma import GemmaProvider, GemmaReasoner
+from integrations.digitalocean import DigitalOceanProvider, DigitalOceanClient, GemmaReasoner
 from integrations.nebius.provider import NebiusNemotronProvider
 
 
@@ -55,6 +56,7 @@ def get_all_adapters(event_bus):
         OpenCodeAdapter(event_bus=event_bus),
         KimiAdapter(event_bus=event_bus),
         HermesAdapter(event_bus=event_bus),
+        DigitalOceanManagedAgentAdapter(event_bus=event_bus),
         GooseAdapter(event_bus=event_bus),
         ClineAdapter(event_bus=event_bus),
         CustomAgentAdapter(
@@ -141,19 +143,42 @@ async def test_hermes_extended_session_lifecycle(event_bus):
 
 
 @pytest.mark.asyncio
-async def test_gemma_provider_descriptor_and_models():
-    """Verifies Google Gemma provider descriptor, models, and supervisory intelligence."""
-    gemma_provider = GemmaProvider()
-    desc = await gemma_provider.get_descriptor()
-    assert desc.provider_id == "google_gemma"
-    assert "supervisory_intelligence" in desc.capabilities
-    assert desc.available is True
+async def test_digitalocean_provider_and_action_gateway():
+    """Verifies DigitalOcean provider descriptor and Action Gateway security enforcement."""
+    do_provider = DigitalOceanProvider()
+    desc = await do_provider.get_descriptor()
+    assert desc.provider_id == "digitalocean"
+    assert "action_gateway" in desc.capabilities
+    assert desc.action_gateway_support is True
 
-    models = await gemma_provider.get_models()
-    assert len(models) == 2
-    model_ids = [m.model_id for m in models]
-    assert "gemma-4-31B-it" in model_ids
-    assert "gemma-4-9B-it" in model_ids
+    # Test Action Gateway safety check: safe tool
+    safe_call = await do_provider.govern_tool_call(
+        tool_name="git_status",
+        arguments={"dir": "."},
+        agent_id="hermes",
+        workspace="."
+    )
+    assert safe_call.is_safe is True
+    assert safe_call.requires_approval is False
+
+    # Test Action Gateway safety check: dangerous tool
+    dangerous_call = await do_provider.govern_tool_call(
+        tool_name="delete_files",
+        arguments={"target": "src/*"},
+        agent_id="hermes",
+        workspace="."
+    )
+    assert dangerous_call.is_safe is False
+    assert dangerous_call.requires_approval is True
+
+    # Test Action Gateway safety check: path traversal
+    traversal_call = await do_provider.govern_tool_call(
+        tool_name="read_file",
+        arguments={"path": "../../../etc/passwd"},
+        agent_id="hermes",
+        workspace="."
+    )
+    assert traversal_call.is_safe is False
 
 
 @pytest.mark.asyncio

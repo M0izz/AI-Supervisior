@@ -19,7 +19,7 @@ class AdapterRegistry:
     """
     Registry for external Agent Adapters, Infrastructure Providers, and Model Catalogs.
     Allows discovery, capability queries, and lifecycle invocation across
-    diverse agent backends (Claude Code, OpenAI Codex, Gemini CLI, Hermes, Nebius, Qwen, etc.).
+    diverse agent backends (Claude Code, OpenAI Codex, Gemini CLI, Hermes, DigitalOcean, Nebius, etc.).
     """
 
     def __init__(self):
@@ -65,7 +65,7 @@ class AdapterRegistry:
         ]
 
     def find_by_infrastructure(self, provider_name: str) -> List[AgentAdapter]:
-        """Filters adapters by backing infrastructure (local, nebius, render)."""
+        """Filters adapters by backing infrastructure (local, digitalocean, nebius)."""
         p_lower = provider_name.lower()
         return [
             adapter for adapter in self._adapters.values()

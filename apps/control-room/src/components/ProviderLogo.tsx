@@ -40,6 +40,17 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 4. DigitalOcean
+  if (id.includes('digitalocean') || id.includes('droplet') || id === 'do') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect width="24" height="24" rx="5" fill="#0080FF" fillOpacity="0.16" />
+        <path d="M12 4C7.58 4 4 7.58 4 12C4 16.42 7.58 20 12 20C16.42 20 20 16.42 20 12H16C16 14.21 14.21 16 12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8V4Z" fill="#0080FF" />
+        <rect x="5.5" y="16.5" width="2.5" height="2.5" fill="#0080FF" />
+        <rect x="3.5" y="19" width="1.8" height="1.8" fill="#0080FF" />
+      </svg>
+    );
+  }
 
   // 5. Nous Research / Hermes Agent
   if (id.includes('hermes') || id.includes('nous')) {

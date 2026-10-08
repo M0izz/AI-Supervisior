@@ -546,12 +546,11 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                     <option value="claude-code">Claude Code (Anthropic)</option>
                     <option value="codex">OpenAI Codex</option>
                     <option value="hermes">Hermes Agent (Nous)</option>
+                    <option value="digitalocean_managed">DigitalOcean Managed Agent</option>
                     <option value="gemini">Gemini CLI</option>
                     <option value="goose">Goose (Block)</option>
                     <option value="cline">Cline</option>
                     <option value="qwen">Qwen Local</option>
-                    <option value="opencode">OpenCode</option>
-                    <option value="kimi">Kimi Code</option>
                   </select>
                 </div>
 
@@ -565,9 +564,8 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                     style={{ fontSize: '12px' }}
                   >
                     <option value="auto">Auto-Select Model</option>
-                    <option value="gemma-4-31B-it">Google Gemma 4 (Supervisory Planning)</option>
-                    <option value="gemini-1.5-pro">Google Gemini 1.5 Pro</option>
-                    <option value="hermes-4-70b-instruct">Nous Hermes 4 (Nebius)</option>
+                    <option value="gemma-4-31B-it">Google Gemma 4 (DigitalOcean)</option>
+                    <option value="hermes-4-70b-instruct">Nous Hermes 4 (DigitalOcean/Nebius)</option>
                     <option value="qwen-2.5-coder-32b">Qwen 2.5 Coder (Nebius)</option>
                     <option value="claude-3-7-sonnet">Claude 3.7 Sonnet</option>
                   </select>
