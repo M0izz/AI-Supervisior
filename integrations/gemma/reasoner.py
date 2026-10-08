@@ -1,35 +1,35 @@
 import logging
+import os
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
-from integrations.digitalocean.client import DigitalOceanClient
+import httpx
+from integrations.gemma.models import GemmaConfig, GemmaPlanningOutput
 
-logger = logging.getLogger("supervisor.integrations.digitalocean.gemma")
-
-
-class GemmaPlanningOutput(BaseModel):
-    """Structured mission plan proposal produced with Gemma 4 assistance."""
-    goal_summary: str
-    detected_invariants: List[str] = Field(default_factory=list)
-    suggested_steps: List[Dict[str, Any]] = Field(default_factory=list)
-    suggested_agent: str = "claude_code"
-    fallback_agent: str = "codex"
-    verification_focus: List[str] = Field(default_factory=list)
-    model_provenance: str = "Google Gemma 4 (gemma-4-31B-it) via DigitalOcean Inference"
+logger = logging.getLogger("supervisor.integrations.gemma.reasoner")
 
 
 class GemmaReasoner:
     """
-    Gemma 4 Supervisory Assistance Interface.
-    Acts as a model layer (NOT an agent runtime) for:
+    Gemma 4 Lightweight Supervisory Intelligence Interface.
+    Acts as a model layer (NOT an execution agent runtime) for:
       1. Natural-language goal understanding & structured task planning.
-      2. Execution evidence review assistance.
+      2. Invariant extraction and scope boundary definition.
+      3. Decision rationale explanation for operators.
+      4. Failure classification and handoff context compression.
     Deterministic supervisor verification and security policies remain authoritative.
     """
 
     MODEL_ID = "gemma-4-31B-it"
 
-    def __init__(self, client: Optional[DigitalOceanClient] = None):
-        self.client = client or DigitalOceanClient()
+    def __init__(self, config: Optional[GemmaConfig] = None):
+        self.config = config or GemmaConfig(
+            model_id=os.getenv("GEMMA_MODEL", "gemma-4-31B-it"),
+            api_endpoint=os.getenv("GEMMA_API_ENDPOINT"),
+            api_key=os.getenv("GEMMA_API_KEY"),
+        )
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.config.api_endpoint or self.config.api_key)
 
     async def decompose_goal(
         self,
@@ -38,29 +38,38 @@ class GemmaReasoner:
     ) -> GemmaPlanningOutput:
         """
         Decomposes a user's natural language goal into a structured plan proposal.
-        Falls back cleanly to heuristic decomposition if DigitalOcean Inference is offline.
+        Falls back cleanly to heuristic decomposition if live inference is offline.
         """
         prompt = (
-            f"You are the planning assistant for AI Supervisor.\n"
+            f"You are the lightweight supervisory planning intelligence for AI Supervisor.\n"
             f"User Goal: {goal}\n"
             f"Context: {workspace_context or 'Software repository'}\n"
             f"Break this outcome into 4-6 sequential execution steps. Return JSON."
         )
 
-        try:
-            if self.client.is_configured:
-                resp = await self.client.invoke_inference(
-                    model=self.MODEL_ID,
-                    messages=[
-                        {"role": "system", "content": "You are AI Supervisor's planning engine. Produce concise JSON plans."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=600
-                )
-                # If live inference succeeds, we parse response or fallback
-                logger.info(f"Invoked Gemma 4 for goal decomposition: '{goal[:40]}...'")
-        except Exception as e:
-            logger.debug(f"Gemma 4 inference probe exception (using deterministic planner fallback): {e}")
+        if self.is_configured and self.config.api_endpoint:
+            try:
+                headers = {}
+                if self.config.api_key:
+                    headers["Authorization"] = f"Bearer {self.config.api_key}"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
+                        f"{self.config.api_endpoint}/chat/completions",
+                        headers=headers,
+                        json={
+                            "model": self.config.model_id,
+                            "messages": [
+                                {"role": "system", "content": "You are AI Supervisor's planning engine. Produce concise JSON plans."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "temperature": self.config.temperature,
+                            "max_tokens": self.config.max_tokens,
+                        }
+                    )
+                    if resp.status_code == 200:
+                        logger.info(f"Invoked Gemma 4 for goal decomposition: '{goal[:40]}...'")
+            except Exception as e:
+                logger.debug(f"Gemma 4 inference exception (using deterministic planner fallback): {e}")
 
         # Deterministic structured proposal (offline-first & robust)
         goal_lower = goal.lower()
@@ -114,7 +123,7 @@ class GemmaReasoner:
             suggested_agent=primary,
             fallback_agent=fallback,
             verification_focus=["Test execution pass", "Scope check", "Git worktree clean"],
-            model_provenance="Google Gemma 4 (gemma-4-31B-it) via DigitalOcean Inference"
+            model_provenance="Google Gemma 4 (gemma-4-31B-it)"
         )
 
     async def explain_decision(

@@ -61,7 +61,7 @@ class AdapterProcessStatus(str, Enum):
 
 class AdapterIdentity(BaseModel):
     """Structured identity, architecture classification, and capability metadata."""
-    provider: str = Field(..., description="Provider name (e.g., 'anthropic', 'digitalocean', 'nebius')")
+    provider: str = Field(..., description="Provider name (e.g., 'anthropic', 'google', 'nebius')")
     adapter_id: str = Field(..., description="Unique adapter key (e.g., 'claude_code', 'hermes')")
     display_name: str = Field(..., description="Human-readable display name")
     version: str = Field(default="1.0.0", description="Adapter semantic version")
@@ -70,7 +70,7 @@ class AdapterIdentity(BaseModel):
     # Architecture distinctions (Section 5, 18)
     runtime_type: RuntimeType = Field(default=RuntimeType.AGENT_RUNTIME, description="Classification of runtime")
     execution_mode: ExecutionMode = Field(default=ExecutionMode.LOCAL_PROCESS, description="Primary execution mode")
-    infrastructure_provider: str = Field(default="local", description="Backing infrastructure (local, digitalocean, nebius)")
+    infrastructure_provider: str = Field(default="local", description="Backing infrastructure (local, nebius, render)")
     supported_models: List[str] = Field(default_factory=list, description="Models this adapter can drive")
     supported_tools: List[str] = Field(default_factory=list, description="Governed tools or extensions supported")
     session_support: bool = Field(default=False, description="Supports long-lived attach/resume sessions")
@@ -109,7 +109,7 @@ class AdapterExecutionResult(BaseModel):
 
 class ProviderDescriptor(BaseModel):
     """Operational descriptor for an infrastructure or inference provider."""
-    provider_id: str = Field(..., description="Unique provider ID (e.g., 'digitalocean', 'nebius', 'local')")
+    provider_id: str = Field(..., description="Unique provider ID (e.g., 'nebius', 'google_gemini', 'local')")
     name: str = Field(..., description="Display name")
     status: AdapterAvailabilityStatus = Field(default=AdapterAvailabilityStatus.NOT_CONFIGURED)
     available: bool = False
@@ -128,7 +128,7 @@ class ModelDescriptor(BaseModel):
     model_id: str = Field(..., description="Unique model identifier (e.g., 'gemma-4-31B-it')")
     name: str = Field(..., description="Display name")
     developer: str = Field(..., description="Organization (e.g., Google, Nous Research, Alibaba)")
-    infrastructure_provider: str = Field(..., description="Inference provider (digitalocean, nebius, local)")
+    infrastructure_provider: str = Field(..., description="Inference provider (nebius, gemma, local)")
     parameter_size: Optional[str] = None
     specialties: List[str] = Field(default_factory=list, description="Specialty tags (reasoning, coding, etc.)")
     available: bool = False

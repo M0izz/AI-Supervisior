@@ -78,7 +78,7 @@ class DraftMissionResponse(BaseModel):
     inferred_constraints: Dict[str, Any]
     verification_plan: Dict[str, Any]
     detected_invariants: List[str] = []
-    model_provenance: str = "Google Gemma 4 (gemma-4-31B-it) via DigitalOcean Inference"
+    model_provenance: str = "Google Gemma 4 (gemma-4-31B-it)"
 
 
 class CreateMissionRequest(BaseModel):
@@ -986,14 +986,14 @@ async def list_adapters():
 
 @app.get("/api/providers")
 async def list_providers():
-    """Lists all infrastructure and inference providers (DigitalOcean, Nebius, Local)."""
+    """Lists all infrastructure and inference providers (Nebius, Google Gemini, Google Gemma, Local)."""
     providers = []
 
-    # 1. DigitalOcean Provider
-    do_desc = await app_state.digitalocean_provider.get_descriptor()
-    providers.append(do_desc.model_dump())
+    # 1. Google Gemma 4 Provider (Supervisory Intelligence)
+    gemma_desc = await app_state.gemma_provider.get_descriptor()
+    providers.append(gemma_desc.model_dump())
 
-    # 2. Nebius Token Factory
+    # 2. Nebius Token Factory (Inference Infrastructure)
     nebius_key = os.getenv("NEBIUS_API_KEY")
     nebius_desc = {
         "provider_id": "nebius",
@@ -1015,7 +1015,7 @@ async def list_providers():
     }
     providers.append(nebius_desc)
 
-    # 3. Google Gemini Provider
+    # 3. Google Gemini Provider (Deep Multimodal Reasoning)
     gemini_desc = await app_state.gemini_provider.get_descriptor()
     providers.append(gemini_desc.model_dump())
 
@@ -1038,13 +1038,13 @@ async def list_providers():
 
 @app.get("/api/models")
 async def list_models():
-    """Lists available models from DigitalOcean Inference, Nebius, Google Gemini, and Local providers."""
+    """Lists available models from Google Gemma 4, Nebius, Google Gemini, and Local providers."""
     from integrations.nebius.provider import NebiusNemotronProvider
     models = []
 
-    # 1. DigitalOcean models (including Gemma 4)
-    do_models = await app_state.digitalocean_provider.get_models()
-    for m in do_models:
+    # 1. Google Gemma 4 models (Supervisory Intelligence)
+    gemma_models = await app_state.gemma_provider.get_models()
+    for m in gemma_models:
         models.append(m.model_dump())
 
     # 2. Nebius Token Factory models

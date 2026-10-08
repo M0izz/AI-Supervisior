@@ -1,0 +1,415 @@
+import type {
+  Mission,
+  Task,
+  AgentRecord,
+  ApprovalRequest,
+  Event,
+  MemoryRecord,
+  MemorySummary,
+  MissionTelemetry,
+  GlobalOverviewTelemetry,
+  ApprovalResolutionAction,
+  AdapterInfo,
+  ProviderInfo,
+  ModelInfo,
+  CustomAgentRegistrationRequest,
+  SyncStatus,
+  SyncDevice
+} from './types';
+
+const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+const API_BASE = rawApiUrl.replace(/\/+$/, '');
+
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${url}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options?.headers || {})
+    }
+  });
+
+  if (!res.ok) {
+    let errMsg = `Request failed: ${res.status} ${res.statusText}`;
+    try {
+      const errBody = await res.json();
+      if (errBody.detail) errMsg = typeof errBody.detail === 'string' ? errBody.detail : JSON.stringify(errBody.detail);
+    } catch {
+      // fallback to status text
+    }
+    throw new Error(errMsg);
+  }
+
+  return res.json();
+}
+
+// Missions
+export async function getMissions(): Promise<Mission[]> {
+  const data = await fetchJson<any>('/api/missions');
+  return Array.isArray(data) ? data : (data?.missions || []);
+}
+export const fetchMissions = getMissions;
+
+export async function getMission(missionId: string): Promise<Mission> {
+  return fetchJson<Mission>(`/api/missions/${missionId}`);
+}
+
+export interface DraftMissionResponse {
+  title: string;
+  goal: string;
+  repository_path: string;
+  interpreted_steps: string[];
+  proposed_tasks: Array<{
+    id: string;
+    title: string;
+    description: string;
+    suggested_agent: string;
+    expected_files: string[];
+    dependencies: string[];
+    order: number;
+  }>;
+  suggested_agents: string[];
+  fallback_agent: string;
+  inferred_constraints: Record<string, any>;
+  verification_plan: Record<string, any>;
+  detected_invariants?: string[];
+  model_provenance?: string;
+}
+
+export async function draftMission(payload: {
+  goal: string;
+  repository_path?: string;
+}): Promise<DraftMissionResponse> {
+  return fetchJson<DraftMissionResponse>('/api/missions/draft', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createMission(payload: {
+  title: string;
+  goal: string;
+  repository_path?: string;
+  constraints?: any;
+  tasks?: any[];
+}): Promise<Mission> {
+  return fetchJson<Mission>('/api/missions', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getMissionState(missionId: string): Promise<{
+  mission_id: string;
+  title: string;
+  status: string;
+  supervisor_state: string;
+  current_task_id: string | null;
+  tasks_count: number;
+  completed_tasks: number;
+  pending_approvals_count: number;
+  agents: AgentRecord[];
+  active_agents_count: number;
+  telemetry: any;
+}> {
+  return fetchJson(`/api/missions/${missionId}/state`);
+}
+
+export async function updateMissionStatus(missionId: string, status: string, reason?: string): Promise<{ status: string; mission: Mission }> {
+  return fetchJson(`/api/missions/${missionId}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status, reason })
+  });
+}
+
+export async function pauseMission(missionId: string, reason: string = 'Paused from Control Room UI'): Promise<{ status: string }> {
+  return fetchJson(`/api/missions/${missionId}/pause`, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  });
+}
+
+export async function resumeMission(missionId: string): Promise<{ status: string }> {
+  return fetchJson(`/api/missions/${missionId}/resume`, {
+    method: 'POST'
+  });
+}
+
+export async function takeControl(missionId: string, operator: string = 'Operator', reason: string = 'Manual control assertion'): Promise<{ status: string }> {
+  return fetchJson(`/api/missions/${missionId}/take-control`, {
+    method: 'POST',
+    body: JSON.stringify({ operator, reason })
+  });
+}
+
+export async function seedDemoMission(): Promise<{ status: string; mission_id: string; tasks_count: number; mission: Mission }> {
+  return fetchJson('/api/missions/seed-demo', {
+    method: 'POST'
+  });
+}
+
+// Tasks
+export async function getMissionTasks(missionId: string): Promise<{
+  tasks: Task[];
+  graph: { nodes: any[]; edges: any[] };
+}> {
+  const data = await fetchJson<any>(`/api/missions/${missionId}/tasks`);
+  return {
+    tasks: Array.isArray(data?.tasks) ? data.tasks : [],
+    graph: data?.graph || { nodes: [], edges: [] }
+  };
+}
+
+export async function getTask(missionId: string, taskId: string): Promise<Task> {
+  return fetchJson<Task>(`/api/missions/${missionId}/tasks/${taskId}`);
+}
+
+// Telemetry
+export async function getOverviewTelemetry(): Promise<{
+  overview: GlobalOverviewTelemetry;
+  missions: any[];
+}> {
+  try {
+    return await fetchJson('/api/control-room/overview');
+  } catch {
+    return await fetchJson('/api/telemetry/overview');
+  }
+}
+export const fetchTelemetry = getOverviewTelemetry;
+
+export async function getMissionTelemetry(missionId: string): Promise<MissionTelemetry> {
+  return fetchJson<MissionTelemetry>(`/api/missions/${missionId}/telemetry`);
+}
+
+// Agents
+export async function getAgents(params?: { missionId?: string; agentType?: string; status?: string }): Promise<AgentRecord[]> {
+  const q = new URLSearchParams();
+  if (params?.missionId) q.set('mission_id', params.missionId);
+  if (params?.agentType) q.set('agent_type', params.agentType);
+  if (params?.status) q.set('status', params.status);
+  const data = await fetchJson<any>(`/api/agents?${q.toString()}`);
+  return Array.isArray(data) ? data : (data?.agents || []);
+}
+export const fetchAgents = getAgents;
+
+export async function getAgent(agentId: string): Promise<AgentRecord> {
+  return fetchJson<AgentRecord>(`/api/agents/${agentId}`);
+}
+
+export async function getAgentState(agentId: string): Promise<any> {
+  return fetchJson(`/api/agents/${agentId}/state`);
+}
+
+export async function pauseAgent(agentId: string): Promise<{ status: string }> {
+  return fetchJson(`/api/agents/${agentId}/pause`, { method: 'POST' });
+}
+
+export async function resumeAgent(agentId: string): Promise<{ status: string }> {
+  return fetchJson(`/api/agents/${agentId}/resume`, { method: 'POST' });
+}
+
+// Approvals
+export async function getApprovals(missionId?: string): Promise<ApprovalRequest[]> {
+  const q = missionId ? `?mission_id=${missionId}` : '';
+  const data = await fetchJson<any>(`/api/approvals${q}`);
+  return Array.isArray(data) ? data : (data?.approvals || data?.requests || []);
+}
+export const fetchApprovals = getApprovals;
+
+export async function resolveApproval(
+  approvalId: string,
+  action: ApprovalResolutionAction,
+  operator: string = 'human_operator',
+  feedback?: string
+): Promise<{ status: string; approval: ApprovalRequest }> {
+  return fetchJson(`/api/approvals/${approvalId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ action, operator, feedback })
+  });
+}
+
+export async function cancelApproval(
+  approvalId: string,
+  operator: string = 'human_operator',
+  reason?: string
+): Promise<{ status: string; approval: ApprovalRequest }> {
+  return fetchJson(`/api/approvals/${approvalId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ operator, reason })
+  });
+}
+
+// Events
+export async function getSupervisorEvents(params?: {
+  missionId?: string;
+  eventType?: string;
+  severity?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<Event[]> {
+  const q = new URLSearchParams();
+  if (params?.missionId) q.set('mission_id', params.missionId);
+  if (params?.eventType) q.set('event_type', params.eventType);
+  if (params?.severity) q.set('severity', params.severity);
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  const data = await fetchJson<any>(`/api/supervisor/events?${q.toString()}`);
+  return Array.isArray(data) ? data : (data?.events || []);
+}
+
+export async function getMissionEvents(missionId: string, limit: number = 100): Promise<Event[]> {
+  const data = await fetchJson<any>(`/api/missions/${missionId}/events?limit=${limit}`);
+  return Array.isArray(data) ? data : (data?.events || []);
+}
+
+export async function getMissionTimeline(missionId: string): Promise<any[]> {
+  const data = await fetchJson<any>(`/api/missions/${missionId}/timeline`);
+  return Array.isArray(data) ? data : (data?.timeline || []);
+}
+
+// Memory
+export async function getAllMemory(params?: { missionId?: string; category?: string }): Promise<MemoryRecord[]> {
+  const q = new URLSearchParams();
+  if (params?.missionId) q.set('mission_id', params.missionId);
+  if (params?.category) q.set('category', params.category);
+  const data = await fetchJson<any>(`/api/memory?${q.toString()}`);
+  return Array.isArray(data) ? data : (data?.records || []);
+}
+export const fetchMemory = getAllMemory;
+
+export async function getMissionMemory(missionId: string): Promise<{
+  mission_id: string;
+  summary: MemorySummary;
+  records: MemoryRecord[];
+  count: number;
+}> {
+  return fetchJson(`/api/missions/${missionId}/memory`);
+}
+
+export async function addMissionMemory(
+  missionId: string,
+  payload: {
+    fact: string;
+    source: string;
+    created_by?: string;
+    status?: string;
+    confidence?: number;
+    category?: string;
+    details?: string;
+  }
+): Promise<{ status: string; record: MemoryRecord }> {
+  return fetchJson(`/api/missions/${missionId}/memory`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+export const addMemoryRecord = addMissionMemory;
+
+// Phase 9: Absence Mode API
+export async function getMissionAbsence(missionId: string): Promise<{
+  active: boolean;
+  session: any | null;
+  remaining_seconds: number;
+}> {
+  return fetchJson(`/api/missions/${missionId}/absence`);
+}
+
+export async function armAbsenceMode(
+  missionId: string,
+  policy?: Record<string, any>
+): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/arm`, {
+    method: 'POST',
+    body: JSON.stringify({ policy, created_by: 'user' })
+  });
+}
+
+export async function startAbsenceMode(missionId: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/start`, {
+    method: 'POST'
+  });
+}
+
+export async function pauseAbsenceMode(missionId: string, reason?: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/pause`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || 'Operator paused via UI' })
+  });
+}
+
+export async function resumeAbsenceMode(missionId: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/resume`, {
+    method: 'POST'
+  });
+}
+
+export async function cancelAbsenceMode(missionId: string, reason?: string): Promise<{ status: string; session: any }> {
+  return fetchJson(`/api/missions/${missionId}/absence/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || 'Emergency stop via UI' })
+  });
+}
+
+// Phase 10: Provider Fleet / Adapters API
+export async function getAdapters(): Promise<{ adapters: AdapterInfo[]; count: number }> {
+  return fetchJson(`/api/adapters`);
+}
+
+export async function getProviders(): Promise<{ providers: ProviderInfo[]; count: number }> {
+  return fetchJson('/api/providers');
+}
+
+export async function getModels(): Promise<{ models: ModelInfo[]; count: number }> {
+  return fetchJson('/api/models');
+}
+
+export async function registerCustomAgent(payload: CustomAgentRegistrationRequest): Promise<any> {
+  return fetchJson('/api/custom-agents', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+// Phase 12: Cloud Sync & Multi-Device API
+export async function getSyncStatus(): Promise<SyncStatus> {
+  return fetchJson<SyncStatus>('/api/sync/status');
+}
+
+export async function triggerSync(): Promise<{ status: string; result: any }> {
+  return fetchJson('/api/sync/trigger', { method: 'POST' });
+}
+
+export async function getSyncDevices(): Promise<{ devices: SyncDevice[]; count: number }> {
+  return fetchJson('/api/sync/devices');
+}
+
+export async function revokeSyncDevice(deviceId: string): Promise<{ status: string; device_id: string }> {
+  return fetchJson(`/api/sync/devices/${deviceId}/revoke`, { method: 'POST' });
+}
+
+// Supervisor Decision & Intelligence Layer API
+export async function getSupervisorDecisions(missionId?: string): Promise<{ decisions: any[]; count: number }> {
+  const url = missionId ? `/api/missions/${missionId}/decisions` : '/api/supervisor/decisions';
+  return fetchJson(url);
+}
+
+export async function explainDecision(decisionType: string, context: Record<string, any>): Promise<any> {
+  return fetchJson('/api/supervisor/decisions/explain', {
+    method: 'POST',
+    body: JSON.stringify({ decision_type: decisionType, context })
+  });
+}
+
+export async function analyzeComplexFailure(payload: {
+  task_title: string;
+  stack_trace: string;
+  failure_history?: string[];
+  affected_files?: string[];
+}): Promise<any> {
+  return fetchJson('/api/supervisor/analyze-failure', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+

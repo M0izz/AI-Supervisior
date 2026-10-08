@@ -138,17 +138,15 @@ class AppState:
         )
         self.adapter_registry.register_adapter(self.kimi_adapter)
 
-        # Extended Provider Ecosystem (Hermes, DigitalOcean, Goose, Cline)
+        # Extended Provider Ecosystem (Hermes, Goose, Cline, Google Gemma, Google Gemini)
         from adapters.hermes import HermesAdapter
-        from adapters.digitalocean_agent import DigitalOceanManagedAgentAdapter
         from adapters.goose import GooseAdapter
         from adapters.cline import ClineAdapter
-        from integrations.digitalocean import DigitalOceanProvider, DigitalOceanClient, GemmaReasoner
+        from integrations.gemma import GemmaProvider, GemmaReasoner
         from integrations.gemini import GeminiProvider, GeminiClient, GeminiReasoner
 
-        self.digitalocean_client = DigitalOceanClient()
-        self.digitalocean_provider = DigitalOceanProvider(client=self.digitalocean_client)
-        self.gemma_reasoner = GemmaReasoner(client=self.digitalocean_client)
+        self.gemma_reasoner = GemmaReasoner()
+        self.gemma_provider = GemmaProvider(reasoner=self.gemma_reasoner)
 
         self.gemini_client = GeminiClient()
         self.gemini_provider = GeminiProvider(client=self.gemini_client)
@@ -159,13 +157,6 @@ class AppState:
             worktree_manager=self.worktree_manager,
         )
         self.adapter_registry.register_adapter(self.hermes_adapter)
-
-        self.do_agent_adapter = DigitalOceanManagedAgentAdapter(
-            event_bus=self.event_bus,
-            worktree_manager=self.worktree_manager,
-            provider=self.digitalocean_provider,
-        )
-        self.adapter_registry.register_adapter(self.do_agent_adapter)
 
         self.goose_adapter = GooseAdapter(
             event_bus=self.event_bus,

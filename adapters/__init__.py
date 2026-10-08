@@ -1,7 +1,7 @@
 """
 AI Supervisor Agent Adapters Package.
 Establishes the universal adapter boundary between AI Supervisor
-and external agent runtimes (Claude Code, OpenAI Codex, Gemini CLI, Hermes, DigitalOcean, etc.).
+and external agent runtimes (Claude Code, OpenAI Codex, Gemini CLI, Hermes, Qwen, OpenCode, Kimi, etc.).
 """
 
 from adapters.models import (
@@ -25,7 +25,6 @@ from adapters.qwen import QwenAdapter
 from adapters.opencode import OpenCodeAdapter
 from adapters.kimi import KimiAdapter
 from adapters.hermes import HermesAdapter
-from adapters.digitalocean_agent import DigitalOceanManagedAgentAdapter
 from adapters.goose import GooseAdapter
 from adapters.cline import ClineAdapter
 from adapters.custom import CustomAgentAdapter, CustomAgentRegistration
@@ -50,7 +49,6 @@ __all__ = [
     "OpenCodeAdapter",
     "KimiAdapter",
     "HermesAdapter",
-    "DigitalOceanManagedAgentAdapter",
     "GooseAdapter",
     "ClineAdapter",
     "CustomAgentAdapter",
