@@ -323,7 +323,7 @@ AI Supervisor features an optional, secure, local-first synchronization engine e
 1. **Zero Implicit Approval**: High-risk actions require explicit human operator approval. Any approval timeout strictly defaults to `DENIED`. Absence of response never grants permission.
 2. **Credential Sanitization**: Bearer tokens, API keys, passwords, and private URLs are stripped from tool execution traces, event payloads, and UI streams before emission.
 3. **Single-Host Container Sandboxing**: When Docker is active, untrusted agent code runs with dropped Linux capabilities (`cap_drop=["ALL"]`), disabled privilege escalation (`security_opt=["no-new-privileges:true"]`), zero network egress (`network_mode="none"`), non-root execution (`USER worker`), hard memory limits (`512MB`), CPU quotas (`1.0`), PID ceilings (`128`), and output truncation (50,000 characters). Host roots, home directories, and the Docker socket are strictly rejected.
-4. **Independent Verification**: No agent is permitted to certify its own success. Passing is only awarded after external Jenkins CI execution and Verifier validation.
+4. **Independent Verification**: No agents is permitted to certify its own success. Passing is only awarded after external Jenkins CI execution and Verifier validation.
 
 ---
 
