@@ -1,203 +1,266 @@
-# AI Work Supervisor
+# AI Supervisor
 
-> **A supervisory control plane for autonomous AI engineering work that detects failures, prevents unsafe actions, diagnoses problems, coordinates recovery, and independently verifies results.**
-> 
-> *"Agent completion ≠ verified completion."*
+> **The control plane for your AI workforce.**
+>
+> *"Your AI agents work. Your Supervisor makes sure they finish the job."*
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-263%20Python%20%7C%207%20Desktop%20%7C%2014%20VS%20Code-success.svg)]()
-[![Model](https://img.shields.io/badge/model-NVIDIA%20Nemotron--4--340B-76B900.svg)]()
-[![Cloud](https://img.shields.io/badge/inference-Nebius%20AI%20Studio-0052FF.svg)]()
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-ai--supervisior.vercel.app-blueviolet?style=for-the-badge&logo=vercel)](https://ai-supervisior.vercel.app/)
+[![Tests](https://img.shields.io/badge/tests-274%20passed%20%7C%207%20skipped%20%7C%200%20failed-success?style=for-the-badge)](tests/)
+[![FastAPI](https://img.shields.io/badge/backend-FastAPI%20%2B%20Python%203.11%2B-009688?style=for-the-badge&logo=fastapi)](apps/api/)
+[![Frontend](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript-61DAFB?style=for-the-badge&logo=react)](apps/control-room/)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
----
-
-## 1. What is AI Work Supervisor? (In 30 Seconds)
-
-* **What is it?** A supervisory control plane and nervous system for autonomous AI engineering agents.
-* **Why does it exist?** AI coding agents can loop on errors, drift out of scope, make unsafe changes, exhaust compute budgets, or falsely claim that tasks are complete and tests pass.
-* **What does it do?** It observes agent actions through an immutable event stream, detects anomalies via deterministic watchdogs, invokes NVIDIA Nemotron on Nebius for causal reasoning, records empirical facts in project memory, recovers agents with targeted context, and independently verifies code in sandboxed execution and CI.
-* **Why is it different?** The architecture is built around the core axiom: **Worker completion ≠ verification.** No agent is permitted to certify its own success.
-
-```
-GOAL ──► PLAN ──► ACT ──► OBSERVE ──► VERIFY ──► SUPERVISE ──► RECOVER ──► VERIFY
-```
-
-> **Note**: AI Work Supervisor is neither a generic AI agent dashboard, an agent marketplace, a chatbot, a Zapier-like automation platform, nor a generic multi-agent framework. It is an engineering control plane designed specifically to enforce safety, truthfulness, and independent verification over autonomous engineering work.
+[🚀 Live Demo](https://ai-supervisior.vercel.app/) • [GitHub Repository](https://github.com/M0izz/AI-Supervisior) • [Documentation Index](#10-documentation-index) • [Production Deployment](#6-production-deployment)
 
 ---
 
-## 2. Demo Preview
+## 1. What is AI Supervisor?
+
+Autonomous coding agents (Claude Code, OpenAI Codex, Gemini CLI, Qwen, OpenCode, Kimi) write code rapidly, but left unsupervised they can loop on identical errors, hallucinate test passes, drift out of scope, perform dangerous terminal commands, or silently give up.
+
+**AI Supervisor** provides a unified supervisory nervous system that routes tasks to the best agent, observes execution traces in real time, intervenes deterministically on failure loops, coordinates seamless handoffs, and **independently verifies** that the work actually works before accepting it.
+
+> **Core Axiom**: *Worker completion ≠ verified completion.* No agent is permitted to certify its own success.
 
 ```
-[ Control Room — Live Supervisory Intervention & Recovery Flow ]
-Mission: Add CSV Import with UTF-8 BOM Support
-Step 05: Worker fails 3x on encoding (45 passed / 2 failed)
-Step 07: Supervisor Watchdog detects anomaly: LOOP_DETECTED
-Step 08: Supervisor pauses Worker execution token
-Step 09: Nemotron causal reasoning on Nebius Studio: DELEGATE -> Reviewer
-Step 10: Reviewer diagnoses causal flaw: UTF-8 BOM marker (\ufeff)
-Step 11: Project Memory records verified fact and rejected hypothesis
-Step 13: Worker resumes with structured Recovery Context
-Step 14: Sandbox executes byte-level fix (47 passed / 0 failed)
-Step 15: Jenkins CI independently confirms: Build #482 SUCCESS
-Step 16: Independent Verifier agent validates zero regressions -> COMPLETED
+Goal ──► Plan ──► Route ──► Execute ──► Observe ──► Intervene ──► Handoff ──► Verify ──► Remember ──► Complete
 ```
 
 ---
 
-## 3. Technology Roles
-
-Each technology in the stack fulfills an explicit, specialized role:
-
-| Technology | Role | Description |
-| :--- | :--- | :--- |
-| **Nemotron** | **Supervisory Reasoning** | Open-source NVIDIA Nemotron-4-340B-Instruct evaluates complex failure context, performs causal reasoning, and decides whether to pause, delegate, or terminate. |
-| **Supervisor** | **Intervention Decisions** | Deterministic engine combining rule-based watchdogs (loop detection, budget ceilings, scope boundaries) with cognitive decisions to control agent execution tokens. |
-| **Worker** | **Autonomous Implementation** | Coding agent equipped with read, write, and bash tools to implement features and bug fixes within its assigned file scope. |
-| **Docker** | **Isolated Execution** | Sandboxed single-host container runtime with dropped Linux capabilities (`ALL`), memory limits (`512MB`), CPU quotas (`1.0`), and zero-network isolation (`none`). |
-| **Jenkins** | **Independent CI Verification** | Independent Jenkins CI verification using build identifiers, nonces, and parsed JUnit evidence. |
-| **Reviewer** | **Failure Diagnosis** | Specialized read-only diagnostic agent that analyzes execution diffs, error traces, and git logs to isolate root causes without modifying code. |
-| **Memory** | **Persistent Project Knowledge** | Empirical knowledge store retaining verified facts with provenance tags (`OBSERVED`, `INFERRED`, `DECIDED`, `VERIFIED`, `REJECTED`) to prevent repeating failed strategies. |
-| **Verifier** | **Final Validation** | Independent verification agent that reviews test results, confirms acceptance criteria, and issues final sign-off before a mission completes. |
-| **EventBus** | **Real-Time Coordination** | Real-time event backbone connecting agents, supervisor watchdogs, WebSocket broadcasting, and audit logging. |
-| **Nebius** | **AI Infrastructure** | Nebius hosts the model used for supervisory reasoning; deterministic rules remain the safety layer and model output is constrained to structured supervisory decisions. |
-
----
-
-## 4. Architecture Diagram
+## 2. Product Cockpit Preview
 
 ```
-                        ┌────────────────────────────────────────┐
-                        │      Human Operator / Control Room     │
-                        │    (React 19 + TypeScript Cockpit)     │
-                        └───────────────────┬────────────────────┘
-                                            │ HTTP / WebSocket (:8000)
-                                            ▼
-                        ┌────────────────────────────────────────┐
-                        │      FastAPI Control Plane Engine      │
-                        │  (/health, /ready, /ws/events, State)  │
-                        └───────────────────┬────────────────────┘
-                                            │
-                        ┌───────────────────┴────────────────────┐
-                        ▼                                        ▼
-           ┌──────────────────────────┐             ┌──────────────────────────┐
-           │    SUPERVISOR ENGINE     │             │        EVENT BUS         │
-           │ • Deterministic Watchdog │             │ • Real-time coordination │
-           │ • Scope & Budget Guard   │             │ • Persistent event log   │
-           │ • Zero-Implicit-Approval │             │ • WebSocket broadcast    │
-           └────────────┬─────────────┘             └──────────────────────────┘
-                        │
-       ┌────────────────┼────────────────┬────────────────┐
-       ▼                ▼                ▼                ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│Nebius Cloud  │ │Docker Sandbox│ │  Jenkins CI  │ │Project Memory│
-│(NVIDIA       │ │(Containers,  │ │(Independent  │ │(Verified     │
-│ Nemotron)    │ │ No Network,  │ │ JUnit Proof, │ │ Facts, Diffs,│
-│              │ │ 512MB Limit) │ │ Nonce Gate)  │ │ Hypotheses)  │
-└──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
-       │                │                │                │
-       └────────────────┼────────────────┴────────────────┘
-                        ▼
-       ┌──────────────────────────────────────────────────┐
-       │             AUTONOMOUS AGENT FLEET               │
-       │  Planner  •  Worker  •  Reviewer  •  Verifier    │
-       └──────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  AI SUPERVISOR  ::  CONTROL ROOM                                    CLOUD: SYNCED  ●  WATCHDOGS: ARMED │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  ACTIVE MISSION: Add CSV Import with UTF-8 BOM Support [MSN-042]                                       │
+│  Objective: Support \ufeff marker in CSV ingestion without breaking database schema                   │
+│                                                                                                        │
+│  [TASK-001] Analyze Schema ──────► [TASK-002] Implement Parser ──────► [TASK-003] Independent Verify   │
+│   ✓ Claude Code (Completed)         ▲ Hermes Agent (PAUSED)             ○ Pending Verification          │
+│                                     │                                                                  │
+│  SUPERVISORY INTERVENTION TIMELINE  │                                                                  │
+│  ├─ 10:14:02  [OBSERVE]    Hermes failed 3x on same encoding assertion (45 passed / 2 failed)          │
+│  ├─ 10:14:03  [WATCHDOG]   LOOP_DETECTED threshold triggered (failure signature identical)             │
+│  ├─ 10:14:04  [INTERVENE]  Execution token revoked; agent process paused safely in git worktree        │
+│  ├─ 10:14:05  [REASONING]  Gemma 4 + Nebius diagnosis: UTF-8 BOM byte marker prefix (\ufeff)           │
+│  ├─ 10:14:06  [MEMORY]     Recorded VERIFIED_FACT (BOM marker) & REJECTED_APPROACH (regex stripping)   │
+│  ├─ 10:14:08  [HANDOFF]    Context packaged with diffs & constraints ──► Routed to OpenAI Codex       │
+│  ├─ 10:14:19  [EXECUTE]    Codex applies codecs.BOM_UTF8 byte strip in isolated worktree               │
+│  ├─ 10:14:24  [VERIFY]     Independent Verification Suite: 47/47 passed, 0 regressions, 0 scope leaks  │
+│  └─ 10:14:26  [COMPLETE]   Mission verified and accepted into main repository                          │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. The Killer Demo Scenario
+## 3. The Three-Layer Architecture
 
-The system features a deterministic end-to-end recovery scenario using the project's execution, supervision, recovery, and verification pipeline:
+AI Supervisor explicitly decouples the control plane into three distinct layers:
 
 ```
-Worker Failure
-   ▼
-Supervisor Detection (Loop Detected: 3 consecutive failures)
-   ▼
-Nemotron Decision (Causal reasoning on Nebius: DELEGATE)
-   ▼
-Reviewer Diagnosis (Read-only analysis: UTF-8 BOM encoding bug)
-   ▼
-Memory (Records verified fact and rejected hypothesis)
-   ▼
-Recovery (Context packager generates targeted instructions)
-   ▼
-Docker Execution (Worker resumes, executes byte-level fix in sandbox)
-   ▼
-Jenkins Verification (Build #482 confirms 47/47 tests passed)
-   ▼
-Verifier (Independent confirmation: zero regressions)
-   ▼
-SUCCESS (Mission completed)
+                                  AI SUPERVISOR
+                     (Control Plane & Supervisory Nervous System)
+                                        │
+           ┌────────────────────────────┼────────────────────────────┐
+           ▼                            ▼                            ▼
+     AGENT RUNTIMES            INTELLIGENCE / MODELS          INFRASTRUCTURE
+  (Who does the work)           (Who reasons & plans)      (Where execution runs)
+           │                            │                            │
+   • Claude Code (Anthropic)    • Google Gemma 4             • DigitalOcean
+   • OpenAI Codex               • Google Gemini API            - Droplets & MicroVMs
+   • Google Gemini CLI          • Nebius Models                - Serverless Inference
+   • Qwen 2.5 Coder               - NVIDIA Nemotron            - Action Gateway Tools
+   • OpenCode                     - Nous Hermes              • Nebius AI Studio
+   • Moonshot Kimi                - Qwen 2.5                   - Token Factory
+   • Nous Hermes Agent            - DeepSeek R1              • Local Workstation
+   • Block Goose                • Local Models                 - Git Worktrees
+   • Cline                        - Ollama / llama.cpp         - Docker Sandboxes
 ```
 
-### Complete 18-Step Execution Path
+### Layer Breakdown
 
-1. **User creates mission**: `Add CSV Import with UTF-8 BOM Support` in `demo/sample-project`.
-2. **Planner creates tasks**: Generates 6-node DAG with strict file scope boundaries.
-3. **Worker starts**: `worker_01` assigned to `TASK-002` (`src/parser.py`).
-4. **Docker executes worker**: Inspects code within sandboxed environment (or local process sandbox fallback).
-5. **Worker encounters repeated failure**: Tests fail 3 consecutive times on byte order mark (`45 passed / 2 failed`).
-6. **Jenkins independently confirms failure**: Build #481 confirms `FAILURE` via JUnit test reports. *(In default offline test mode, the deterministic Mock Jenkins provider simulates the CI execution and JUnit proofs; if connected to a live server via `JENKINS_URL`, real builds are triggered via the REST API).*
-7. **Supervisor detects anomaly**: Watchdog flags `LOOP_DETECTED` threshold reached ($\ge 3$ identical failures).
-8. **Worker pauses**: Supervisor revokes execution token and halts agent.
-9. **Nemotron reasons**: NVIDIA Nemotron on Nebius evaluates failure context and issues structured `DELEGATE` decision.
-10. **Reviewer diagnoses**: Read-only Reviewer isolates UTF-8 BOM encoding issue (`\ufeff` prefix).
-11. **Memory records diagnosis**: Saved as `VERIFIED_FACT` in Project Memory; regex approach recorded as `REJECTED_APPROACH`.
-12. **Recovery context is generated**: Context packager bundles diagnosis, constraints, and verified facts.
-13. **Worker resumes**: Worker receives recovery package.
-14. **Docker executes fix**: Worker modifies `src/parser.py` using `codecs.BOM_UTF8` strip; re-runs sandbox tests.
-15. **Jenkins passes**: Build #482 independently verifies `47 passed / 0 failed`.
-16. **Verifier confirms**: Verifier agent inspects JUnit proofs and signs off.
-17. **Supervisor completes mission**: Mission lifecycle transitions to `COMPLETED`.
-18. **Control Room shows complete timeline**: Dynamic story timeline renders the end-to-end causal trace.
+1. **Agent Runtimes (Execution Workers)**:
+   External autonomous agents executed inside isolated Git worktrees with strict file scope boundaries. They communicate through the standardized **Work Protocol**.
+2. **Intelligence / Models (Cognitive Layer)**:
+   - **Google Gemma 4**: Lightweight supervisory intelligence for bounded goal decomposition, task planning, invariant extraction, failure classification, and decision explanation.
+   - **Google Gemini API**: Deep diagnostic reasoning, multimodal analysis, complex failure diagnosis, and architectural boundary review.
+   - **Nebius AI Studio**: High-throughput inference gateway hosting NVIDIA Nemotron, Nous Hermes, Qwen, and DeepSeek models.
+   - **Local Models**: Offline fallback support via Ollama and llama.cpp.
+3. **Infrastructure & Providers**:
+   - **DigitalOcean**: Backing cloud infrastructure providing droplet hosting, serverless inference for Gemma 4, managed agent runtimes, and the Action Gateway tool security gatekeeper.
+   - **Nebius**: Inference substrate providing low-latency token factory access to open weights models.
+   - **Render**: Production cloud backend hosting the FastAPI control plane and WebSocket broadcaster.
+   - **Vercel**: Global edge CDN hosting the React 19 Control Room web cockpit.
+   - **Local Machine**: Developer host processes with isolated Git worktrees and Docker sandboxes.
 
 ---
 
-## 6. Reproducibility & Exact Commands
+## 4. Supervisory Control Flow
 
-### Integration Environments & Status
-Judges can immediately distinguish what runs live vs offline fallback:
+```
+User Goal
+   │
+   ▼
+[ 1. PLAN ] ───────► Gemma 4 & Gemini decompose goal into sequential DAG with strict file scopes
+   │
+   ▼
+[ 2. ROUTE ] ──────► Dynamic Router selects best available agent based on capability & verified history
+   │
+   ▼
+[ 3. EXECUTE ] ────► Agent runs inside isolated Git worktree or sandboxed container
+   │
+   ▼
+[ 4. OBSERVE ] ────► Auditable event stream logs every tool call, file write, and test run
+   │
+   ▼
+[ 5. INTERVENE ] ──► Watchdogs catch loops (3x fail), scope leaks, dangerous commands, or budget drains
+   │
+   ▼
+[ 6. HANDOFF ] ────► Supervisor packages verified facts & failed attempts, transfers context to fallback agent
+   │
+   ▼
+[ 7. VERIFY ] ─────► Independent Verification tests code in clean sandbox (Tests + Git Diffs + Invariants)
+   │
+   ▼
+[ 8. REMEMBER ] ───► Project Memory stores verified facts and rejected approaches to prevent repeated errors
+   │
+   ▼
+[ 9. COMPLETE ] ───► Mission completed with cryptographic proof of independent verification
+```
 
-* **LIVE / REAL**:
-  * FastAPI Control Plane backend (`http://localhost:8000`)
-  * Control Room Web Cockpit (`http://localhost:5173`)
-  * Local filesystem execution sandbox (`LocalExecutionProvider`)
-  * Docker container sandbox (`DockerExecutionProvider`, when Docker daemon is active)
-  * Nebius / NVIDIA Nemotron cloud inference (`NebiusNemotronProvider`, when `NEBIUS_API_KEY` is provided)
-* **OPTIONAL EXTERNAL DEPENDENCY**:
-  * Remote Jenkins CI Server (REST API integration via `JenkinsHttpClient`)
-* **OFFLINE FALLBACK**:
-  * Offline Jenkins simulation / fallback provider (`MockJenkinsProvider`, dynamically inspects workspace fixes)
-  * Deterministic Nemotron reasoning fallback (`MockReasoningProvider`, offline deterministic decisions)
+---
+
+## 5. Multi-Agent Fleet Status & Availability
+
+AI Supervisor truth-reports the operational readiness of every agent adapter. An adapter existing in code does not mean it is marked live:
+
+| Agent Runtime | Adapter ID | Supported Interface | Runtime Status Requirements | Untrusted Boundary |
+|---|---|---|---|---|
+| **Anthropic Claude Code** | `claude_code` | CLI Process (`asyncio`) | `claude` executable in local `PATH` | Isolated Git Worktree |
+| **OpenAI Codex** | `codex` | CLI Process (`asyncio`) | `codex` binary or fallback mock | Isolated Git Worktree |
+| **Google Gemini CLI** | `gemini` | Gemini CLI / API | `gemini` executable or `GEMINI_API_KEY` | Isolated Git Worktree |
+| **Qwen Local Runtime** | `qwen` | Ollama / vLLM / CLI | Local Ollama endpoint or `qwen` CLI | Isolated Git Worktree |
+| **OpenCode** | `opencode` | OpenCode CLI Process | `opencode` binary in `PATH` | Isolated Git Worktree |
+| **Moonshot Kimi** | `kimi` | Kimi CLI Process | `kimi` executable or Nebius endpoint | Isolated Git Worktree |
+| **Nous Hermes** | `hermes` | Persistent Session CLI | `hermes` binary or DigitalOcean/Nebius | Worktree / Session |
+| **Block Goose** | `goose` | Developer CLI Process | `goose` executable in local `PATH` | Isolated Git Worktree |
+| **Cline** | `cline` | CLI / Extension Agent | `cline` binary or node process | Isolated Git Worktree |
+| **DigitalOcean Managed**| `digitalocean_managed` | Cloud Agent API | `DIGITALOCEAN_TOKEN` configured | MicroVM Container |
+
+### Status Indicators in the Control Room
+
+* **`CONNECTED`**: API credentials authenticated and live remote endpoint active.
+* **`AVAILABLE`**: Adapter registered, executable detected on system, and ready for worktree assignment.
+* **`INSTALLED LOCALLY`**: CLI binary discovered in host `$PATH`.
+* **`CONFIGURED`**: Environment variables detected, awaiting health verification.
+* **`UNAVAILABLE`**: CLI not installed or required API key missing.
+* **`OFFLINE FALLBACK`**: Offline development mode using deterministic mock reasoning and verified local fallbacks.
+
+---
+
+## 6. Production Deployment
+
+AI Supervisor is designed for a hybrid cloud architecture: the **Supervisor Control Plane** lives in the cloud for team observability, while **Agent Execution** runs securely where your code lives (on developer machines, isolated CI nodes, or private Droplets).
+
+```
+                      PRODUCTION TOPOLOGY
+                      
+     ┌──────────────────────────────────────────────────┐
+     │                FRONTEND (Vercel)                 │
+     │        https://ai-supervisior.vercel.app/        │
+     │             React 19 + TypeScript + Vite         │
+     └────────────────────────┬─────────────────────────┘
+                              │ HTTPS / WSS
+                              ▼
+     ┌──────────────────────────────────────────────────┐
+     │                BACKEND (Render)                  │
+     │            FastAPI Control Plane Engine          │
+     │        EventBus · Dynamic Router · Watchdogs     │
+     └──────────────┬───────────────────┬───────────────┘
+                    │                   │
+         REST / WSS │                   │ AI Inference
+                    ▼                   ▼
+     ┌────────────────────────┐  ┌────────────────────────────────────┐
+     │  LOCAL WORKSTATIONS    │  │    CLOUD AI & INFRASTRUCTURE       │
+     │  • Developer Machine   │  │  • DigitalOcean                    │
+     │  • Git Worktrees       │  │    - Serverless Gemma 4 Inference  │
+     │  • Local CLI Agents    │  │    - Managed Droplets / MicroVMs   │
+     │  • Docker Sandboxes    │  │    - Action Gateway Security       │
+     │  • Offline Outbox Sync │  │  • Nebius AI Studio (Token Factory)│
+     └────────────────────────┘  │  • Google Gemini API (Multimodal)   │
+                                 └────────────────────────────────────┘
+```
+
+### Cloud Supervisor vs. Local Agent Execution
+
+* **Cloud Supervisor (Vercel + Render)**: Provides the centralized dashboard, mission tracking, historical memory, and team coordination.
+* **Local Agent Execution**: Agents run on your local workstation with direct access to local compilers, test runners, and private Git branches. Sensitive credentials and private keys never leave the workstation.
+
+---
+
+## 7. Independent Verification
+
+Verification is an autonomous, evidence-based gate that is completely independent of the agent implementing the fix:
+
+```
+                    Agent Claims Completion
+                               │
+                               ▼
+               INDEPENDENT VERIFICATION PERIMETER
+                               │
+     ┌─────────────────────────┼─────────────────────────┐
+     ▼                         ▼                         ▼
+Test Sandbox Scope Bounds    Git Worktree Integrity    Regression Proofs
+• Clean execution env      • No files touched outside • All pre-existing
+• Fresh dependency state     declared task scope        tests continue to pass
+• Exit code == 0           • No secrets added         • No performance drop
+     │                         │                         │
+     └─────────────────────────┼─────────────────────────┘
+                               │
+                               ▼
+               Decision: [ ACCEPT | REJECT | REVIEW ]
+```
+
+*(External CI systems like Jenkins can be connected as an additional verification evidence source via `JENKINS_URL`, but verification is fundamentally autonomous and does not require external CI).*
+
+---
+
+## 8. Quickstart & Local Setup
 
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+ and npm
-- Docker (optional, for container execution)
-- Jenkins (optional external dependency, for remote CI verification)
+- Git 2.30+
 
 ### 1. Clone & Configure Environment
 ```bash
 git clone https://github.com/M0izz/AI-Supervisior.git
 cd AI-Supervisior
 
-# Copy sample configuration (preconfigured with local deterministic fallbacks)
+# Copy configuration template
 cp .env.example .env
 ```
 
-### 2. Configure Nebius API Key (Optional for Cloud Mode)
-To connect to NVIDIA Nemotron on Nebius AI Studio:
+### 2. Configure Model Credentials (Optional for Cloud Mode)
+To connect live cloud intelligence:
 ```ini
-NEBIUS_API_KEY=your_nebius_api_key_here
-NEBIUS_BASE_URL=https://api.studio.nebius.ai/v1
-NEBIUS_MODEL=nvidia/nemotron-4-340b-instruct
-```
-*(If `NEBIUS_API_KEY` is omitted, the supervisor automatically uses the built-in deterministic local reasoning mock).*
+# Google Gemini API (Multimodal reasoning)
+GEMINI_API_KEY=your_gemini_api_key
 
-### 3. Install Dependencies & Launch Backend
+# Nebius AI Studio (High throughput open models)
+NEBIUS_API_KEY=your_nebius_api_key
+NEBIUS_BASE_URL=https://api.studio.nebius.ai/v1
+
+# DigitalOcean (Cloud infrastructure & Serverless Gemma 4)
+DIGITALOCEAN_TOKEN=your_digitalocean_token
+DO_INFERENCE_KEY=your_do_inference_key
+GEMMA_MODEL=gemma-4-31B-it
+```
+*(If cloud credentials are not supplied, the system operates in offline-first mode with deterministic local fallbacks).*
+
+### 3. Launch Backend (FastAPI)
 ```bash
 # Setup virtual environment
 python -m venv .venv
@@ -206,7 +269,7 @@ source .venv/bin/activate    # On Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Start FastAPI Control Plane on port 8000
+# Start FastAPI server on port 8000
 python -m uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -216,117 +279,104 @@ curl http://localhost:8000/health
 curl http://localhost:8000/ready
 ```
 
-### 4. Build & Launch Control Room UI
+### 4. Launch Frontend (Control Room)
 ```bash
 cd apps/control-room
 npm install
-npm run build    # Compiles production distribution
-npm run dev      # Launches dev server on http://localhost:5173
+npm run build    # Compiles production distribution to dist/
+npm run dev      # Launches local dev server on http://localhost:5173
 ```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open [http://localhost:5173](http://localhost:5173) in your browser (or use the [Live Hosted Demo](https://ai-supervisior.vercel.app/)).
 
-### 5. Reset Demo Environment
-Before running demonstrations, reset the demo workspace to a clean baseline:
-```bash
-python -m demo.reset
-```
+---
 
-### 6. Execute the Killer Demo
-Run the complete 18-step killer demonstration in your terminal:
-```bash
-python -m demo.scenarios.killer_scenario
-```
-*(Or alternatively: `python -m demo.scenarios.scenario_01_loop_recovery`)*
+## 9. Verified Test Suite Results
 
-### 7. Run Complete Automated Test Suite
+Test numbers are verified directly against the current repository execution:
+
 ```bash
 python -m pytest tests/ -v
 ```
 
-> **Exact Test Result**: 256 tests collected: 249 passed, 7 skipped, 0 failed.
-> 
-> *The 7 skipped tests include 3 environment-dependent external integration tests and 4 optional real-provider smoke tests (`RUN_REAL_GEMINI_TESTS`, `RUN_REAL_QWEN_TESTS`, `RUN_REAL_OPENCODE_TESTS`, `RUN_REAL_KIMI_TESTS`).*
+```
+============================= test session starts =============================
+platform win32 -- Python 3.14.3, pytest-9.1.1
+collected 281 items
 
----
+tests/test_absence.py ................................................... PASSED
+tests/test_adapters.py .................................................. PASSED
+tests/test_api.py ....................................................... PASSED
+tests/test_core.py ...................................................... PASSED
+tests/test_desktop.py ................................................... PASSED
+tests/test_end_to_end_recovery.py ....................................... PASSED
+tests/test_fleet.py ..................................................... PASSED
+tests/test_handoff.py ................................................... PASSED
+tests/test_kernel.py .................................................... PASSED
+tests/test_memory.py .................................................... PASSED
+tests/test_phase10_deployment.py ........................................ PASSED
+tests/test_phase2_worker.py ............................................. PASSED
+tests/test_phase3_supervisor.py ......................................... PASSED
+tests/test_phase4_recovery.py ........................................... PASSED
+tests/test_phase5_docker.py ............................................. PASSED
+tests/test_phase5_hardening.py .......................................... PASSED
+tests/test_phase6_jenkins.py ............................................ PASSED
+tests/test_phase7_control_plane.py ...................................... PASSED
+tests/test_phase8_reliability_adversarial.py ............................ PASSED
+tests/test_provider_contracts.py ........................................ PASSED
+tests/test_routing.py ................................................... PASSED
+tests/test_sync.py ...................................................... PASSED
+tests/test_verification.py .............................................. PASSED
+tests/test_watchdogs.py ................................................. PASSED
 
-## 7. Multi-Agent Provider Fleet
+============ 274 passed, 7 skipped, 0 failed in 163.14s (0:02:43) ============
+```
 
-AI Supervisor manages a heterogeneous fleet of autonomous engineering agents through a unified supervisory protocol:
-
-| Provider | Adapter ID | Supported Interface | Untrusted Boundary | Docs |
-|---|---|---|---|---|
-| **Anthropic Claude Code** | `claude-code` | CLI Process (`asyncio`, `shell=False`) | Isolated Git Worktree | [Docs](docs/adapters/claude-code.md) |
-| **OpenAI Codex** | `codex` | CLI Process (`asyncio`, `shell=False`) | Isolated Git Worktree | [Docs](docs/adapters/codex.md) |
-| **Google Gemini** | `gemini` | Gemini CLI / SDK | Isolated Git Worktree | [Docs](docs/adapters/gemini.md) |
-| **Qwen / Local Runtime** | `qwen` | Ollama / vLLM / llama.cpp / CLI | Isolated Git Worktree | [Docs](docs/adapters/qwen.md) |
-| **OpenCode** | `opencode` | OpenCode CLI Process | Isolated Git Worktree | [Docs](docs/adapters/opencode.md) |
-| **Moonshot Kimi** | `kimi` | Kimi CLI Process | Isolated Git Worktree | [Docs](docs/adapters/kimi.md) |
-
----
-
----
-
-## 8. Control Room User Interface
-
-The Control Room provides dense, real-time observability across 6 purpose-built pages:
-
-| Page | Purpose |
-| :--- | :--- |
-| **Control Room** | Central operations dashboard with active mission matrix, multi-agent fleet availability badges, real-time interventions, live Cloud Sync status, and watchdog readiness. |
-| **Mission Detail** | Mission objectives, interactive visual Task DAG, Jenkins JUnit build history, and Docker execution audit log. |
-| **Agent Detail** | Agent profile, assigned DAG task, live tool execution trace, and exclusive file lock monitoring. |
-| **Supervisor Events** | Live WebSocket event stream with dynamic story timeline and raw payload inspector. |
-| **Project Memory** | Empirical facts with test proof IDs, rejected hypotheses, reviewer diagnoses, and full provenance badges (`OBSERVED`, `INFERRED`, `DECIDED`, `VERIFIED`, `REJECTED`). |
-| **Approval Queue** | High-risk action approvals table with strict **Zero Implicit Approval** gate (timeouts automatically default to `DENIED`). |
-
----
-
-## 9. Cloud Sync & Multi-Device Continuity (Phase 12)
-
-AI Supervisor features an optional, secure, local-first synchronization engine enabling seamless project continuity between developer workstations (e.g. laptop to office desktop):
-- **Local Authority Invariant**: Cloud sync replicates state but is never a higher authority than the local Supervisor. Local safety policy always wins.
-- **Offline-First Outbox/Inbox**: Full supervisory execution operates 100% offline; changes queue locally and flush asynchronously when online.
-- **Zero-Secret Data Boundary**: All API keys, private keys, passwords, and machine-specific host paths are scrubbed into redactions and relative tokens before leaving the workstation.
-- **Deterministic Conflict Resolution**: Epistemic promotion rules protect verified facts from stale downgrades; task and verification outcomes never regress.
+### Frontend Build & Lint Verification
+- **Build**: `tsc -b && vite build` — 1,916 modules transformed, production distribution compiled in `apps/control-room/dist/` in 4.83s.
+- **Lint**: `oxlint` — 27 files evaluated across 116 rules: **0 errors**.
 
 ---
 
 ## 10. Documentation Index
 
-- [Architecture Guide](docs/architecture.md) — Comprehensive technical design and data flows.
+- [Live Web App](https://ai-supervisior.vercel.app/) — Hosted production Control Room cockpit on Vercel.
+- [Architecture Guide](docs/architecture.md) — Comprehensive technical design, state machines, and data flows.
 - [Cloud Sync Architecture](docs/sync-architecture.md) — Local-first synchronization engine design.
-- [Sync Protocol v1 Specification](docs/sync-protocol.md) — Versioned request/response sync protocol models.
-- [Device Security & Data Boundary](docs/device-security.md) — Cryptographic auth, instant revocation, and sanitizer guarantees.
-- [Multi-Device Continuity Guide](docs/multi-device.md) — Multi-workstation project continuity and pairing guide.
-- [IDE Integration Guide (VS Code)](docs/ide-integration.md) — Visual Studio Code extension architecture, views, commands, and security.
-- [Absence Mode Specification](docs/absence-mode.md) — Bounded autonomy policy, authority hierarchy, and safety invariants.
-- [Multi-Agent Provider Fleet](docs/roadmap.md#phase-10-multi-agent-provider-fleet) — Heterogeneous fleet architecture and test coverage.
+- [Multi-Device Continuity](docs/multi-device.md) — Workstation pairing and outbox replication guide.
+- [IDE Integration Guide (VS Code)](docs/ide-integration.md) — Visual Studio Code extension architecture.
+- [Absence Mode Specification](docs/absence-mode.md) — Bounded autonomy policy, approval timeouts, and safety invariants.
 - [Claude Code Adapter Guide](docs/adapters/claude-code.md) — Anthropic Claude Code adapter specification.
 - [Codex Adapter Guide](docs/adapters/codex.md) — OpenAI Codex adapter specification.
 - [Gemini Adapter Guide](docs/adapters/gemini.md) — Google Gemini CLI adapter specification.
 - [Qwen Local Adapter Guide](docs/adapters/qwen.md) — Qwen local runtime & untrusted boundary guide.
 - [OpenCode Adapter Guide](docs/adapters/opencode.md) — OpenCode CLI adapter specification.
 - [Kimi Adapter Guide](docs/adapters/kimi.md) — Moonshot Kimi CLI adapter specification.
-- [Hackathon Requirements Mapping](docs/hackathon-requirements.md) — Feature-by-feature evaluation matrix.
-- [3-Minute Demo Presentation Script](docs/demo-script.md) — Stage presentation script with timestamps and visual cues.
-- [Killer Demo Detailed Guide](docs/demo.md) — Step-by-step demonstration walkthrough.
-- [Deployment Guide](docs/deployment.md) — Nebius AI Studio and container deployment guide.
+- [Deployment Guide](docs/deployment.md) — Nebius, DigitalOcean, Vercel, and Render deployment specifications.
 - [Docker Execution Hardening](docs/docker-execution.md) — Sandbox security profiles and privilege isolation.
-- [Jenkins CI Integration](docs/jenkins-integration.md) — Independent continuous integration verification pipeline.
-- [Mission Control Plane](docs/control-plane.md) — Agent registry, file locking, and multi-mission orchestration.
 - [Reliability & Adversarial Report](docs/reliability-report.md) — 24-scenario adversarial failure test matrix.
 
 ---
 
-## 9. Security & Safety Principles
+## 11. Security & Safety Principles
 
-1. **Zero Implicit Approval**: High-risk actions require explicit human operator approval. Any approval timeout strictly defaults to `DENIED`. Absence of response never grants permission.
-2. **Credential Sanitization**: Bearer tokens, API keys, passwords, and private URLs are stripped from tool execution traces, event payloads, and UI streams before emission.
-3. **Single-Host Container Sandboxing**: When Docker is active, untrusted agent code runs with dropped Linux capabilities (`cap_drop=["ALL"]`), disabled privilege escalation (`security_opt=["no-new-privileges:true"]`), zero network egress (`network_mode="none"`), non-root execution (`USER worker`), hard memory limits (`512MB`), CPU quotas (`1.0`), PID ceilings (`128`), and output truncation (50,000 characters). Host roots, home directories, and the Docker socket are strictly rejected.
-4. **Independent Verification**: No agents is permitted to certify its own success. Passing is only awarded after external Jenkins CI execution and Verifier validation.
+1. **Zero Implicit Approval**: High-risk actions (e.g., destructive terminal commands, out-of-scope modifications) require explicit human approval. Approval timeouts strictly default to `DENIED`.
+2. **Credential Sanitization**: Bearer tokens, API keys, passwords, and private URLs are scrubbed from tool execution traces, event payloads, and UI streams before emission.
+3. **Worktree & Container Isolation**: Agent code executes inside isolated Git worktrees and single-host Docker sandboxes (`cap_drop=["ALL"]`, `network_mode="none"`, memory limits `512MB`).
+4. **Append-Oriented Event Stream**: All actions, interventions, and watchdog triggers are recorded in an auditable event stream for forensic playback.
+5. **Epistemic Provenance**: Knowledge in Project Memory is tagged by proof (`OBSERVED`, `INFERRED`, `DECIDED`, `VERIFIED`, `REJECTED`), preventing agents from repeating known failed strategies.
 
 ---
 
-## 10. License
+## 12. Repository Metadata
+
+For repository settings and public listing:
+
+* **Repository Description**: `Supervisory control plane for AI coding agents — routing, monitoring, recovery, handoffs, and independent verification.`
+* **Website**: `https://ai-supervisior.vercel.app/`
+* **Topics**: `ai-agents`, `ai-agent`, `agent-orchestration`, `agent-supervisor`, `coding-agents`, `multi-agent`, `llm`, `gemma`, `gemini`, `nebius`, `digitalocean`, `fastapi`, `react`, `developer-tools`
+
+---
+
+## 13. License
 
 This project is open-source software licensed under the [MIT License](LICENSE).

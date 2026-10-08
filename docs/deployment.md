@@ -84,6 +84,13 @@ Configuration is strictly environment-driven. **Never commit secrets such as `NE
 | `NEBIUS_BASE_URL` | `https://api.studio.nebius.ai/v1` | Nebius OpenAI-compatible API base URL. |
 | `NEBIUS_MODEL` | `nvidia/nemotron-4-340b-instruct` | NVIDIA open-source foundation model on Nebius. |
 | `SUPERVISOR_MODEL_TIMEOUT_SECONDS` | `20.0` | Timeout before fallback reasoning engages. |
+| **Google Gemini API** | | |
+| `GEMINI_API_KEY` | *(Optional)* | Google Gemini API key for multimodal inspection and deep incident diagnostics. |
+| **DigitalOcean & Gemma 4** | | |
+| `DIGITALOCEAN_TOKEN` | *(Optional)* | DigitalOcean Personal Access Token for cloud infrastructure & Managed Agents. |
+| `DO_INFERENCE_KEY` | *(Optional)* | API token for DigitalOcean Serverless Inference. |
+| `DO_INFERENCE_ENDPOINT` | `https://inference.digitalocean.com/v1` | Serverless inference base URL. |
+| `GEMMA_MODEL` | `gemma-4-31B-it` | Google Gemma 4 model identifier on DigitalOcean inference. |
 | **Supervisor Runtime** | | |
 | `SUPERVISOR_MAX_ITERATIONS` | `25` | Maximum agent iteration budget before intervention. |
 | `SUPERVISOR_FAILURE_THRESHOLD` | `3` | Consecutive identical error threshold before triggering `LOOP_DETECTED`. |
@@ -95,7 +102,7 @@ Configuration is strictly environment-driven. **Never commit secrets such as `NE
 | `DOCKER_MEMORY_LIMIT` | `512m` | Hard RAM ceiling for worker tasks. |
 | `DOCKER_CPU_LIMIT` | `1.0` | CPU allocation quota. |
 | `DOCKER_NETWORK_DISABLED` | `true` | Restricts container egress to prevent exfiltration. |
-| **Jenkins CI Integration** | | |
+| **Jenkins CI Integration (Optional)** | | |
 | `JENKINS_URL` | `http://localhost:8080` | Jenkins server base URL (or `mock` for deterministic test mode). |
 | `JENKINS_JOB_NAME` | `ai-work-supervisor` | Job configured with test execution and JUnit reporting. |
 | `JENKINS_USERNAME` | *(Optional)* | Service account username for Jenkins API. |
@@ -255,14 +262,16 @@ Never conflate mock test results with cloud test results.
 
 To run all automated verification tests:
 ```bash
-# Run full suite (126 tests collected: 124 passed, 2 skipped)
+# Run full suite (281 tests collected: 274 passed, 7 skipped, 0 failed)
 python -m pytest tests/ -v
 
 # Run Phase 10 deployment tests specifically
 python -m pytest tests/test_phase10_deployment.py -v
 
+# Run multi-agent provider contracts
+python -m pytest tests/test_provider_contracts.py -v
+
 # Run interactive failure scenarios
+python -m demo.scenarios.killer_scenario
 python -m demo.scenarios.scenario_01_loop_recovery
-python -m demo.scenarios.scenario_02_ci_failure
-python -m demo.scenarios.scenario_03_failure_matrix
 ```

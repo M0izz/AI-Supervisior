@@ -6,7 +6,7 @@
 
 Autonomous agents may prematurely declare tasks complete, omit edge cases, or hallucinate passing test outputs. The **AI Work Supervisor** enforces that worker completion is treated solely as an unverified claim.
 
-An external, independent continuous integration system—**Jenkins CI**—acts as an authoritative verification gate. Jenkins pulls or executes against the resulting workspace code, runs the test suite, generates structured test reports (e.g., JUnit XML via pytest), and emits structured telemetry to the central `EventBus`.
+Independent verification evaluates test assertions, file scope boundaries, git worktree diffs, completion criteria, and regressions. When connected, an external continuous integration system—**Jenkins CI**—acts as an authoritative CI evidence source. Jenkins executes against the resulting workspace code, runs the test suite, generates structured test reports (e.g., JUnit XML via pytest), and emits structured telemetry to the central `EventBus`.
 
 ```text
                     HUMAN
