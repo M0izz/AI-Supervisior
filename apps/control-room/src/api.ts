@@ -21,27 +21,41 @@ const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
 const API_BASE = rawApiUrl.replace(/\/+$/, '');
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${url}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers || {})
-    }
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-  if (!res.ok) {
-    let errMsg = `Request failed: ${res.status} ${res.statusText}`;
-    try {
-      const errBody = await res.json();
-      if (errBody.detail) errMsg = typeof errBody.detail === 'string' ? errBody.detail : JSON.stringify(errBody.detail);
-    } catch {
-      // fallback to status text
+  try {
+    const res = await fetch(`${API_BASE}${url}`, {
+      ...options,
+      signal: options?.signal || controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options?.headers || {})
+      }
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error(`Expected JSON from ${url}, but received ${contentType || 'non-JSON'}`);
     }
-    throw new Error(errMsg);
+
+    if (!res.ok) {
+      let errMsg = `Request failed: ${res.status} ${res.statusText}`;
+      try {
+        const errBody = await res.json();
+        if (errBody.detail) errMsg = typeof errBody.detail === 'string' ? errBody.detail : JSON.stringify(errBody.detail);
+      } catch {
+        // fallback
+      }
+      throw new Error(errMsg);
+    }
+
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return res.json();
 }
+
 
 // Missions
 export async function getMissions(): Promise<Mission[]> {
@@ -147,6 +161,18 @@ export async function seedDemoMission(): Promise<{ status: string; mission_id: s
     method: 'POST'
   });
 }
+
+export async function executeMission(missionId: string, payload?: { agent_id?: string; use_worktree?: boolean }): Promise<any> {
+  return fetchJson(`/api/missions/${missionId}/execute`, {
+    method: 'POST',
+    body: JSON.stringify(payload || {})
+  });
+}
+
+export async function getMissionVerification(missionId: string): Promise<{ verifications: any[]; count: number }> {
+  return fetchJson(`/api/missions/${missionId}/verification`).catch(() => ({ verifications: [], count: 0 }));
+}
+
 
 // Tasks
 export async function getMissionTasks(missionId: string): Promise<{

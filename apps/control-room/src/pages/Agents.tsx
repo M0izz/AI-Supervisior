@@ -115,10 +115,11 @@ export const Agents: React.FC<AgentsProps> = ({
       isPaused,
       statusDisplay,
       capabilities,
-      verificationRate: liveInstance ? '100%' : null,
+      verificationRate: liveInstance?.metadata?.verification_rate || (liveInstance?.status === 'COMPLETED' ? 'Verified' : null),
       interventions: liveInstance?.interventions || 0
     };
   });
+
 
   const filteredFleet = fleetList.filter(item => {
     if (selectedCategory !== 'All') {

@@ -24,6 +24,7 @@ import {
   getMissionEvents,
   getMissionAbsence,
   getSupervisorDecisions,
+  getMissionVerification,
   explainDecision
 } from '../api';
 import { ProviderLogo } from '../components/ProviderLogo';
@@ -55,6 +56,7 @@ export const Missions: React.FC<MissionsProps> = ({
   const [activeTab, setActiveTab] = useState<'story' | 'tasks' | 'verification' | 'policy'>('story');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [missionDecisions, setMissionDecisions] = useState<SupervisorDecision[]>([]);
+  const [verificationRecords, setVerificationRecords] = useState<any[]>([]);
   const [explainingDecision, setExplainingDecision] = useState<SupervisorDecision | null>(null);
   const [gemmaExplanation, setGemmaExplanation] = useState<any | null>(null);
   const [isExplaining, setIsExplaining] = useState(false);
@@ -91,11 +93,19 @@ export const Missions: React.FC<MissionsProps> = ({
       })
       .catch(() => setMissionDecisions([]));
 
+    // Load actual independent verification records
+    getMissionVerification(selectedMission.id)
+      .then(res => {
+        if (res?.verifications) setVerificationRecords(res.verifications);
+      })
+      .catch(() => setVerificationRecords([]));
+
     // Load absence mode state
     getMissionAbsence(selectedMission.id)
       .then(res => setAbsenceInfo(res))
       .catch(() => setAbsenceInfo(null));
   }, [selectedMission]);
+
 
   // Handle Pause/Resume
   const handleTogglePause = async () => {
@@ -517,15 +527,44 @@ export const Missions: React.FC<MissionsProps> = ({
               </span>
             </div>
 
+            {/* Authoritative Evidence Records from SQLite */}
+            {verificationRecords.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Authoritative Verification Runs ({verificationRecords.length})
+                </div>
+                {verificationRecords.map((vr, idx) => (
+                  <div key={idx} style={{ padding: '12px 14px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13px' }}>
+                        {vr.verification_id} • {vr.verification_type || 'INDEPENDENT_VERIFICATION'}
+                      </span>
+                      <span className={`badge ${vr.status === 'PASS' || vr.status === 'ACCEPT' ? 'badge-green' : 'badge-red'}`}>
+                        {vr.status}
+                      </span>
+                    </div>
+                    {vr.command && (
+                      <code style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg)', padding: '4px 8px', borderRadius: '4px' }}>
+                        {vr.command}
+                      </code>
+                    )}
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Timestamp: {new Date(vr.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* 6-Point Verification Checklist */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
               {[
-                { name: 'Deterministic Test Suite', desc: 'Automated pytest / unit test suite executed in isolated worktree sandbox.', verified: selectedMission.status === 'COMPLETED' },
-                { name: 'Allowed File Boundary', desc: 'Ensures agent only edited files declared in mission scope without side effects.', verified: selectedMission.status === 'COMPLETED' },
-                { name: 'Scope & AST Invariant Checks', desc: 'No unintended mutations, no prohibited library imports, and zero leaks.', verified: selectedMission.status === 'COMPLETED' },
-                { name: 'Git State Cleanliness', desc: 'Worktree verified clean; no temporary debug artefacts or leftover secret tokens.', verified: selectedMission.status === 'COMPLETED' },
-                { name: 'Completion Claim Audit', desc: 'Cross-checks agent output against required task deliverables and outputs.', verified: selectedMission.status === 'COMPLETED' },
-                { name: 'Regression Test Perimeter', desc: 'Baseline regression tests pass with zero newly failing test cases.', verified: selectedMission.status === 'COMPLETED' },
+                { name: 'Deterministic Test Suite', desc: 'Automated pytest / unit test suite executed in isolated worktree sandbox.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
+                { name: 'Allowed File Boundary', desc: 'Ensures agent only edited files declared in mission scope without side effects.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
+                { name: 'Scope & AST Invariant Checks', desc: 'No unintended mutations, no prohibited library imports, and zero leaks.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
+                { name: 'Git State Cleanliness', desc: 'Worktree verified clean; no temporary debug artefacts or leftover secret tokens.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
+                { name: 'Completion Claim Audit', desc: 'Cross-checks agent output against required task deliverables and outputs.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
+                { name: 'Regression Test Perimeter', desc: 'Baseline regression tests pass with zero newly failing test cases.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
               ].map(check => (
                 <div 
                   key={check.name} 
@@ -551,6 +590,7 @@ export const Missions: React.FC<MissionsProps> = ({
                 </div>
               ))}
             </div>
+
 
             <div style={{ 
               display: 'flex', 

@@ -428,12 +428,50 @@ async def update_mission_state(mission_id: str, req: UpdateMissionStatusRequest)
     return {"status": "updated", "mission": mission}
 
 
+class ExecuteMissionRequest(BaseModel):
+    agent_id: str = "worker_01"
+    use_worktree: bool = False
+
+
 @app.post("/api/missions/{mission_id}/start")
 async def start_mission(mission_id: str):
     mission = await app_state.mission_manager.start_mission(mission_id)
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
+    # Launch real background mission execution
+    asyncio.create_task(app_state.mission_runner.execute_mission(mission_id=mission_id))
     return {"status": "started", "mission": mission}
+
+
+@app.post("/api/missions/{mission_id}/execute")
+async def execute_mission_endpoint(mission_id: str, req: Optional[ExecuteMissionRequest] = None):
+    """
+    Executes a real end-to-end coding mission:
+    Agent availability check -> Workspace setup -> Execution -> Watchdog interception ->
+    Diagnosis -> Repair -> Independent verification -> Persisted SQLite results.
+    """
+    agent_id = req.agent_id if req else "worker_01"
+    use_wt = req.use_worktree if req else False
+    try:
+        result = await app_state.mission_runner.execute_mission(
+            mission_id=mission_id,
+            target_agent=agent_id,
+            use_worktree=use_wt
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error executing mission {mission_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/missions/{mission_id}/verification")
+async def get_mission_verification(mission_id: str):
+    """Returns independent verification outcomes for the given mission."""
+    verifications = await app_state.verification_repo.list_by_mission(mission_id)
+    return {"verifications": verifications, "count": len(verifications)}
+
 
 
 @app.post("/api/missions/{mission_id}/pause")

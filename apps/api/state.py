@@ -252,6 +252,11 @@ class AppState:
             approval_manager=self.approval_manager,
         )
 
+        # Mission Runner Orchestrator
+        from execution.mission_runner import MissionRunner
+        self.mission_runner = MissionRunner(self)
+
+
     async def _sqlite_event_sink(self, event: Any) -> None:
         """Asynchronously persists event bus stream to SQLite without blocking handlers."""
         try:

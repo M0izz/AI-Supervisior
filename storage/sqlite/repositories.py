@@ -13,12 +13,13 @@ def _to_json(val: Any) -> str:
     if val is None:
         return "{}"
     if isinstance(val, (dict, list)):
-        return json.dumps(val)
+        return json.dumps(val, default=str)
     if hasattr(val, "model_dump"):
-        return json.dumps(val.model_dump())
+        return json.dumps(val.model_dump(), default=str)
     if hasattr(val, "dict"):
-        return json.dumps(val.dict())
-    return json.dumps(val)
+        return json.dumps(val.dict(), default=str)
+    return json.dumps(val, default=str)
+
 
 
 def _from_json(val: Optional[str], default: Any = None) -> Any:

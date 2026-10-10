@@ -18,6 +18,7 @@ import {
   getAdapters,
   getSyncStatus,
   seedDemoMission,
+  executeMission,
   getSupervisorEvents
 } from './api';
 import { useWebSocket } from './useWebSocket';
@@ -61,6 +62,12 @@ export const App: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+
+  // Fallback safety timeout for initial loading
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoading(false), 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Load authoritative backend data
   const loadData = useCallback(async () => {
@@ -114,7 +121,8 @@ export const App: React.FC = () => {
       eType.includes('TASK') || 
       eType.includes('AGENT') || 
       eType.includes('APPROVAL') ||
-      eType.includes('RECOVERY')
+      eType.includes('RECOVERY') ||
+      eType.includes('VERIFICATION')
     ) {
       loadData();
     }
@@ -141,25 +149,20 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Demo scenario trigger
+  // Real demo scenario trigger
   const handleSeedDemo = async () => {
     setIsSeeding(true);
     try {
       const res = await seedDemoMission();
-      await loadData();
       if (res?.mission_id) {
         setSelectedMissionId(res.mission_id);
         setActiveTab('missions');
+        // Trigger real background mission execution via backend MissionRunner
+        executeMission(res.mission_id).catch(e => {
+          console.warn('Mission execution progress', e);
+        });
       }
-      setInterventions([{
-        anomaly: 'LOOP DETECTED',
-        evidence: '3 consecutive identical failures on test_csv_parser.py (regex unescaped comma error)',
-        action: 'DELEGATE → REVIEWER',
-        target: 'reviewer_01',
-        confidence: 0.94,
-        reason: 'Worker repeatedly failed with identical stack trace. Escalating to Reviewer for causal root diagnosis.',
-        timestamp: new Date().toISOString()
-      }]);
+      await loadData();
     } catch (e) {
       console.error('Failed to run demo scenario', e);
     } finally {
@@ -207,6 +210,7 @@ export const App: React.FC = () => {
       </div>
     );
   }
+
 
   return (
     <div className="app-shell">

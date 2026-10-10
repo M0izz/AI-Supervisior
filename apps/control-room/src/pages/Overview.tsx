@@ -170,10 +170,11 @@ export const Overview: React.FC<OverviewProps> = ({
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <span>{activeMissions.length} mission{activeMissions.length === 1 ? '' : 's'} running</span>
             <span>•</span>
-            <span>{workingAgents.length > 0 ? `${workingAgents.length} agents working` : `${safeAdapters.filter(a => a.availability?.available).length || 2} providers ready`}</span>
+            <span>{workingAgents.length > 0 ? `${workingAgents.length} agents working` : `${safeAdapters.filter(a => a.availability?.available).length} providers ready`}</span>
             <span>•</span>
             <span>{pendingApprovals.length} decisions requiring you</span>
           </div>
+
         </div>
 
         {/* Primary Command Actions */}
