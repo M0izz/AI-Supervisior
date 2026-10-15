@@ -96,7 +96,7 @@ AI Supervisor explicitly decouples the control plane into three distinct layers:
 
 ---
 
-## 4. Supervisory Control Flow
+## 4. Supervisory Control Flow:
 
 ```
 User Goal
@@ -225,6 +225,20 @@ Test Sandbox Scope Bounds    Git Worktree Integrity    Regression Proofs
 *(External CI systems like Jenkins can be connected as an additional verification evidence source via `JENKINS_URL`, but verification is fundamentally autonomous and does not require external CI).*
 
 ---
+---
+
+## What You'll Learn
+
+Exploring AI Supervisor can help developers understand:
+
+- **AI Agent Orchestration:** How multiple coding agents can coordinate tasks and handoffs.
+- **Backend Development:** Building APIs and services with Python and FastAPI.
+- **Frontend Development:** Creating interactive dashboards using React and TypeScript.
+- **Automated Testing:** Verifying application behavior with pytest and frontend build checks.
+- **CI/CD Concepts:** Understanding how Jenkins can support automated verification workflows.
+- **Software Reliability:** Detecting repeated failures and independently verifying task completion.
+
+These learning opportunities depend on exploring the relevant implementations and running the project locally.
 
 ## 8. Quickstart & Local Setup
 
