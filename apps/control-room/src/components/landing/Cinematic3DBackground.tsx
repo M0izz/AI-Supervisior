@@ -463,39 +463,7 @@ export const Cinematic3DBackground: React.FC<Cinematic3DBackgroundProps> = ({ cl
     bloomSprite.scale.set(420, 420, 1);
     masterGroup.add(bloomSprite);
 
-    // 6. TOPOGRAPHICAL WAVE GRID PLANE (Fluid Computational Depth, Image 2)
-    // Seamless extended width & depth with harmonic edge fade
-    const waveWidth = 1400;
-    const waveHeight = 850;
-    const waveCols = 96;
-    const waveRows = 60;
-    const waveGeo = new THREE.PlaneGeometry(waveWidth, waveHeight, waveCols, waveRows);
-    waveGeo.rotateX(-Math.PI * 0.46);
 
-    const basePositions = new Float32Array(waveGeo.attributes.position.array);
-
-    const waveBaseMat = new THREE.MeshStandardMaterial({
-      color: 0x081326,
-      roughness: 0.35,
-      metalness: 0.85,
-      transparent: true,
-      opacity: 0.95,
-      wireframe: false
-    });
-    const waveBaseMesh = new THREE.Mesh(waveGeo, waveBaseMat);
-    waveBaseMesh.position.set(0, -145, -70);
-    masterGroup.add(waveBaseMesh);
-
-    const waveWireMat = new THREE.MeshStandardMaterial({
-      color: 0x3478F6,
-      emissive: 0x1D3B70,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.32
-    });
-    const waveWireMesh = new THREE.Mesh(waveGeo, waveWireMat);
-    waveWireMesh.position.set(0, -144.5, -70);
-    masterGroup.add(waveWireMesh);
 
     // 7. SCULPTURAL OPTICAL LENS RINGS (Concentric Glass Array, Optilayer Image 3)
     const lensRingGroup = new THREE.Group();
@@ -778,29 +746,7 @@ export const Cinematic3DBackground: React.FC<Cinematic3DBackgroundProps> = ({ cl
       rimPointLight.position.x = 210 + mouse.x * 120 + Math.sin(elapsedTime * 0.6) * 45;
       rimPointLight.position.y = 80 - mouse.y * 80 + Math.cos(elapsedTime * 0.5) * 35;
 
-      // A. Undulate Topographical Wave Surface (Image 2 Fluid Motion with Edge Fade)
-      const posAttr = waveGeo.attributes.position;
-      const vertexCount = posAttr.count;
-      for (let i = 0; i < vertexCount; i++) {
-        const bx = basePositions[i * 3];
-        const by = basePositions[i * 3 + 1];
 
-        // Harmonic edge envelope so waves naturally soften towards margins
-        const envelopeX = Math.sin((bx / waveWidth + 0.5) * Math.PI);
-        const envelopeY = Math.sin((by / waveHeight + 0.5) * Math.PI);
-        const envelope = Math.max(0, envelopeX * envelopeY);
-
-        const wZ =
-          (Math.sin(bx * 0.01 + elapsedTime * 0.5 * motionFactor) *
-            Math.cos(by * 0.014 + elapsedTime * 0.4 * motionFactor) *
-            18 +
-          Math.sin((bx + by) * 0.008 + elapsedTime * 0.3 * motionFactor) * 9 +
-          Math.cos(bx * 0.018 - elapsedTime * 0.35 * motionFactor) * 5) * envelope;
-
-        posAttr.setZ(i, wZ);
-      }
-      posAttr.needsUpdate = true;
-      waveGeo.computeVertexNormals();
 
       // B. Animate Concentric Optical Lens Array (Image 3 Optilayer)
       lensRingGroup.rotation.z += 0.0018 * motionFactor;
@@ -848,9 +794,7 @@ export const Cinematic3DBackground: React.FC<Cinematic3DBackgroundProps> = ({ cl
       motionQuery.removeEventListener('change', handleMotionChange);
       observer.disconnect();
 
-      waveGeo.dispose();
-      waveBaseMat.dispose();
-      waveWireMat.dispose();
+
       particlesGeo.dispose();
       particlesMat.dispose();
       moteTexture.dispose();

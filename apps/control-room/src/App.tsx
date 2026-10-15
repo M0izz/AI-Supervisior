@@ -151,17 +151,13 @@ export const App: React.FC = () => {
       setMemoryRecords(safeMemory);
       setEvents(safeEvents);
       if (sync) setSyncStatus(sync);
-
-      if (safeMissions.length > 0 && !selectedMissionId) {
-        setSelectedMissionId(safeMissions[0].id);
-      }
     } catch (err) {
       console.error('Failed to sync authoritative backend data', err);
     } finally {
       setIsRefreshing(false);
       setIsInitialLoading(false);
     }
-  }, [selectedMissionId]);
+  }, []);
 
   useEffect(() => {
     loadData();

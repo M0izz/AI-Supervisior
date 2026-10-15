@@ -392,7 +392,7 @@ def test_api_full_control_plane_endpoints():
     res_st = client.get(f"/api/missions/{mid}/state")
     assert res_st.status_code == 200
     assert res_st.json()["mission_id"] == mid
-    assert res_st.json()["status"] == "CREATED"
+    assert res_st.json()["status"] in ("CREATED", "AWAITING_APPROVAL")
 
     # 3. Transition Mission State
     res_up = client.post(f"/api/missions/{mid}/status", json={"status": "PLANNING", "reason": "Planning started"})

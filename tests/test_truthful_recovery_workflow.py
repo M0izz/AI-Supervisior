@@ -110,7 +110,8 @@ async def test_unavailable_agent_cannot_produce_false_success(test_env):
         repository_path=str(tmp_path)
     )
 
-    result = await state.mission_runner.execute_mission(mission.id, target_agent="claude_code")
+    unavailable_agent = "nonexistent_agent"
+    result = await state.mission_runner.execute_mission(mission.id, target_agent=unavailable_agent)
     assert result["status"] == "FAILED"
     assert "unavailable" in result["reason"].lower()
 

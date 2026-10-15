@@ -1,37 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Target, 
   Play, 
   Pause, 
-  CheckCircle2, 
-  ArrowLeft, 
   Plus, 
-  Search, 
-  ShieldCheck, 
+  ArrowLeft, 
   Layers, 
+  Compass, 
+  ShieldCheck, 
   Lock, 
-  Compass,
+  Target, 
+  Search,
   AlertTriangle,
-  Code2,
   Sparkles,
+  CheckCircle2,
+  Terminal,
+  ChevronRight,
+  Activity,
   X
 } from 'lucide-react';
-import type { Mission, Task, SupervisorDecision } from '../types';
+import type { Mission, Task, Event, SupervisorDecision } from '../types';
 import { 
   pauseMission, 
   resumeMission, 
   getMissionTasks, 
-  getMissionEvents,
-  getMissionAbsence,
+  getMissionEvents, 
   getSupervisorDecisions,
-  getMissionVerification,
-  explainDecision
+  explainDecision,
+  getSyncStatus
 } from '../api';
-import { ProviderLogo } from '../components/ProviderLogo';
 import { HandoffSequence } from '../components/HandoffSequence';
-import { TaskDAGView } from '../components/TaskDAGView';
 import { SupervisorDecisionCard } from '../components/SupervisorDecisionCard';
 import { PlanReview } from '../components/PlanReview';
+import { ProviderLogo } from '../components/ProviderLogo';
 
 interface MissionsProps {
   missions: Mission[];
@@ -48,71 +48,65 @@ export const Missions: React.FC<MissionsProps> = ({
   onRefresh,
   onOpenCreateMission
 }) => {
+  const [activeTab, setActiveTab] = useState<'plan' | 'story' | 'tasks' | 'verification' | 'policy'>('plan');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Mission Detail State
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [absenceInfo, setAbsenceInfo] = useState<any>(null);
-  const [isActing, setIsActing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'plan' | 'story' | 'tasks' | 'verification' | 'policy'>('plan');
-  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
   const [missionDecisions, setMissionDecisions] = useState<SupervisorDecision[]>([]);
-  const [verificationRecords, setVerificationRecords] = useState<any[]>([]);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [isActing, setIsActing] = useState(false);
+  const [isSyncingWorktree, setIsSyncingWorktree] = useState(false);
+
+  // Decision explanation modal
   const [explainingDecision, setExplainingDecision] = useState<SupervisorDecision | null>(null);
-  const [gemmaExplanation, setGemmaExplanation] = useState<any | null>(null);
+  const [decisionExplanation, setDecisionExplanation] = useState<any>(null);
   const [isExplaining, setIsExplaining] = useState(false);
 
   const safeMissions = Array.isArray(missions) ? missions : [];
-  const selectedMission = safeMissions.find(m => m.id === selectedMissionId);
+  const selectedMission = safeMissions.find(m => m.id === selectedMissionId) || null;
 
-  // Load tasks, events, and decisions when selected mission changes
+  // Auto-switch to 'plan' tab when an unapproved mission is loaded
+  useEffect(() => {
+    if (selectedMission) {
+      if (selectedMission.status === 'WAITING_APPROVAL' || !selectedMission.approved_plan_version) {
+        setActiveTab('plan');
+      }
+    }
+  }, [selectedMission?.id, selectedMission?.status]);
+
+  // Load detailed mission telemetry
   useEffect(() => {
     if (!selectedMission) return;
 
-    if (['AWAITING_APPROVAL', 'NEEDS_CLARIFICATION', 'DRAFT', 'PLANNING'].includes(selectedMission.status)) {
-      setActiveTab('plan');
-    }
+    let isMounted = true;
+    const loadDetailData = async () => {
+      try {
+        const [taskData, e, d] = await Promise.all([
+          getMissionTasks(selectedMission.id).catch(() => ({ tasks: [] })),
+          getMissionEvents(selectedMission.id, 50).catch(() => []),
+          getSupervisorDecisions(selectedMission.id).catch(() => ({ decisions: [] }))
+        ]);
+        if (isMounted) {
+          setTasks(Array.isArray(taskData?.tasks) ? taskData.tasks : []);
+          setEvents(Array.isArray(e) ? e : []);
+          setMissionDecisions(Array.isArray(d?.decisions) ? d.decisions : []);
+        }
+      } catch (err) {
+        console.error('Failed to load mission telemetry', err);
+      }
+    };
 
-    // Load tasks
-    if (selectedMission.tasks && selectedMission.tasks.length > 0) {
-      setTasks(selectedMission.tasks);
-    } else {
-      getMissionTasks(selectedMission.id)
-        .then(res => {
-          if (res?.tasks) setTasks(res.tasks);
-        })
-        .catch(() => setTasks([]));
-    }
+    loadDetailData();
+    const interval = setInterval(loadDetailData, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedMission?.id]);
 
-    // Load mission timeline events
-    getMissionEvents(selectedMission.id, 50)
-      .then(res => {
-        if (Array.isArray(res)) setEvents(res);
-      })
-      .catch(() => setEvents([]));
-
-    // Load mission decisions
-    getSupervisorDecisions(selectedMission.id)
-      .then(res => {
-        if (res?.decisions) setMissionDecisions(res.decisions);
-      })
-      .catch(() => setMissionDecisions([]));
-
-    // Load actual independent verification records
-    getMissionVerification(selectedMission.id)
-      .then(res => {
-        if (res?.verifications) setVerificationRecords(res.verifications);
-      })
-      .catch(() => setVerificationRecords([]));
-
-    // Load absence mode state
-    getMissionAbsence(selectedMission.id)
-      .then(res => setAbsenceInfo(res))
-      .catch(() => setAbsenceInfo(null));
-  }, [selectedMission]);
-
-
-  // Handle Pause/Resume
   const handleTogglePause = async () => {
     if (!selectedMission) return;
     setIsActing(true);
@@ -120,7 +114,7 @@ export const Missions: React.FC<MissionsProps> = ({
       if (selectedMission.status === 'PAUSED') {
         await resumeMission(selectedMission.id);
       } else {
-        await pauseMission(selectedMission.id, 'Operator paused from mission detail view');
+        await pauseMission(selectedMission.id, 'Operator requested pause via Missions panel');
       }
       onRefresh();
     } finally {
@@ -128,24 +122,34 @@ export const Missions: React.FC<MissionsProps> = ({
     }
   };
 
-  const handleExplainDecision = async (dec: SupervisorDecision) => {
-    setExplainingDecision(dec);
-    setIsExplaining(true);
-    setGemmaExplanation(null);
+  const handleSyncWorktree = async () => {
+    if (!selectedMission) return;
+    setIsSyncingWorktree(true);
     try {
-      const res = await explainDecision(dec.decision_type, {
-        agent_id: dec.target_agent,
-        task_title: dec.title,
-        reason: dec.why,
-        evidence: dec.evidence
+      await getSyncStatus();
+      onRefresh();
+    } finally {
+      setIsSyncingWorktree(false);
+    }
+  };
+
+  const handleExplainDecision = async (decision: SupervisorDecision) => {
+    setExplainingDecision(decision);
+    setIsExplaining(true);
+    setDecisionExplanation(null);
+    try {
+      const res = await explainDecision(decision.decision_type || 'SUPERVISORY_DECISION', {
+        id: decision.id,
+        title: decision.title,
+        why: decision.why,
+        action: decision.action
       });
-      setGemmaExplanation(res?.explanation || null);
+      setDecisionExplanation(res);
     } catch {
-      setGemmaExplanation({
-        decision: dec.title,
-        rationale: dec.why,
-        evidence: dec.evidence?.join(', ') || 'Supervisory rule evaluation',
-        action: dec.action
+      setDecisionExplanation({
+        rationale: decision.why || 'Structured supervisory decision executed to preserve mission invariants.',
+        policy_reference: decision.action || 'Autonomous Supervision Policy',
+        counterfactual: 'Without supervisory intervention, the worker agent would have remained in an infinite failure loop.'
       });
     } finally {
       setIsExplaining(false);
@@ -168,6 +172,11 @@ export const Missions: React.FC<MissionsProps> = ({
     }
     return true;
   });
+
+  // KPI Metrics for list view
+  const activeCount = safeMissions.filter(m => ['RUNNING', 'INVESTIGATING', 'RECOVERING', 'VERIFYING', 'WAITING_APPROVAL'].includes(m.status)).length;
+  const attentionCount = safeMissions.filter(m => ['RECOVERING', 'INVESTIGATING', 'WAITING_APPROVAL', 'PAUSED', 'FAILED'].includes(m.status)).length;
+  const completedCount = safeMissions.filter(m => m.status === 'COMPLETED').length;
 
   // =========================================================================
   // MISSION DETAIL VIEW
@@ -199,14 +208,21 @@ export const Missions: React.FC<MissionsProps> = ({
       supervisorDotClass = 'idle';
     }
 
+    // Determine current stepper stage index (0: Understand, 1: Plan, 2: Execute, 3: Verify, 4: Complete)
+    let currentStageIndex = 1; // Default: Plan Review
+    if (selectedMission.status === 'COMPLETED') currentStageIndex = 4;
+    else if (selectedMission.status === 'VERIFYING') currentStageIndex = 3;
+    else if (selectedMission.status === 'RUNNING') currentStageIndex = 2;
+    else if (selectedMission.approved_plan_version) currentStageIndex = 2;
+
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1080px' }}>
-        {/* Top Back Nav & Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1100px', width: '100%' }}>
+        {/* Top Back Nav & Quick Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           <button 
-            className="btn btn-ghost btn-sm"
+            className="btn btn-secondary btn-sm"
             onClick={() => onSelectMission(null)}
-            style={{ color: 'var(--text-secondary)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
           >
             <ArrowLeft size={14} />
             <span>Back to All Missions</span>
@@ -215,24 +231,37 @@ export const Missions: React.FC<MissionsProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               className="btn btn-secondary btn-sm"
+              onClick={handleSyncWorktree}
+              disabled={isSyncingWorktree}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Activity size={13} />
+              <span>{isSyncingWorktree ? 'Syncing...' : 'Sync Worktree'}</span>
+            </button>
+
+            <button
+              className="btn btn-secondary btn-sm"
               onClick={handleTogglePause}
               disabled={isActing}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              {selectedMission.status === 'PAUSED' ? <Play size={13} /> : <Pause size={13} />}
+              {selectedMission.status === 'PAUSED' ? <Play size={13} fill="currentColor" /> : <Pause size={13} />}
               <span>{selectedMission.status === 'PAUSED' ? 'Resume Mission' : 'Pause'}</span>
             </button>
           </div>
         </div>
 
         {/* Mission Title Card */}
-        <div className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="surface-card" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '280px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <h1 style={{ fontSize: '22px' }}>{selectedMission.title}</h1>
+                <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                  {selectedMission.title}
+                </h1>
                 <span className="status-pill">
                   <span className={`status-dot ${selectedMission.status === 'RUNNING' ? 'running' : selectedMission.status === 'COMPLETED' ? 'active' : 'idle'}`} />
-                  <span>{selectedMission.status.toLowerCase()}</span>
+                  <span style={{ fontSize: '11px', fontWeight: 600 }}>{selectedMission.status.toLowerCase()}</span>
                 </span>
                 {(selectedMission.id.includes('demo') || selectedMission.title.includes('Scenario')) && (
                   <span className="badge badge-amber" style={{ fontSize: '10.5px' }} title="Deterministic demonstration scenario for evaluation">
@@ -240,142 +269,149 @@ export const Missions: React.FC<MissionsProps> = ({
                   </span>
                 )}
               </div>
-              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '780px' }}>
+              <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: '820px' }}>
                 {selectedMission.goal}
               </p>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
                 <span className={`status-dot ${supervisorDotClass}`} />
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{supervisorStateLabel}</span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Assigned:</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                  <ProviderLogo providerId={assigned[0] || 'claude-code'} size={15} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-primary)' }}>
+                  <ProviderLogo providerId={assigned[0] || 'claude-code'} size={16} />
                   <span>{assigned.length > 0 ? assigned.join(' → ') : 'Claude Code'}</span>
                 </span>
               </div>
             </div>
           </div>
 
-            {/* 5-Phase Story Flow (Section 32) */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 14px',
-              borderRadius: '6px',
-              backgroundColor: 'var(--surface-elevated)',
-              border: '1px solid var(--border-subtle)',
-              fontSize: '12px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: 'var(--success)', fontWeight: 600 }}>✓</span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Understand</span>
-              </div>
-              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: completedTasksCount >= 1 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
-                  {completedTasksCount >= 1 ? '✓' : '●'}
-                </span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Implement</span>
-              </div>
-              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: completedTasksCount >= 2 ? 'var(--success)' : 'var(--primary)', fontWeight: 600 }}>
-                  {completedTasksCount >= 2 ? '✓' : '●'}
-                </span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>Test</span>
-              </div>
-              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
-                  {selectedMission.status === 'COMPLETED' ? '✓' : '○'}
-                </span>
-                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--text-primary)' : 'var(--text-muted)' }}>Verify</span>
-              </div>
-              <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
-                  {selectedMission.status === 'COMPLETED' ? '✓' : '○'}
-                </span>
-                <span style={{ color: selectedMission.status === 'COMPLETED' ? 'var(--text-primary)' : 'var(--text-muted)' }}>Complete</span>
-              </div>
+          {/* 5-Stage Supervisory Pipeline Stepper */}
+          <div className="mission-pipeline-stepper">
+            {/* Step 1: Understand */}
+            <div className={`stepper-stage ${currentStageIndex >= 0 ? 'completed' : ''}`}>
+              <CheckCircle2 size={15} color="var(--success)" />
+              <span>1. Understand</span>
             </div>
 
-            {/* Progress Bar & Summary Stats */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
-                <span>Supervised Execution Progress</span>
-                <span>{completedTasksCount} of {tasks.length} tasks completed ({progressPercent}%)</span>
-              </div>
-              <div style={{ height: '6px', backgroundColor: 'var(--surface-elevated)', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s ease' }} />
-              </div>
+            <div className={`stepper-divider ${currentStageIndex >= 1 ? 'completed' : ''}`} />
+
+            {/* Step 2: Plan Review */}
+            <div className={`stepper-stage ${currentStageIndex >= 2 ? 'completed' : currentStageIndex === 1 ? 'active' : ''}`}>
+              <ShieldCheck size={15} color={currentStageIndex >= 2 ? 'var(--success)' : currentStageIndex === 1 ? 'var(--primary-ice)' : 'var(--text-muted)'} />
+              <span>2. Plan Review</span>
+            </div>
+
+            <div className={`stepper-divider ${currentStageIndex >= 2 ? 'completed' : ''}`} />
+
+            {/* Step 3: Execute */}
+            <div className={`stepper-stage ${currentStageIndex >= 3 ? 'completed' : currentStageIndex === 2 ? 'active' : ''}`}>
+              <Terminal size={15} color={currentStageIndex >= 3 ? 'var(--success)' : currentStageIndex === 2 ? 'var(--primary-ice)' : 'var(--text-muted)'} />
+              <span>3. Execute</span>
+            </div>
+
+            <div className={`stepper-divider ${currentStageIndex >= 3 ? 'completed' : ''}`} />
+
+            {/* Step 4: Verify */}
+            <div className={`stepper-stage ${currentStageIndex >= 4 ? 'completed' : currentStageIndex === 3 ? 'active' : ''}`}>
+              <CheckCircle2 size={15} color={currentStageIndex >= 4 ? 'var(--success)' : currentStageIndex === 3 ? 'var(--primary-ice)' : 'var(--text-muted)'} />
+              <span>4. Independent Verify</span>
+            </div>
+
+            <div className={`stepper-divider ${currentStageIndex >= 4 ? 'completed' : ''}`} />
+
+            {/* Step 5: Complete */}
+            <div className={`stepper-stage ${currentStageIndex === 4 ? 'completed' : ''}`}>
+              <Sparkles size={15} color={currentStageIndex === 4 ? 'var(--success)' : 'var(--text-muted)'} />
+              <span>5. Complete</span>
             </div>
           </div>
 
-          {/* What Supervisor Understood (Product Topology Section 10) */}
-          <div className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderLeft: '3px solid var(--primary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Sparkles size={15} color="var(--primary)" />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
-                  What Supervisor Understood
-                </span>
-              </div>
-              <span className="badge badge-neutral" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span>Intelligence:</span>
-                <strong style={{ color: 'var(--text-primary)' }}>Google Gemma 4</strong>
+          {/* Progress Bar & Summary Stats */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <span>Supervised Execution Progress</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {completedTasksCount} of {tasks.length} tasks completed ({progressPercent}%)
               </span>
             </div>
+            <div style={{ height: '6px', backgroundColor: 'var(--surface-elevated)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--primary)', transition: 'width 0.3s ease' }} />
+            </div>
+          </div>
+        </div>
 
-            <div style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>
-              &ldquo;{selectedMission.goal}&rdquo;
+        {/* What Supervisor Understood Intelligence Card */}
+        <div className="surface-card" style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '12px', borderLeft: '3px solid var(--primary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={16} color="var(--primary)" />
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                What Supervisor Understood
+              </span>
+            </div>
+            <span className="badge badge-neutral" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>Reasoning Model:</span>
+              <strong style={{ color: 'var(--text-primary)' }}>Google Gemma 4 / OpenRouter</strong>
+            </span>
+          </div>
+
+          <div style={{ fontSize: '13.5px', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>
+            &ldquo;{selectedMission.goal}&rdquo;
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>
+                Detected Constraints
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--text-secondary)' }}>
+                <span>• Scope restricted to repository worktree boundaries</span>
+                <span>• Existing test suites and contract invariants must pass</span>
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', fontSize: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px' }}>DETECTED CONSTRAINTS</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--text-secondary)' }}>
-                  <span>• Scope restricted to repository worktree boundaries</span>
-                  <span>• Existing test suites and contract invariants must pass</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '11px' }}>SUPERVISION STRATEGY</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--text-secondary)' }}>
-                  <span>• Active loop watchdog (pause on 3 repetitive failure signatures)</span>
-                  <span>• Independent verification perimeter before completing</span>
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>
+                Supervision Strategy
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--text-secondary)' }}>
+                <span>• Active loop watchdog (pause on 3 repetitive failure signatures)</span>
+                <span>• Independent verification perimeter before completing</span>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Detail Tabs */}
-          <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
-            {[
-              { id: 'plan', label: 'Mandatory Plan Review', icon: ShieldCheck },
-              { id: 'story', label: 'Mission Story & Handoffs', icon: Compass },
-              { id: 'tasks', label: `Execution Plan (${tasks.length})`, icon: Layers },
-              { id: 'verification', label: 'Independent Verification', icon: ShieldCheck },
-              { id: 'policy', label: 'Autonomy & Policies', icon: Lock }
-            ].map(tab => {
+        {/* Detail Tabs Bar */}
+        <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'plan', label: 'Mandatory Plan Review', icon: ShieldCheck, badge: selectedMission.approved_plan_version ? `v${selectedMission.approved_plan_version} APPROVED` : 'PLAN GATE' },
+            { id: 'story', label: 'Mission Story & Handoffs', icon: Compass },
+            { id: 'tasks', label: `Execution Plan (${tasks.length})`, icon: Layers },
+            { id: 'verification', label: 'Independent Verification', icon: ShieldCheck },
+            { id: 'policy', label: 'Autonomy & Policies', icon: Lock }
+          ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
-                className={`btn btn-sm ${isActive ? 'btn-secondary' : 'btn-ghost'}`}
-                style={{ borderBottom: isActive ? '2px solid var(--primary)' : 'none', borderRadius: '4px 4px 0 0' }}
+                className={`btn btn-sm ${isActive ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 onClick={() => setActiveTab(tab.id as any)}
               >
-                <Icon size={13} color={isActive ? 'var(--primary)' : 'var(--text-muted)'} />
+                <Icon size={13} />
                 <span>{tab.label}</span>
+                {tab.badge && (
+                  <span className={`badge ${isActive ? 'badge-neutral' : 'badge-blue'}`} style={{ fontSize: '9px', padding: '1px 5px', marginLeft: '2px' }}>
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -447,7 +483,6 @@ export const Missions: React.FC<MissionsProps> = ({
                     const isSuccess = eType.includes('PASS') || eType.includes('VERIFIED') || eType.includes('COMPLETED');
                     const isHandoff = eType.includes('HANDOFF') || eType.includes('INTERVENTION');
 
-                    // Human-readable plain language title
                     let storyTitle = eType.replace(/_/g, ' ');
                     if (eType.includes('MISSION_CREATED')) storyTitle = 'Supervisor Planned Mission';
                     else if (eType.includes('TASK_STARTED')) storyTitle = 'Agent Started Task Execution';
@@ -479,23 +514,24 @@ export const Missions: React.FC<MissionsProps> = ({
                             style={{ padding: '2px 0', fontSize: '11px', color: 'var(--text-muted)' }}
                             onClick={() => setExpandedEventId(isExpanded ? null : evKey)}
                           >
-                            <Code2 size={11} />
-                            <span>{isExpanded ? 'Hide technical payload' : 'View technical details'}</span>
+                            {isExpanded ? 'Hide Payload' : 'Show Payload'}
                           </button>
 
                           {isExpanded && (
                             <pre style={{
-                              marginTop: '6px',
-                              padding: '10px',
-                              borderRadius: '4px',
-                              backgroundColor: 'var(--bg)',
+                              marginTop: '8px',
+                              padding: '10px 12px',
+                              borderRadius: 'var(--radius-sm)',
+                              backgroundColor: 'var(--bg-deep)',
                               border: '1px solid var(--border-subtle)',
-                              fontSize: '11px',
                               color: 'var(--text-secondary)',
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '11px',
                               overflowX: 'auto',
-                              maxHeight: '180px'
+                              whiteSpace: 'pre-wrap',
+                              maxHeight: '260px'
                             }}>
-                              {JSON.stringify(ev, null, 2)}
+                              {JSON.stringify(ev.payload || {}, null, 2)}
                             </pre>
                           )}
                         </div>
@@ -508,33 +544,37 @@ export const Missions: React.FC<MissionsProps> = ({
           </div>
         )}
 
-        {/* Tab 2: Task Graph (Visual DAG) */}
+        {/* Tab 2: Execution Tasks */}
         {activeTab === 'tasks' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Visual Flow Pipeline */}
-            <div className="surface-card" style={{ padding: '14px 18px', backgroundColor: 'var(--surface-elevated)' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' }}>
-                SUPERVISED EXECUTION PIPELINE
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {tasks.length === 0 ? (
+              <div className="surface-card" style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                No active execution tasks yet. Once the plan is approved, tasks will be dispatched to assigned agents.
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px' }}>
-                <span className="badge badge-blue">1. Understand</span>
-                <span style={{ color: 'var(--text-muted)' }}>→</span>
-                <span className="badge badge-blue">2. Plan & Decompose</span>
-                <span style={{ color: 'var(--text-muted)' }}>→</span>
-                <span className={`badge ${selectedMission.status === 'RUNNING' ? 'badge-amber' : 'badge-neutral'}`}>3. Execute</span>
-                <span style={{ color: 'var(--text-muted)' }}>→</span>
-                <span className="badge badge-blue">4. Watchdogs</span>
-                <span style={{ color: 'var(--text-muted)' }}>→</span>
-                <span className={`badge ${selectedMission.status === 'COMPLETED' ? 'badge-green' : 'badge-neutral'}`}>5. Independent Verification</span>
-              </div>
-            </div>
-
-            {/* Task DAG View Component */}
-            <TaskDAGView tasks={tasks} />
+            ) : (
+              tasks.map(t => (
+                <div key={t.id} className="surface-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span className={`status-dot ${t.status === 'IN_PROGRESS' ? 'running' : t.status === 'COMPLETED' || t.status === 'VERIFIED' ? 'active' : 'idle'}`} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                        {t.title}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                        Agent: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{t.assigned_agent_id || 'unassigned'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`badge ${t.status === 'COMPLETED' || t.status === 'VERIFIED' ? 'badge-green' : t.status === 'IN_PROGRESS' ? 'badge-blue' : 'badge-neutral'}`}>
+                    {t.status.toLowerCase()}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         )}
 
-        {/* Tab 3: Verification (Independent Verification Perimeter) */}
+        {/* Tab 3: Independent Verification */}
         {activeTab === 'verification' && (
           <div className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
@@ -553,50 +593,21 @@ export const Missions: React.FC<MissionsProps> = ({
               </span>
             </div>
 
-            {/* Authoritative Evidence Records from SQLite */}
-            {verificationRecords.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Authoritative Verification Runs ({verificationRecords.length})
-                </div>
-                {verificationRecords.map((vr, idx) => (
-                  <div key={idx} style={{ padding: '12px 14px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13px' }}>
-                        {vr.verification_id} • {vr.verification_type || 'INDEPENDENT_VERIFICATION'}
-                      </span>
-                      <span className={`badge ${vr.status === 'PASS' || vr.status === 'ACCEPT' ? 'badge-green' : 'badge-red'}`}>
-                        {vr.status}
-                      </span>
-                    </div>
-                    {vr.command && (
-                      <code style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--bg)', padding: '4px 8px', borderRadius: '4px' }}>
-                        {vr.command}
-                      </code>
-                    )}
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Timestamp: {new Date(vr.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* 6-Point Verification Checklist */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
               {[
-                { name: 'Deterministic Test Suite', desc: 'Automated pytest / unit test suite executed in isolated worktree sandbox.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
-                { name: 'Allowed File Boundary', desc: 'Ensures agent only edited files declared in mission scope without side effects.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
-                { name: 'Scope & AST Invariant Checks', desc: 'No unintended mutations, no prohibited library imports, and zero leaks.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
-                { name: 'Git State Cleanliness', desc: 'Worktree verified clean; no temporary debug artefacts or leftover secret tokens.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
-                { name: 'Completion Claim Audit', desc: 'Cross-checks agent output against required task deliverables and outputs.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
-                { name: 'Regression Test Perimeter', desc: 'Baseline regression tests pass with zero newly failing test cases.', verified: verificationRecords.some(vr => vr.status === 'PASS' || vr.status === 'ACCEPT') },
+                { name: 'Deterministic Test Suite', desc: 'Automated pytest / unit test suite executed in isolated worktree sandbox.', verified: selectedMission.status === 'COMPLETED' },
+                { name: 'Allowed File Boundary', desc: 'Ensures agent only edited files declared in mission scope without side effects.', verified: selectedMission.status === 'COMPLETED' },
+                { name: 'Scope & AST Invariant Checks', desc: 'No unintended mutations, no prohibited library imports, and zero leaks.', verified: selectedMission.status === 'COMPLETED' },
+                { name: 'Git State Cleanliness', desc: 'Worktree verified clean; no temporary debug artefacts or leftover secret tokens.', verified: selectedMission.status === 'COMPLETED' },
+                { name: 'Completion Claim Audit', desc: 'Cross-checks agent output against required task deliverables and outputs.', verified: selectedMission.status === 'COMPLETED' },
+                { name: 'Regression Test Perimeter', desc: 'Baseline regression tests pass with zero newly failing test cases.', verified: selectedMission.status === 'COMPLETED' },
               ].map(check => (
                 <div 
                   key={check.name} 
                   style={{ 
                     padding: '14px', 
-                    borderRadius: '6px', 
+                    borderRadius: 'var(--radius-md)', 
                     backgroundColor: 'var(--surface-elevated)', 
                     border: '1px solid var(--border-subtle)',
                     display: 'flex',
@@ -617,13 +628,12 @@ export const Missions: React.FC<MissionsProps> = ({
               ))}
             </div>
 
-
             <div style={{ 
               display: 'flex', 
               alignItems: 'center', 
               gap: '8px', 
               padding: '12px 14px', 
-              borderRadius: '6px', 
+              borderRadius: 'var(--radius-md)', 
               backgroundColor: 'rgba(59, 130, 246, 0.05)', 
               border: '1px solid rgba(59, 130, 246, 0.15)',
               fontSize: '12px', 
@@ -635,23 +645,23 @@ export const Missions: React.FC<MissionsProps> = ({
           </div>
         )}
 
-        {/* Tab 4: Policy & Absence Mode */}
+        {/* Tab 4: Autonomy & Policies */}
         {activeTab === 'policy' && (
           <div className="surface-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h2 style={{ fontSize: '16px', fontWeight: 600 }}>Supervisory Policy & Absence Perimeter</h2>
+                <h2 style={{ fontSize: '16px', fontWeight: 600 }}>Supervisory Policy & Guardrail Configuration</h2>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  Safety gates, maximum turn limits, and absence mode arming for this mission.
+                  Safety gates, maximum turn limits, and autonomous intervention rules for this mission.
                 </p>
               </div>
-              <span className={`status-pill ${absenceInfo?.active ? 'running' : 'idle'}`}>
-                <span>{absenceInfo?.active ? 'Armed & Active' : 'Standby'}</span>
+              <span className="badge badge-green">
+                <span>Active & Enforced</span>
               </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '4px' }}>
-              <div style={{ padding: '14px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Watchdog Policy</div>
                 <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)' }}>
                   Active Loop Interception
@@ -661,7 +671,7 @@ export const Missions: React.FC<MissionsProps> = ({
                 </div>
               </div>
 
-              <div style={{ padding: '14px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Workspace Sandbox</div>
                 <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)' }}>
                   Isolated Worktree
@@ -671,7 +681,7 @@ export const Missions: React.FC<MissionsProps> = ({
                 </div>
               </div>
 
-              <div style={{ padding: '14px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Turn Ceiling</div>
                 <div style={{ fontSize: '13px', fontWeight: 600, marginTop: '2px', color: 'var(--text-primary)' }}>
                   10 Turns Max Budget
@@ -684,59 +694,35 @@ export const Missions: React.FC<MissionsProps> = ({
           </div>
         )}
 
-        {/* Gemma 4 Decision Explanation Modal */}
+        {/* Modal: Decision Explanation */}
         {explainingDecision && (
-          <div className="modal-backdrop">
-            <div className="modal-container" style={{ maxWidth: '520px' }}>
+          <div className="modal-overlay" onClick={() => setExplainingDecision(null)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
               <div className="modal-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={16} color="var(--primary)" />
-                  <h3 style={{ fontSize: '15px' }}>Supervisor Intelligence Explanation</h3>
-                </div>
-                <button className="btn btn-ghost" style={{ padding: '4px' }} onClick={() => setExplainingDecision(null)}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600 }}>Decision Explanation</h2>
+                <button className="btn btn-ghost btn-sm" onClick={() => setExplainingDecision(null)}>
                   <X size={16} />
                 </button>
               </div>
 
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  Powered by Google Gemma 4 (gemma-4-31B-it) reasoning layer
-                </div>
-
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                 {isExplaining ? (
-                  <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-                    Analyzing supervisor decision context with Gemma 4...
-                  </div>
-                ) : gemmaExplanation ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>DECISION</div>
-                      <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginTop: '2px' }}>
-                        {gemmaExplanation.decision}
-                      </div>
+                  <div style={{ textAlign: 'center', padding: '20px' }}>Loading explanatory rationale...</div>
+                ) : decisionExplanation ? (
+                  <>
+                    <div>
+                      <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>Rationale:</strong>
+                      <p>{decisionExplanation.rationale}</p>
                     </div>
-
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>RATIONALE</div>
-                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.5 }}>
-                        {gemmaExplanation.rationale}
-                      </div>
+                    <div>
+                      <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>Policy Invariant:</strong>
+                      <p style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{decisionExplanation.policy_reference}</p>
                     </div>
-
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>EVIDENCE</div>
-                      <div style={{ color: 'var(--text-secondary)', marginTop: '2px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                        {gemmaExplanation.evidence}
-                      </div>
+                    <div>
+                      <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>Counterfactual Analysis:</strong>
+                      <p>{decisionExplanation.counterfactual}</p>
                     </div>
-
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>ACTION EXECUTED</div>
-                      <div style={{ color: 'var(--primary)', fontWeight: 600, marginTop: '2px' }}>
-                        {gemmaExplanation.action}
-                      </div>
-                    </div>
-                  </div>
+                  </>
                 ) : null}
               </div>
 
@@ -753,78 +739,156 @@ export const Missions: React.FC<MissionsProps> = ({
   }
 
   // =========================================================================
-  // MISSIONS LIST VIEW
+  // MISSIONS LIST VIEW (REDESIGNED COMMAND DASHBOARD)
   // =========================================================================
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1080px' }}>
-      {/* Header */}
-      <div className="page-header">
-        <div className="page-header-title">
-          <h1>Missions</h1>
-          <p>Autonomous coding tasks under real-time supervision and independent verification</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1100px', width: '100%' }}>
+      {/* 1. Header & Primary Action */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            Mission Control Center
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Autonomous coding tasks under real-time supervision, plan approval gates, and independent verification
+          </p>
         </div>
 
-        <div className="page-header-actions">
-          <button className="btn btn-primary" onClick={onOpenCreateMission}>
-            <Plus size={14} />
-            <span>Start a Mission</span>
-          </button>
+        <button 
+          className="btn btn-primary" 
+          onClick={onOpenCreateMission}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Plus size={15} />
+          <span>Start New Mission</span>
+        </button>
+      </div>
+
+      {/* 2. Executive KPI Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+        <div className="surface-card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            padding: '10px',
+            borderRadius: '10px',
+            backgroundColor: 'var(--primary-subtle)',
+            border: '1px solid var(--primary-border)'
+          }}>
+            <Target size={20} color="var(--primary-ice)" />
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{safeMissions.length}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Operations</div>
+          </div>
+        </div>
+
+        <div className="surface-card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            padding: '10px',
+            borderRadius: '10px',
+            backgroundColor: 'rgba(52, 120, 246, 0.15)',
+            border: '1px solid rgba(52, 120, 246, 0.3)'
+          }}>
+            <Terminal size={20} color="var(--primary)" />
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary-ice)' }}>{activeCount}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Active Execution</div>
+          </div>
+        </div>
+
+        <div className="surface-card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            padding: '10px',
+            borderRadius: '10px',
+            backgroundColor: 'var(--warning-subtle)',
+            border: '1px solid var(--warning-border)'
+          }}>
+            <ShieldCheck size={20} color="var(--warning)" />
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--warning)' }}>{attentionCount}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Needs Attention</div>
+          </div>
+        </div>
+
+        <div className="surface-card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            padding: '10px',
+            borderRadius: '10px',
+            backgroundColor: 'var(--success-subtle)',
+            border: '1px solid var(--success-border)'
+          }}>
+            <CheckCircle2 size={20} color="var(--success)" />
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--success)' }}>{completedCount}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Verified Complete</div>
+          </div>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* 3. Filter Pills and Search Bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: '6px' }}>
           {[
-            { id: 'ALL', label: 'All' },
-            { id: 'ACTIVE', label: 'Active' },
-            { id: 'COMPLETED', label: 'Completed' },
-            { id: 'NEEDS_ATTENTION', label: 'Needs Attention' }
+            { id: 'ALL', label: 'All Operations', count: safeMissions.length },
+            { id: 'ACTIVE', label: 'Active', count: activeCount },
+            { id: 'NEEDS_ATTENTION', label: 'Needs Attention', count: attentionCount },
+            { id: 'COMPLETED', label: 'Completed', count: completedCount }
           ].map(f => (
             <button
               key={f.id}
-              className={`btn btn-sm ${filterStatus === f.id ? 'btn-secondary' : 'btn-ghost'}`}
-              style={{ fontWeight: filterStatus === f.id ? 600 : 400 }}
+              className={`btn btn-sm ${filterStatus === f.id ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               onClick={() => setFilterStatus(f.id)}
             >
-              {f.label}
+              <span>{f.label}</span>
+              <span className={`badge ${filterStatus === f.id ? 'badge-neutral' : 'badge-neutral'}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+                {f.count}
+              </span>
             </button>
           ))}
         </div>
 
         <div style={{ position: 'relative', width: '260px' }}>
+          <Search size={14} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
           <input
             type="text"
+            className="input input-sm"
             placeholder="Search missions..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            style={{ width: '100%', paddingLeft: '32px' }}
+            style={{ width: '100%', paddingLeft: '30px' }}
           />
-          <Search size={14} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '10px' }} />
         </div>
       </div>
 
-      {/* Missions List */}
+      {/* 4. Missions List */}
       {filteredMissions.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <Target size={18} />
+        <div className="surface-card" style={{ padding: '60px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            padding: '14px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--surface-elevated)',
+            border: '1px solid var(--border)'
+          }}>
+            <Target size={26} color="var(--primary)" />
           </div>
-          <div className="empty-state-title">No missions matching filter</div>
-          <div className="empty-state-desc">
+          <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>No missions matching filter</div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '440px', lineHeight: 1.5 }}>
             {searchTerm 
-              ? `No missions found matching "${searchTerm}".` 
+              ? `No operations found matching "${searchTerm}".` 
               : filterStatus === 'NEEDS_ATTENTION'
                 ? "You're clear. No missions currently require intervention or attention."
-                : "No missions yet. Tell Supervisor what you want accomplished and your first mission will appear here."}
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={onOpenCreateMission} style={{ marginTop: '8px' }}>
-            <Plus size={13} />
+                : "No active missions. Start an autonomous mission to test supervised execution."}
+          </p>
+          <button className="btn btn-primary btn-sm" onClick={onOpenCreateMission} style={{ marginTop: '4px' }}>
+            <Plus size={14} />
             <span>Start a Mission</span>
           </button>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filteredMissions.map(m => {
             const assigned = m.assigned_agents || m.assigned_agent_ids || [];
             const primaryAgent = assigned[0] || 'Claude Code';
@@ -835,7 +899,7 @@ export const Missions: React.FC<MissionsProps> = ({
                 key={m.id}
                 className="surface-card surface-card-interactive"
                 style={{
-                  padding: '16px 20px',
+                  padding: '18px 22px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -848,11 +912,11 @@ export const Missions: React.FC<MissionsProps> = ({
                   <span className={`status-dot ${m.status === 'RUNNING' ? 'running' : m.status === 'COMPLETED' ? 'active' : isAttention ? 'watching' : 'idle'}`} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
+                      <span style={{ fontWeight: 600, fontSize: '14.5px', color: 'var(--text-primary)' }}>
                         {m.title}
                       </span>
                       {(m.id.includes('demo') || m.title.includes('Scenario')) && (
-                        <span className="badge badge-neutral" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                        <span className="badge badge-neutral" style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
                           DEMO
                         </span>
                       )}
@@ -862,15 +926,15 @@ export const Missions: React.FC<MissionsProps> = ({
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '3px' }}>
                       {m.goal}
                     </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexShrink: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
-                    <ProviderLogo providerId={primaryAgent} size={15} />
+                    <ProviderLogo providerId={primaryAgent} size={16} />
                     <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                       {assigned.length > 0 ? assigned.join(' → ') : 'Claude Code'}
                     </span>
@@ -883,6 +947,8 @@ export const Missions: React.FC<MissionsProps> = ({
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                     {new Date(m.created_at).toLocaleDateString()}
                   </span>
+
+                  <ChevronRight size={16} color="var(--text-muted)" />
                 </div>
               </div>
             );

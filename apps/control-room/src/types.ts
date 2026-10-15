@@ -128,6 +128,8 @@ export interface Mission {
     prohibited_files: string[];
     allowed_commands: string[];
   };
+  approved_plan_version?: number | null;
+  plan_status?: string;
 }
 
 export interface AgentRecord {

@@ -11,11 +11,11 @@ import {
   FileCode,
   Layers,
   Sparkles,
-  Check,
   Terminal,
-  Cpu
+  Lock,
+  X
 } from 'lucide-react';
-import type { PlanVersion, PlanTaskItem } from '../types';
+import type { PlanVersion } from '../types';
 import {
   getMissionPlan,
   approveMissionPlan,
@@ -25,6 +25,7 @@ import {
   regenerateMissionPlan,
   executeMission
 } from '../api';
+import { ProviderLogo } from './ProviderLogo';
 
 interface PlanReviewProps {
   missionId: string;
@@ -89,23 +90,20 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center p-12 bg-slate-900/40 border border-slate-800 rounded-2xl">
-        <RotateCw className="w-8 h-8 text-indigo-400 animate-spin mb-3" />
-        <p className="text-sm text-slate-400 font-medium">Synthesizing execution plan and extracting intent...</p>
+      <div className="surface-card" style={{ padding: '40px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+        <RotateCw size={24} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Synthesizing execution plan and extracting intent...</p>
       </div>
     );
   }
 
   if (error || !plan) {
     return (
-      <div className="p-8 bg-rose-950/20 border border-rose-800/40 rounded-2xl text-center">
-        <AlertTriangle className="w-10 h-10 text-rose-400 mx-auto mb-3" />
-        <h3 className="text-lg font-semibold text-rose-200 mb-1">Plan Unavailable</h3>
-        <p className="text-sm text-rose-400/80 mb-4">{error || 'No active plan found for this mission'}</p>
-        <button
-          onClick={loadPlan}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition"
-        >
+      <div className="surface-card" style={{ padding: '30px', textAlign: 'center', borderColor: 'var(--danger-border)', backgroundColor: 'var(--danger-subtle)' }}>
+        <AlertTriangle size={28} color="var(--danger)" style={{ margin: '0 auto 10px' }} />
+        <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>Plan Unavailable</h3>
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>{error || 'No active plan found for this mission'}</p>
+        <button onClick={loadPlan} className="btn btn-secondary btn-sm">
           Retry
         </button>
       </div>
@@ -209,163 +207,212 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Plan Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-800/80 border border-slate-700/60 rounded-2xl backdrop-blur-xl shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-            <ShieldCheck className="w-6 h-6 text-indigo-400" />
+    <div className="plan-review-container">
+      {/* 1. Plan Header Bar */}
+      <div className="plan-header-card">
+        <div className="plan-header-meta">
+          <div style={{
+            padding: '10px',
+            borderRadius: '10px',
+            backgroundColor: 'var(--primary-subtle)',
+            border: '1px solid var(--primary-border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <ShieldCheck size={24} color="var(--primary-ice)" />
           </div>
+
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-white tracking-tight">Supervisory Plan Review</h2>
-              <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-md">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                Supervisory Plan Review
+              </h2>
+              <span className="badge badge-blue" style={{ fontSize: '11px', fontWeight: 700 }}>
                 v{version}
               </span>
-              <span
-                className={`px-2 py-0.5 text-xs font-semibold rounded-md border ${
-                  isApproved
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : isRejected
-                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                    : hasBlockingQuestions
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                    : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                }`}
-              >
+              <span className={`badge ${
+                isApproved 
+                  ? 'badge-green' 
+                  : isRejected 
+                    ? 'badge-red' 
+                    : hasBlockingQuestions 
+                      ? 'badge-amber' 
+                      : 'badge-blue'
+              }`} style={{ fontSize: '11px', fontWeight: 700 }}>
                 {approval_status}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Mandatory approval gate: agents cannot dispatch tasks until explicit operator sign-off.
             </p>
           </div>
         </div>
 
-        {/* Global Plan Actions */}
-        <div className="flex items-center gap-2">
+        {/* Action Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {!isApproved && !isRejected && (
             <>
               <button
+                className="btn btn-secondary btn-sm"
                 onClick={() => setIsEditing(!isEditing)}
                 disabled={isSubmitting}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 rounded-lg flex items-center gap-1.5 transition"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                <Edit3 className="w-3.5 h-3.5 text-slate-400" />
-                {isEditing ? 'Cancel Edit' : 'Edit Plan'}
+                <Edit3 size={13} />
+                <span>{isEditing ? 'Cancel Edit' : 'Edit Plan'}</span>
               </button>
+
               <button
+                className="btn btn-secondary btn-sm"
                 onClick={() => setShowRegenModal(true)}
                 disabled={isSubmitting}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 rounded-lg flex items-center gap-1.5 transition"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                <RotateCw className="w-3.5 h-3.5 text-indigo-400" />
-                Regenerate
+                <RotateCw size={13} />
+                <span>Regenerate</span>
               </button>
+
               <button
+                className="btn btn-danger btn-sm"
                 onClick={() => setShowRejectModal(true)}
                 disabled={isSubmitting}
-                className="px-3 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 text-xs font-medium text-rose-300 rounded-lg flex items-center gap-1.5 transition"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                <XCircle className="w-3.5 h-3.5 text-rose-400" />
-                Reject
+                <XCircle size={13} />
+                <span>Reject</span>
               </button>
+
               <button
+                className="btn btn-primary btn-sm"
                 onClick={handleApproveAndStart}
                 disabled={isSubmitting || hasBlockingQuestions}
-                title={hasBlockingQuestions ? 'Resolve blocking clarification questions before approval' : 'Approve plan and dispatch execution'}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg transition ${
-                  hasBlockingQuestions
-                    ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 cursor-pointer'
-                }`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: hasBlockingQuestions ? 'var(--surface-hover)' : 'var(--success)',
+                  borderColor: hasBlockingQuestions ? 'var(--border)' : 'var(--success-border)',
+                  color: hasBlockingQuestions ? 'var(--text-muted)' : '#FFFFFF',
+                  fontWeight: 600,
+                  boxShadow: hasBlockingQuestions ? 'none' : '0 0 16px rgba(16, 185, 129, 0.35)'
+                }}
               >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                Approve & Start Execution
+                <Play size={13} fill="currentColor" />
+                <span>Approve & Start Execution</span>
               </button>
             </>
           )}
 
           {isApproved && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs font-semibold text-emerald-400">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              Approved by {plan.approved_by || 'operator'} (v{version})
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--success-subtle)',
+              border: '1px solid var(--success-border)',
+              color: 'var(--success)',
+              fontSize: '12px',
+              fontWeight: 600
+            }}>
+              <CheckCircle2 size={15} />
+              <span>Approved by {plan.approved_by || 'operator'} (v{version})</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* SECTION E: BLOCKING QUESTIONS ALERT BANNER */}
+      {/* 2. SECTION E: BLOCKING CLARIFICATION QUESTIONS (IF ANY) */}
       {hasBlockingQuestions && (
-        <div className="p-5 bg-amber-950/30 border border-amber-600/40 rounded-2xl shadow-lg">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-400 mt-0.5">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-bold text-amber-200 tracking-tight">
-                Blocking Clarification Required ({blockingQuestions.length})
-              </h3>
-              <p className="text-xs text-amber-300/80 mt-1 mb-3">
-                Execution cannot safely proceed. Ambiguity in requirements was flagged by the Supervisor. Clarify below to unblock plan approval.
-              </p>
+        <div className="surface-card" style={{
+          backgroundColor: 'var(--warning-subtle)',
+          borderColor: 'var(--warning-border)',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={18} color="var(--warning)" />
+            <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--warning)' }}>
+              Blocking Clarification Required ({blockingQuestions.length})
+            </h3>
+          </div>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            Execution cannot safely proceed. Ambiguity in requirements was flagged by the Supervisor. Clarify below to unblock plan approval.
+          </p>
 
-              <div className="space-y-3">
-                {blockingQuestions.map((q, idx) => (
-                  <div key={idx} className="p-3.5 bg-slate-900/80 border border-amber-500/20 rounded-xl">
-                    <p className="text-xs font-medium text-slate-200 mb-2 flex items-center gap-1.5">
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                      {q}
-                    </p>
-                    <input
-                      type="text"
-                      placeholder="Type clarification or operator constraint..."
-                      value={clarifyAnswers[q] || ''}
-                      onChange={e => setClarifyAnswers({ ...clarifyAnswers, [q]: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
-                    />
-                  </div>
-                ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {blockingQuestions.map((q, idx) => (
+              <div key={idx} style={{
+                backgroundColor: 'var(--surface-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                  <HelpCircle size={14} color="var(--warning)" />
+                  <span>{q}</span>
+                </div>
+                <input
+                  type="text"
+                  className="input input-sm"
+                  placeholder="Type clarification or operator constraint..."
+                  value={clarifyAnswers[q] || ''}
+                  onChange={e => setClarifyAnswers({ ...clarifyAnswers, [q]: e.target.value })}
+                />
               </div>
+            ))}
+          </div>
 
-              <div className="mt-3 flex justify-end">
-                <button
-                  onClick={handleClarifySubmit}
-                  disabled={isSubmitting || Object.keys(clarifyAnswers).length === 0}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg shadow-md transition disabled:opacity-50"
-                >
-                  Submit Clarifications & Advance Plan
-                </button>
-              </div>
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleClarifySubmit}
+              disabled={isSubmitting || Object.keys(clarifyAnswers).length === 0}
+            >
+              Submit Clarifications & Advance Plan
+            </button>
           </div>
         </div>
       )}
 
-      {/* SECTION A: ORIGINAL REQUEST (VERBATIM) */}
-      <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl shadow-md">
-        <div className="flex items-center gap-2 mb-2">
-          <Terminal className="w-4 h-4 text-indigo-400" />
-          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">A. Original Request</h3>
-          <span className="text-[10px] text-slate-500 font-mono">Immutable audit record</span>
+      {/* 3. SECTION A: ORIGINAL REQUEST (VERBATIM AUDIT RECORD) */}
+      <div className="plan-section-card">
+        <div className="plan-section-header">
+          <div className="plan-section-title">
+            <Terminal size={15} color="var(--primary-ice)" />
+            <span>A. Original Request</span>
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            Immutable audit record
+          </span>
         </div>
-        <div className="p-4 bg-slate-950/80 border border-slate-800/80 rounded-xl font-mono text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">
+
+        <div className="plan-terminal-box">
+          <span style={{ color: 'var(--primary)', userSelect: 'none', marginRight: '8px' }}>&gt;_</span>
           {interpretation.original_request}
         </div>
       </div>
 
-      {/* SECTION B: WHAT I UNDERSTOOD (INTERPRETATION) */}
-      <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl shadow-md space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">B. Intent Extraction & Boundaries</h3>
+      {/* 4. SECTION B: INTENT EXTRACTION & BOUNDARIES */}
+      <div className="plan-section-card">
+        <div className="plan-section-header">
+          <div className="plan-section-title">
+            <Sparkles size={15} color="var(--cyan)" />
+            <span>B. Intent Extraction & Boundaries</span>
           </div>
           {isEditing && (
             <button
+              className="btn btn-primary btn-sm"
               onClick={handleSaveEdit}
               disabled={isSubmitting}
-              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-md transition"
             >
               Save Changes
             </button>
@@ -374,64 +421,77 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
 
         {/* Interpreted Goal */}
         <div>
-          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+          <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '6px' }}>
             Interpreted Goal
           </label>
           {isEditing ? (
             <textarea
+              className="input"
               value={editedGoal}
               onChange={e => setEditedGoal(e.target.value)}
-              className="w-full p-2.5 bg-slate-950 border border-indigo-500/50 rounded-lg text-xs text-slate-200 focus:outline-none"
               rows={2}
+              style={{ width: '100%', fontSize: '13px' }}
             />
           ) : (
-            <p className="text-xs font-semibold text-indigo-200 bg-indigo-950/20 border border-indigo-500/20 p-3 rounded-lg">
-              {interpretation.interpreted_goal}
-            </p>
+            <div style={{
+              padding: '12px 14px',
+              backgroundColor: 'var(--primary-subtle)',
+              border: '1px solid var(--primary-border)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--primary-ice)',
+              lineHeight: 1.5
+            }}>
+              "{interpretation.interpreted_goal}"
+            </div>
           )}
         </div>
 
-        {/* Deliverables, In-Scope & Exclusions Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Deliverables */}
-          <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl">
-            <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Expected Deliverables
-            </h4>
-            <ul className="space-y-1.5">
+        {/* Deliverables, In-Scope, and Exclusions Grid */}
+        <div className="plan-grid-3">
+          {/* Deliverables Card */}
+          <div className="plan-sub-card">
+            <div className="plan-sub-card-title">
+              <CheckCircle2 size={14} color="var(--success)" />
+              <span>Expected Deliverables</span>
+            </div>
+            <ul className="plan-bullet-list">
               {interpretation.expected_deliverables?.map((d, i) => (
-                <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
-                  <span className="text-emerald-400 font-bold">•</span>
+                <li key={i} className="plan-bullet-item">
+                  <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓</span>
                   <span>{d}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* In-Scope */}
-          <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl">
-            <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-blue-400" /> In-Scope Work
-            </h4>
-            <ul className="space-y-1.5">
+          {/* In-Scope Card */}
+          <div className="plan-sub-card">
+            <div className="plan-sub-card-title">
+              <Layers size={14} color="var(--primary)" />
+              <span>In-Scope Work</span>
+            </div>
+            <ul className="plan-bullet-list">
               {interpretation.in_scope?.map((s, i) => (
-                <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
-                  <span className="text-blue-400 font-bold">•</span>
+                <li key={i} className="plan-bullet-item">
+                  <span style={{ color: 'var(--primary)', fontWeight: 700 }}>•</span>
                   <span>{s}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Explicit Exclusions */}
-          <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl">
-            <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <XCircle className="w-3.5 h-3.5 text-rose-400" /> Explicit Exclusions
-            </h4>
-            <ul className="space-y-1.5">
+          {/* Explicit Exclusions Card */}
+          <div className="plan-sub-card" style={{ borderColor: 'var(--danger-border)' }}>
+            <div className="plan-sub-card-title">
+              <XCircle size={14} color="var(--danger)" />
+              <span style={{ color: 'var(--danger)' }}>Explicit Exclusions</span>
+            </div>
+            <ul className="plan-bullet-list">
               {interpretation.explicit_exclusions?.map((x, i) => (
-                <li key={i} className="text-xs text-slate-400 flex items-start gap-1.5">
-                  <span className="text-rose-400 font-bold">•</span>
+                <li key={i} className="plan-bullet-item" style={{ color: 'var(--text-secondary)' }}>
+                  <span style={{ color: 'var(--danger)', fontWeight: 700 }}>✕</span>
                   <span>{x}</span>
                 </li>
               ))}
@@ -440,247 +500,218 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
         </div>
       </div>
 
-      {/* SECTION C & D: PROPOSED EXECUTION PLAN & AGENT ASSIGNMENTS */}
-      <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl shadow-md space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileCode className="w-4 h-4 text-indigo-400" />
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              C & D. Proposed Tasks & Genuine Agent Runtime Assignments
-            </h3>
+      {/* 5. SECTIONS C & D: PROPOSED TASKS & GENUINE AGENT RUNTIME ASSIGNMENTS */}
+      <div className="plan-section-card">
+        <div className="plan-section-header">
+          <div className="plan-section-title">
+            <FileCode size={15} color="var(--purple)" />
+            <span>C & D. Proposed Tasks & Genuine Agent Runtime Assignments</span>
           </div>
-          <span className="text-xs text-slate-400 font-mono">{tasks.length} ordered tasks</span>
+          <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
+            {tasks.length} ordered tasks
+          </span>
         </div>
 
-        <div className="space-y-3">
-          {tasks.map((task: PlanTaskItem, idx: number) => (
-            <div
-              key={task.task_id || idx}
-              className="p-4 bg-slate-950/70 border border-slate-800 hover:border-slate-700/80 rounded-xl transition space-y-2.5"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <span className="px-2 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[11px] font-bold rounded">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {tasks.map((task, idx) => (
+            <div key={task.task_id} className="plan-task-item">
+              <div className="plan-task-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span className="plan-badge-step">STEP {idx + 1}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
                     {task.task_id}
                   </span>
-                  <h4 className="text-xs font-bold text-white">{task.title}</h4>
+                  <h4 style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {task.title}
+                  </h4>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {/* Agent assignment chip */}
-                  <span className="px-2.5 py-0.5 bg-indigo-950/50 border border-indigo-700/50 text-indigo-300 text-[11px] font-medium rounded-full flex items-center gap-1.5">
-                    <Cpu className="w-3 h-3 text-indigo-400" />
-                    {task.proposed_agent} (Worker Runtime)
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {/* Assigned Agent */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '3px 8px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    fontSize: '11px',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-mono)'
+                  }}>
+                    <ProviderLogo providerId={task.proposed_agent || (task as any).assigned_agent_id || 'worker_01'} size={14} />
+                    <span>{task.proposed_agent || (task as any).assigned_agent_id || 'worker_01'}</span>
+                  </div>
+
+                  {/* Action Type */}
+                  <span className="badge badge-neutral" style={{ fontSize: '10px' }}>
+                    {(task as any).action_type || 'EXECUTE'}
                   </span>
 
-                  {/* Verification strategy badge */}
-                  <span className="px-2 py-0.5 bg-emerald-950/40 border border-emerald-700/40 text-emerald-300 text-[10px] font-semibold rounded">
-                    {task.verification_strategy}
-                  </span>
-
-                  {/* Risk chip */}
-                  <span
-                    className={`px-2 py-0.5 text-[10px] font-semibold rounded ${
-                      task.risk_classification === 'HIGH'
-                        ? 'bg-rose-950/40 text-rose-300 border border-rose-800/40'
-                        : task.risk_classification === 'MEDIUM'
-                        ? 'bg-amber-950/40 text-amber-300 border border-amber-800/40'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    Risk: {task.risk_classification}
+                  {/* Risk Badge */}
+                  <span className={`badge ${
+                    (task.risk_classification || (task as any).risk_level) === 'HIGH' 
+                      ? 'badge-red' 
+                      : (task.risk_classification || (task as any).risk_level) === 'MEDIUM' 
+                        ? 'badge-amber' 
+                        : 'badge-green'
+                  }`} style={{ fontSize: '10px' }}>
+                    Risk: {task.risk_classification || (task as any).risk_level || 'LOW'}
                   </span>
                 </div>
               </div>
 
-              {task.description && (
-                <p className="text-xs text-slate-400">{task.description}</p>
-              )}
+              {/* Description */}
+              <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '2px 0' }}>
+                {task.description}
+              </p>
 
-              {/* Dependencies & Acceptance Criteria */}
-              <div className="pt-2 border-t border-slate-900 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+              {/* Acceptance Criteria */}
+              {task.acceptance_criteria && task.acceptance_criteria.length > 0 && (
+                <div style={{
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'var(--surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                     Acceptance Criteria:
                   </span>
-                  <ul className="space-y-1">
-                    {task.acceptance_criteria?.map((ac, aci) => (
-                      <li key={aci} className="text-slate-300 text-[11px] flex items-center gap-1.5">
-                        <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                        <span>{ac}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                    Dependencies & Scope:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {task.dependencies?.length > 0 ? (
-                      task.dependencies.map((dep, di) => (
-                        <span key={di} className="px-1.5 py-0.5 bg-slate-900 text-slate-400 text-[10px] font-mono rounded">
-                          dep: {dep}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-slate-500 text-[10px]">None (Entry task)</span>
-                    )}
-                    {task.expected_files?.map((ef, efi) => (
-                      <span key={efi} className="px-1.5 py-0.5 bg-indigo-950/40 text-indigo-300 text-[10px] font-mono rounded">
-                        file: {ef}
-                      </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {task.acceptance_criteria.map((crit, cIdx) => (
+                      <div key={cIdx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        <CheckCircle2 size={13} color="var(--success)" />
+                        <span>{crit}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* SECTION E & F: RISKS, ASSUMPTIONS & INDEPENDENT VERIFICATION */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Risks & Assumptions */}
-        <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl shadow-md space-y-3">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">E. Risks & Disclosed Assumptions</h3>
-          </div>
-
-          <div className="space-y-2">
-            <div>
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                Non-Blocking Assumptions:
-              </span>
-              <ul className="space-y-1">
-                {interpretation.non_blocking_assumptions?.map((a, i) => (
-                  <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
-                    <span className="text-indigo-400 font-bold">•</span>
-                    <span>{a}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800">
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                Material Risks & Destructive Guardrails:
-              </span>
-              <ul className="space-y-1">
-                {interpretation.risks?.map((r, i) => (
-                  <li key={i} className="text-xs text-amber-300/90 flex items-start gap-1.5">
-                    <span className="text-amber-400 font-bold">!</span>
-                    <span>{r}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {/* 6. SECTION F: SAFETY & VERIFICATION INVARIANTS */}
+      <div className="plan-section-card">
+        <div className="plan-section-header">
+          <div className="plan-section-title">
+            <Lock size={15} color="var(--primary)" />
+            <span>F. Safety Perimeter & Independent Verification Gates</span>
           </div>
         </div>
 
-        {/* Definition of Success & Independent Verification */}
-        <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl shadow-md space-y-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">F. Success Definition & Verification</h3>
+        <div className="plan-grid-3">
+          <div className="plan-sub-card">
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+              Execution Sandbox
+            </span>
+            <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <span>✓ Git Worktree Strict Isolation</span>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Primary repository root protected from direct mutation.
+            </div>
           </div>
 
-          <div>
-            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-              Definition of Success:
+          <div className="plan-sub-card">
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+              Watchdog Supervision
             </span>
-            <p className="text-xs text-slate-200 bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-medium">
-              {interpretation.definition_of_success || 'All acceptance criteria certified by independent test execution.'}
-            </p>
+            <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <span>✓ Loop & Anomaly Detection</span>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Intervenes automatically on 3 repetitive failure signatures.
+            </div>
           </div>
 
-          <div className="pt-2 border-t border-slate-800">
-            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-              Proposed Verification Methods:
+          <div className="plan-sub-card">
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+              Independent Verification
             </span>
-            <div className="flex flex-wrap gap-1.5">
-              {interpretation.proposed_verification_methods?.map((vm, i) => (
-                <span key={i} className="px-2.5 py-1 bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold rounded-lg flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  {vm}
-                </span>
-              ))}
+            <div style={{ fontSize: '12.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+              <span>✓ Objective Test Evaluation</span>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Agent cannot self-certify completion. Verification perimeter runs clean test suite.
             </div>
           </div>
         </div>
       </div>
 
-      {/* Regeneration Modal */}
+      {/* Modal: Regenerate Plan */}
       {showRegenModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <RotateCw className="w-4 h-4 text-indigo-400" />
-              Regenerate Execution Plan (v{version + 1})
-            </h3>
-            <p className="text-xs text-slate-400">
-              Provide feedback or adjustments for the Supervisor to incorporate into the updated plan.
-            </p>
-            <textarea
-              placeholder="e.g. Focus on JWT cookie renewal rather than custom sessions, add pytest fixture..."
-              value={regenFeedback}
-              onChange={e => setRegenFeedback(e.target.value)}
-              className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-              rows={4}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowRegenModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition"
-              >
-                Cancel
+        <div className="modal-overlay" onClick={() => setShowRegenModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: '15px', fontWeight: 600 }}>Regenerate Execution Plan</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowRegenModal(false)}>
+                <X size={16} />
               </button>
-              <button
-                onClick={handleRegenerateSubmit}
-                disabled={isSubmitting}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition shadow"
-              >
-                Regenerate Plan
-              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                Provide feedback or additional constraints. The supervisor will synthesize an updated plan version (v{version + 1}).
+              </p>
+              <textarea
+                className="input"
+                placeholder="e.g. Focus only on unit tests; do not modify configuration files..."
+                value={regenFeedback}
+                onChange={e => setRegenFeedback(e.target.value)}
+                rows={3}
+                style={{ width: '100%', fontSize: '13px' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button className="btn btn-secondary" onClick={() => setShowRegenModal(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" onClick={handleRegenerateSubmit} disabled={isSubmitting}>
+                  Regenerate Plan
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Rejection Modal */}
+      {/* Modal: Reject Plan */}
       {showRejectModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
-            <h3 className="text-sm font-bold text-rose-300 flex items-center gap-2">
-              <XCircle className="w-4 h-4 text-rose-400" />
-              Reject Proposed Plan
-            </h3>
-            <p className="text-xs text-slate-400">
-              State the reason for rejection. The mission will transition to REJECTED and no tasks will execute.
-            </p>
-            <input
-              type="text"
-              placeholder="e.g. Plan violates sprint timeline or architectural boundary..."
-              value={rejectReason}
-              onChange={e => setRejectReason(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-rose-500"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowRejectModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition"
-              >
-                Cancel
+        <div className="modal-overlay" onClick={() => setShowRejectModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--danger)' }}>Reject Execution Plan</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowRejectModal(false)}>
+                <X size={16} />
               </button>
-              <button
-                onClick={handleRejectSubmit}
-                disabled={isSubmitting || !rejectReason.trim()}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg transition shadow disabled:opacity-50"
-              >
-                Confirm Rejection
-              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                Please specify why this plan is being rejected. The rejection reason is permanently stored in the SQLite audit ledger.
+              </p>
+              <textarea
+                className="input"
+                placeholder="e.g. Incorrect scope, missing acceptance criteria..."
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                rows={3}
+                style={{ width: '100%', fontSize: '13px' }}
+                required
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button className="btn btn-secondary" onClick={() => setShowRejectModal(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-danger" onClick={handleRejectSubmit} disabled={isSubmitting || !rejectReason.trim()}>
+                  Confirm Rejection
+                </button>
+              </div>
             </div>
           </div>
         </div>
