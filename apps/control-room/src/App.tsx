@@ -365,6 +365,12 @@ export const App: React.FC = () => {
             <Activity
               events={events}
               wsConnected={wsConnected}
+              missions={missions}
+              onSelectMission={(mid) => {
+                setSelectedMissionId(mid);
+                setActiveTab('missions');
+              }}
+              onRefresh={loadData}
             />
           )}
 
