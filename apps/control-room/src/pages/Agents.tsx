@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { 
   Play, 
   Pause, 
-  Plus,
-  Cpu,
-  Server,
-  Terminal,
-  Search,
+  Plus, 
+  Cpu, 
+  Server, 
+  Terminal, 
+  Search, 
   X
 } from 'lucide-react';
 import type { AgentRecord, AdapterInfo } from '../types';
@@ -27,23 +27,248 @@ interface FleetItem {
   provider: string;
   role: string;
   category: 'Coding' | 'Research' | 'Local' | 'Cloud' | 'Open Source';
-  infrastructure: 'LOCAL' | 'DIGITALOCEAN' | 'NEBIUS';
+  infrastructure: 'LOCAL' | 'DIGITALOCEAN' | 'NEBIUS' | 'OPENROUTER' | 'BACKBOARD' | 'HUGGINGFACE';
   defaultCaps: string[];
   supportedModels?: string[];
   sessionSupport?: boolean;
 }
 
 const FLEET_REGISTRY: FleetItem[] = [
-  { id: 'claude_code', name: 'Claude Code', provider: 'Anthropic', role: 'Autonomous Code Editing & Terminal', category: 'Coding', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution', 'git'], supportedModels: ['Claude 3.7 Sonnet'] },
-  { id: 'codex', name: 'OpenAI Codex', provider: 'OpenAI', role: 'Precision Code Repair & Fallback Handoff', category: 'Coding', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'test_execution', 'git'], supportedModels: ['Codex / GPT-4o'] },
-  { id: 'hermes', name: 'Hermes Agent', provider: 'Nous Research', role: 'Long-running Autonomous Agent Sessions', category: 'Open Source', infrastructure: 'DIGITALOCEAN', defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'governed_tools'], supportedModels: ['Hermes-4-70B', 'Gemma-4-31B'], sessionSupport: true },
-  { id: 'digitalocean_managed', name: 'DigitalOcean Managed Agent', provider: 'DigitalOcean', role: 'MicroVM Cloud Sandbox & Action Gateway', category: 'Cloud', infrastructure: 'DIGITALOCEAN', defaultCaps: ['remote_execution', 'microvm_isolation', 'governed_tools', 'git'], supportedModels: ['Hermes 4', 'Gemma 4', 'Llama 3.3'], sessionSupport: true },
-  { id: 'gemini', name: 'Gemini CLI', provider: 'Google', role: 'Multimodal Analysis & Architecture Planning', category: 'Research', infrastructure: 'LOCAL', defaultCaps: ['documentation', 'code_review', 'planning'], supportedModels: ['Gemini 2.5 Flash', 'Gemini 2.5 Pro'] },
-  { id: 'goose', name: 'Goose', provider: 'Block', role: 'Open Extensible On-machine Agent', category: 'Open Source', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'terminal_execution', 'developer_tools'], supportedModels: ['Open Weights'] },
-  { id: 'cline', name: 'Cline', provider: 'Cline', role: 'Autonomous Coding & File Patching', category: 'Coding', infrastructure: 'LOCAL', defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution'], supportedModels: ['Claude 3.7', 'DeepSeek'] },
-  { id: 'opencode', name: 'OpenCode', provider: 'Open-Source', role: 'Open Weight Agentic Engine', category: 'Open Source', infrastructure: 'NEBIUS', defaultCaps: ['terminal_execution', 'git', 'filesystem_write'], supportedModels: ['Qwen 2.5 Coder', 'Kimi'] },
-  { id: 'qwen', name: 'Qwen Local', provider: 'Alibaba Cloud', role: 'On-device Local LLM Offline Agent', category: 'Local', infrastructure: 'LOCAL', defaultCaps: ['local_model', 'code_execution', 'filesystem_read'], supportedModels: ['Qwen 2.5 Coder 32B'] },
-  { id: 'kimi', name: 'Kimi Code', provider: 'Moonshot AI', role: 'Ultra Long-context Code Diagnostics', category: 'Research', infrastructure: 'NEBIUS', defaultCaps: ['large_context', 'code_review'], supportedModels: ['Kimi 1.5'] }
+  { 
+    id: 'claude_code', 
+    name: 'Claude Code', 
+    provider: 'Anthropic', 
+    role: 'Autonomous Code Editing & Terminal CLI', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution', 'git'], 
+    supportedModels: ['Claude 3.7 Sonnet', 'Claude 3.5 Sonnet'] 
+  },
+  { 
+    id: 'codex', 
+    name: 'OpenAI Codex', 
+    provider: 'OpenAI', 
+    role: 'Precision Code Repair & Fallback Handoff', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'test_execution', 'git'], 
+    supportedModels: ['Codex / GPT-4o', 'o3-mini'] 
+  },
+  { 
+    id: 'cursor', 
+    name: 'Cursor Agent', 
+    provider: 'Anysphere', 
+    role: 'Context-Engineered IDE Agent & Fast Code Repair', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution', 'git'], 
+    supportedModels: ['Claude 3.7 Sonnet', 'Cursor Small'] 
+  },
+  { 
+    id: 'devin', 
+    name: 'Cognition Devin', 
+    provider: 'Cognition', 
+    role: 'Autonomous End-to-End Cloud Software Engineer', 
+    category: 'Cloud', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'browser_control'], 
+    supportedModels: ['Devin Engine', 'Cognition 1.0'],
+    sessionSupport: true 
+  },
+  { 
+    id: 'windsurf', 
+    name: 'Windsurf Cascade', 
+    provider: 'Codeium', 
+    role: 'Flow-State Multi-File Patching & Deep Search', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'filesystem_write', 'git'], 
+    supportedModels: ['Cascade Base', 'Claude 3.7 Sonnet'] 
+  },
+  { 
+    id: 'copilot', 
+    name: 'GitHub Copilot CLI', 
+    provider: 'GitHub', 
+    role: 'Terminal Assistance & Inline Code Synthesis', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'git', 'terminal_execution'], 
+    supportedModels: ['GPT-4o', 'Claude 3.7 Sonnet'] 
+  },
+  { 
+    id: 'cline', 
+    name: 'Cline', 
+    provider: 'Cline Core', 
+    role: 'Autonomous Coding & File Patching', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution'], 
+    supportedModels: ['Claude 3.7', 'DeepSeek R1'] 
+  },
+  { 
+    id: 'goose', 
+    name: 'Goose', 
+    provider: 'Block', 
+    role: 'Open Extensible On-machine Developer Agent', 
+    category: 'Open Source', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'terminal_execution', 'developer_tools'], 
+    supportedModels: ['Open Weights', 'Databricks DBRX'] 
+  },
+  { 
+    id: 'hermes', 
+    name: 'Hermes Agent', 
+    provider: 'Nous Research', 
+    role: 'Long-running Autonomous Agent Sessions', 
+    category: 'Open Source', 
+    infrastructure: 'DIGITALOCEAN', 
+    defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'governed_tools'], 
+    supportedModels: ['Hermes-4-70B', 'Gemma-4-31B'], 
+    sessionSupport: true 
+  },
+  { 
+    id: 'digitalocean_managed', 
+    name: 'DigitalOcean Managed Agent', 
+    provider: 'DigitalOcean', 
+    role: 'MicroVM Cloud Sandbox & Action Gateway', 
+    category: 'Cloud', 
+    infrastructure: 'DIGITALOCEAN', 
+    defaultCaps: ['remote_execution', 'microvm_isolation', 'governed_tools', 'git'], 
+    supportedModels: ['Hermes 4', 'Gemma 4', 'Llama 3.3'], 
+    sessionSupport: true 
+  },
+  { 
+    id: 'gemini', 
+    name: 'Gemini CLI', 
+    provider: 'Google', 
+    role: 'Multimodal Analysis & Architecture Planning', 
+    category: 'Research', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['documentation', 'code_review', 'planning'], 
+    supportedModels: ['Gemini 2.5 Flash', 'Gemini 2.5 Pro'] 
+  },
+  { 
+    id: 'qwen', 
+    name: 'Qwen Local', 
+    provider: 'Alibaba Cloud', 
+    role: 'On-device Local LLM Offline Agent', 
+    category: 'Local', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['local_model', 'code_execution', 'filesystem_read'], 
+    supportedModels: ['Qwen 2.5 Coder 32B'] 
+  },
+  { 
+    id: 'opencode', 
+    name: 'OpenCode', 
+    provider: 'Open-Source', 
+    role: 'Open Weight Agentic Engine', 
+    category: 'Open Source', 
+    infrastructure: 'NEBIUS', 
+    defaultCaps: ['terminal_execution', 'git', 'filesystem_write'], 
+    supportedModels: ['Qwen 2.5 Coder', 'Kimi'] 
+  },
+  { 
+    id: 'kimi', 
+    name: 'Kimi Code', 
+    provider: 'Moonshot AI', 
+    role: 'Ultra Long-context Code Diagnostics', 
+    category: 'Research', 
+    infrastructure: 'NEBIUS', 
+    defaultCaps: ['large_context', 'code_review'], 
+    supportedModels: ['Kimi 1.5'] 
+  }
+];
+
+interface ProviderItem {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  features: string[];
+  badgeText: string;
+  badgeClass: string;
+  statusText: string;
+  statusColor: string;
+}
+
+const INFRASTRUCTURE_PROVIDERS: ProviderItem[] = [
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    category: 'Universal Multi-Model Gateway',
+    description: 'Unified access to 200+ frontier models (Claude 3.7 Sonnet, DeepSeek R1, GPT-4o, Gemini 2.5, Llama 3.3) with dynamic model routing and fallback resilience.',
+    features: ['Multi-model inference gateway (200+ models)', 'Dynamic catalog discovery & automatic fallback', 'Supervisory reasoning & diagnostic engine'],
+    badgeText: 'CONNECTED & ACTIVE',
+    badgeClass: 'badge-green',
+    statusText: 'API Authorized',
+    statusColor: 'var(--success)'
+  },
+  {
+    id: 'backboard',
+    name: 'Backboard.io (Espri.ai)',
+    category: 'Sovereign AI & Persistent Memory',
+    description: 'Enterprise sovereign infrastructure providing persistent cross-mission AI memory, adaptive context window management, and routing across 17,000+ models.',
+    features: ['Persistent AI memory & state retention', 'Adaptive context management across model shifts', 'Unified routing across 17,000+ LLMs'],
+    badgeText: 'CONNECTED & ACTIVE',
+    badgeClass: 'badge-green',
+    statusText: 'API Authorized',
+    statusColor: 'var(--success)'
+  },
+  {
+    id: 'huggingface',
+    name: 'Hugging Face',
+    category: 'Open Model Hub & Serverless Inference',
+    description: 'Direct access to Hugging Face Model Hub and Serverless Inference API (Llama 3.3, StarCoder 2, DeepSeek R1, Qwen 2.5) authenticated under user M0izz.',
+    features: ['Serverless inference across open models', 'Model Hub catalog & fine-tune access', 'Verified user account integration (M0izz)'],
+    badgeText: 'CONNECTED & ACTIVE',
+    badgeClass: 'badge-green',
+    statusText: 'Hub Authorized (M0izz)',
+    statusColor: 'var(--success)'
+  },
+  {
+    id: 'digitalocean',
+    name: 'DigitalOcean',
+    category: 'Cloud Infrastructure & Inference',
+    description: 'Provides Managed Agents in isolated microVMs, Action Gateway governed MCP tool access, and Serverless Inference with Google Gemma 4.',
+    features: ['Managed Agents & Droplets', 'Action Gateway governed tools', 'Serverless Gemma 4 Inference'],
+    badgeText: 'OPTIONAL INTEGRATION',
+    badgeClass: 'badge-neutral',
+    statusText: 'Configure via Settings',
+    statusColor: 'var(--text-muted)'
+  },
+  {
+    id: 'nebius',
+    name: 'Nebius Token Factory',
+    category: 'Open Model Inference Gateway',
+    description: 'OpenAI-compatible inference gateway powering NVIDIA Nemotron 4, Nous Hermes, Qwen 2.5 Coder, and Kimi Code models.',
+    features: ['Dynamic model catalog queries', 'Supervisory reasoning backend', 'Token Factory high throughput'],
+    badgeText: 'OPTIONAL INTEGRATION',
+    badgeClass: 'badge-neutral',
+    statusText: 'Configure via Settings',
+    statusColor: 'var(--text-muted)'
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    category: 'Multimodal Inference & Incident Diagnostics',
+    description: 'Powers deep failure diagnosis, architecture boundary reviews, multimodal UI and diagram analysis, and operational incident briefings.',
+    features: ['Complex failure diagnosis & root-cause isolation', 'Multimodal UI & architecture analysis', 'Operational incident briefings'],
+    badgeText: 'OPTIONAL INTEGRATION',
+    badgeClass: 'badge-neutral',
+    statusText: 'Configure via Settings',
+    statusColor: 'var(--text-muted)'
+  },
+  {
+    id: 'local',
+    name: 'Local Workstation',
+    category: 'Developer Machine Host',
+    description: 'Executes agents on your local workstation with isolated Git worktrees, native subprocess runners, and real-time telemetry.',
+    features: ['Git worktree isolation', 'Local CLI execution (Claude, Codex)', 'Offline-first persistence (SQLite WAL)'],
+    badgeText: 'ALWAYS ACTIVE',
+    badgeClass: 'badge-blue',
+    statusText: 'Connected',
+    statusColor: 'var(--success)'
+  }
 ];
 
 const INFERENCE_MODELS = [
@@ -105,7 +330,8 @@ export const Agents: React.FC<AgentsProps> = ({
     if (isWorking) statusDisplay = 'BUSY';
     else if (isPaused) statusDisplay = 'PAUSED';
     else if (isInstalled && isAvail) statusDisplay = 'AVAILABLE';
-    else if (isInstalled && !isAvail) statusDisplay = 'UNAVAILABLE';
+    else if (isInstalled && matchedAdapter?.availability?.status === 'UNAUTHORIZED') statusDisplay = 'AUTH NEEDED';
+    else if (isInstalled && !isAvail) statusDisplay = 'STANDBY (CLI NOT CONFIGURED)';
     else statusDisplay = 'STANDBY (NOT INSTALLED)';
 
     const capabilities = matchedAdapter?.capabilities || reg.defaultCaps;
@@ -125,13 +351,12 @@ export const Agents: React.FC<AgentsProps> = ({
     };
   });
 
-
   const filteredFleet = fleetList.filter(item => {
     if (selectedCategory !== 'All') {
       if (selectedCategory === 'Coding' && item.category !== 'Coding') return false;
       if (selectedCategory === 'Research' && item.category !== 'Research') return false;
       if (selectedCategory === 'Local' && item.infrastructure !== 'LOCAL') return false;
-      if (selectedCategory === 'Cloud' && item.infrastructure !== 'DIGITALOCEAN' && item.infrastructure !== 'NEBIUS') return false;
+      if (selectedCategory === 'Cloud' && item.category !== 'Cloud' && item.infrastructure !== 'DIGITALOCEAN' && item.infrastructure !== 'NEBIUS') return false;
       if (selectedCategory === 'Open Source' && item.category !== 'Open Source') return false;
     }
     if (searchQuery) {
@@ -181,7 +406,7 @@ export const Agents: React.FC<AgentsProps> = ({
 
   const readyCount = fleetList.filter(f => f.isAvailable).length;
   const runningCount = fleetList.filter(f => f.isWorking).length;
-  const unavailCount = fleetList.filter(f => !f.isAvailable).length;
+  const standbyCount = fleetList.filter(f => !f.isAvailable && !f.isWorking).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1100px' }}>
@@ -192,7 +417,7 @@ export const Agents: React.FC<AgentsProps> = ({
             Agent Fleet Control Center
           </h1>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {fleetList.length} runtimes integrated · <span style={{ color: 'var(--success)', fontWeight: 500 }}>{readyCount} ready</span> · {runningCount} active · <span style={{ color: 'var(--text-muted)' }}>{unavailCount} unconfigured</span>
+            {fleetList.length} runtimes integrated · <span style={{ color: readyCount > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 500 }}>{readyCount} ready</span> · {runningCount} active · <span style={{ color: 'var(--text-muted)' }}>{standbyCount} standby</span>
           </div>
         </div>
 
@@ -232,7 +457,7 @@ export const Agents: React.FC<AgentsProps> = ({
           style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           <Server size={14} />
-          <span>Infrastructure Providers (3)</span>
+          <span>Infrastructure Providers ({INFRASTRUCTURE_PROVIDERS.length})</span>
         </button>
       </div>
 
@@ -254,19 +479,20 @@ export const Agents: React.FC<AgentsProps> = ({
               ))}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', padding: '4px 10px', width: '240px' }}>
-              <Search size={13} color="var(--text-muted)" />
+            <div style={{ position: 'relative', width: '220px' }}>
+              <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
+                className="input input-sm"
                 placeholder="Search runtimes..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: '12px', width: '100%' }}
+                style={{ paddingLeft: '28px', width: '100%' }}
               />
             </div>
           </div>
 
-          {/* Grid Layout: Left Cards & Right Inspector */}
+          {/* Master-Detail Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '18px' }}>
             {/* Cards List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -280,7 +506,7 @@ export const Agents: React.FC<AgentsProps> = ({
                       borderColor: isSelected ? 'var(--primary)' : 'var(--border)',
                       backgroundColor: isSelected ? 'var(--surface-elevated)' : 'var(--surface)',
                       padding: '12px 14px',
-                      opacity: item.isAvailable ? 1 : 0.7
+                      opacity: item.isAvailable ? 1 : 0.75
                     }}
                     onClick={() => onSelectAgent(item.id)}
                   >
@@ -368,10 +594,10 @@ export const Agents: React.FC<AgentsProps> = ({
                       {selectedItem.isWorking
                         ? 'Executing tasks on assigned mission under watchdog monitoring.'
                         : selectedItem.isAvailable
-                          ? `Ready for assignment by Dynamic Router (${selectedItem.infrastructure} execution).`
+                          ? `Ready for assignment by Dynamic Router (${selectedItem.infrastructure} execution substrate).`
                           : selectedItem.isInstalled
-                            ? 'Adapter installed but CLI binary or endpoint not reachable in environment.'
-                            : 'Runtime not configured on this machine.'}
+                            ? 'Adapter declared in system, but CLI binary or endpoint not reachable in environment.'
+                            : 'Runtime not configured on this host machine.'}
                     </div>
                   </div>
 
@@ -380,7 +606,17 @@ export const Agents: React.FC<AgentsProps> = ({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Execution Substrate</span>
                       <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {selectedItem.infrastructure === 'LOCAL' ? 'Local Workstation (Host PATH)' : selectedItem.infrastructure === 'DIGITALOCEAN' ? 'DigitalOcean MicroVM / Action Gateway' : 'Nebius Token Factory'}
+                        {selectedItem.infrastructure === 'LOCAL' 
+                          ? 'Local Workstation (Host PATH / Worktree)' 
+                          : selectedItem.infrastructure === 'DIGITALOCEAN' 
+                            ? 'DigitalOcean MicroVM / Action Gateway' 
+                            : selectedItem.infrastructure === 'OPENROUTER'
+                              ? 'OpenRouter Universal Multi-Model Gateway'
+                              : selectedItem.infrastructure === 'BACKBOARD'
+                                ? 'Backboard Sovereign Persistent Infrastructure'
+                                : selectedItem.infrastructure === 'HUGGINGFACE'
+                                  ? 'Hugging Face Model Hub & Serverless'
+                                  : 'Nebius Token Factory'}
                       </span>
                     </div>
 
@@ -412,13 +648,33 @@ export const Agents: React.FC<AgentsProps> = ({
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {selectedItem.capabilities.map(c => (
                         <span key={c} className="badge badge-neutral" style={{ fontSize: '11px' }}>
-                          {c.replace(/_/g, ' ')}
+                          ✓ {c.replace(/_/g, ' ')}
                         </span>
                       ))}
                     </div>
                   </div>
+
+                  {/* Interventions & Health */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Interventions Handled</div>
+                      <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {selectedItem.interventions}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Verification Rate</div>
+                      <div style={{ fontSize: '15px', fontWeight: 600, color: selectedItem.verificationRate ? 'var(--success)' : 'var(--text-muted)' }}>
+                        {selectedItem.verificationRate ? `${selectedItem.verificationRate}` : 'Unmeasured'}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="surface-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Select an agent runtime to inspect its profile and capabilities.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -428,27 +684,21 @@ export const Agents: React.FC<AgentsProps> = ({
       {activeTab === 'models' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Underlying language models accessed through infrastructure providers (DigitalOcean Inference, Nebius, and Local).
+            Underlying language models accessed through infrastructure providers (OpenRouter, Backboard, Hugging Face, DigitalOcean, Nebius, Gemini, and Local).
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
             {INFERENCE_MODELS.map(m => (
               <div key={m.id} className="surface-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Cpu size={16} color="var(--primary)" />
-                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>{m.name}</span>
-                  </div>
-                  <span className="badge badge-neutral" style={{ fontSize: '10px' }}>{m.infra}</span>
+                  <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>{m.name}</span>
+                  <span className="badge badge-blue" style={{ fontSize: '10px' }}>{m.size}</span>
                 </div>
-
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Developer: <strong style={{ color: 'var(--text-secondary)' }}>{m.developer}</strong> · Gateway: <span className="badge badge-neutral" style={{ fontSize: '9px' }}>{m.infra}</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4, marginTop: '4px' }}>
                   {m.focus}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)' }}>
-                  <span>Developer: {m.developer}</span>
-                  <span>Size: {m.size}</span>
                 </div>
               </div>
             ))}
@@ -460,191 +710,36 @@ export const Agents: React.FC<AgentsProps> = ({
       {activeTab === 'providers' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Execution substrates and inference gateways connected to AI Supervisor.
+            Execution substrates and inference gateways connected to AI Supervisor ({INFRASTRUCTURE_PROVIDERS.length} total).
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px' }}>
-            {/* DigitalOcean Card */}
-            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="digitalocean" size={24} />
-                <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>DigitalOcean</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Cloud Infrastructure & Inference</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
+            {INFRASTRUCTURE_PROVIDERS.map(p => (
+              <div key={p.id} className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <ProviderLogo providerId={p.id} size={24} />
+                  <div>
+                    <h3 style={{ fontSize: '15px', fontWeight: 600 }}>{p.name}</h3>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.category}</div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {p.description}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {p.features.map(f => (
+                    <div key={f}>✓ {f}</div>
+                  ))}
+                </div>
+
+                <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span className={`badge ${p.badgeClass}`} style={{ fontSize: '10px' }}>{p.badgeText}</span>
+                  <span style={{ fontSize: '11px', color: p.statusColor }}>{p.statusText}</span>
                 </div>
               </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Provides Managed Agents in isolated microVMs, Action Gateway governed MCP tool access, and Serverless Inference with Google Gemma 4.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Managed Agents & Droplets</div>
-                <div>✓ Action Gateway governed tools</div>
-                <div>✓ Serverless Gemma 4 Inference</div>
-              </div>
-
-              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-neutral" style={{ fontSize: '10px' }}>OPTIONAL INTEGRATION</span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Configure via Settings</span>
-              </div>
-            </div>
-
-            {/* Nebius Card */}
-            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="nebius" size={24} />
-                <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Nebius Token Factory</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Open Model Inference Gateway</div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                OpenAI-compatible inference gateway powering NVIDIA Nemotron 4, Nous Hermes, Qwen 2.5 Coder, and Kimi Code models.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Dynamic model catalog queries</div>
-                <div>✓ Supervisory reasoning backend</div>
-                <div>✓ Token Factory high throughput</div>
-              </div>
-
-              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-neutral" style={{ fontSize: '10px' }}>OPTIONAL INTEGRATION</span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Configure via Settings</span>
-              </div>
-            </div>
-
-            {/* Google Gemini Card */}
-            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="gemini" size={24} />
-                <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Google Gemini</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Multimodal Inference & Incident Diagnostics</div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Powers deep failure diagnosis, architecture boundary reviews, multimodal UI and diagram analysis, and operational incident briefings.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Complex failure diagnosis & root-cause isolation</div>
-                <div>✓ Multimodal UI & architecture analysis</div>
-                <div>✓ Operational incident briefings</div>
-              </div>
-
-              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-neutral" style={{ fontSize: '10px' }}>OPTIONAL INTEGRATION</span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Configure via Settings</span>
-              </div>
-            </div>
-
-            {/* OpenRouter Card */}
-            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="openrouter" size={24} />
-                <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>OpenRouter</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Universal Multi-Model Gateway</div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Unified access to 200+ frontier models (Claude 3.7 Sonnet, DeepSeek R1, GPT-4o, Gemini 2.5, Llama 3.3) with dynamic model routing and fallback resilience.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Multi-model inference gateway (200+ models)</div>
-                <div>✓ Dynamic catalog discovery & automatic fallback</div>
-                <div>✓ Supervisory reasoning & diagnostic engine</div>
-              </div>
-
-              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-green" style={{ fontSize: '10px' }}>CONNECTED & ACTIVE</span>
-                <span style={{ fontSize: '11px', color: 'var(--success)' }}>API Authorized</span>
-              </div>
-            </div>
-
-            {/* Backboard.io Card */}
-            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="backboard" size={24} />
-                <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Backboard.io (Espri.ai)</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sovereign AI & Persistent Memory</div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Enterprise sovereign infrastructure providing persistent cross-mission AI memory, adaptive context window management, and routing across 17,000+ models.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Persistent AI memory & state retention</div>
-                <div>✓ Adaptive context management across model shifts</div>
-                <div>✓ Unified routing across 17,000+ LLMs</div>
-              </div>
-
-              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-green" style={{ fontSize: '10px' }}>CONNECTED & ACTIVE</span>
-                <span style={{ fontSize: '11px', color: 'var(--success)' }}>API Authorized</span>
-              </div>
-            </div>
-
-            {/* Hugging Face Card */}
-            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="huggingface" size={24} />
-                <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Hugging Face</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Open Model Hub & Serverless Inference</div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Direct access to Hugging Face Model Hub and Serverless Inference API (Llama 3.3, StarCoder 2, DeepSeek R1, Qwen 2.5) authenticated under user M0izz.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Serverless inference across open models</div>
-                <div>✓ Model Hub catalog & fine-tune access</div>
-                <div>✓ Verified user account integration (M0izz)</div>
-              </div>
-
-              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-green" style={{ fontSize: '10px' }}>CONNECTED & ACTIVE</span>
-                <span style={{ fontSize: '11px', color: 'var(--success)' }}>Hub Authorized (M0izz)</span>
-              </div>
-            </div>
-
-            {/* Local Card */}
-            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ProviderLogo providerId="local" size={24} />
-                <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Local Workstation</h3>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Developer Machine Host</div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Executes agents on your local workstation with isolated Git worktrees and real-time subprocess telemetry.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <div>✓ Git worktree isolation</div>
-                <div>✓ Local CLI execution (Claude, Codex)</div>
-                <div>✓ Offline-first persistence (SQLite WAL)</div>
-              </div>
-
-              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge badge-blue" style={{ fontSize: '10px' }}>ALWAYS ACTIVE</span>
-                <span style={{ fontSize: '11px', color: 'var(--success)' }}>Connected</span>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
@@ -660,55 +755,69 @@ export const Agents: React.FC<AgentsProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleRegisterCustom}>
-              <div className="modal-body" style={{ gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>Agent Display Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. In-House Python Fixer"
-                    value={customName}
-                    onChange={e => setCustomName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>Unique Identifier Slug</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. custom_python_agent"
-                    value={customId}
-                    onChange={e => setCustomId(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>Command or HTTP Endpoint</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. python -m custom_agent or https://agent.internal/api"
-                    value={customCommand}
-                    onChange={e => setCustomCommand(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>Execution Mode</label>
-                  <select
-                    value={customExecutionMode}
-                    onChange={e => setCustomExecutionMode(e.target.value as any)}
-                  >
-                    <option value="local_process">Local Process (Subprocess in Worktree)</option>
-                    <option value="remote_managed">Remote Managed (HTTP / MicroVM)</option>
-                  </select>
-                </div>
+            <form onSubmit={handleRegisterCustom} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Agent Name
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g. My Custom Coding Worker"
+                  value={customName}
+                  onChange={e => setCustomName(e.target.value)}
+                  required
+                />
               </div>
 
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsCustomModalOpen(false)}>
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Adapter ID (Unique)
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g. custom_worker_v1"
+                  value={customId}
+                  onChange={e => setCustomId(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Executable Command or Endpoint URL
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g. my-agent-cli or https://api.myagent.ai/v1"
+                  value={customCommand}
+                  onChange={e => setCustomCommand(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Execution Substrate Mode
+                </label>
+                <select
+                  className="select"
+                  value={customExecutionMode}
+                  onChange={e => setCustomExecutionMode(e.target.value as any)}
+                >
+                  <option value="local_process">Local Process (Host Worktree)</option>
+                  <option value="remote_managed">Remote Managed Gateway (MicroVM Sandbox)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsCustomModalOpen(false)}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">

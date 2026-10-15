@@ -96,7 +96,15 @@ class ClaudeCodeAdapter(AgentAdapter):
                 message=f"Claude Code executable '{target_exec}' not found on PATH or environment.",
             )
 
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        if resolved_path:
+            return AdapterAvailability(
+                status=AdapterAvailabilityStatus.AVAILABLE,
+                available=True,
+                message=f"Claude Code CLI is installed ({resolved_path}) and ready for execution.",
+                executable_path=resolved_path,
+            )
+
         if not api_key and not self.executable_override:
             return AdapterAvailability(
                 status=AdapterAvailabilityStatus.UNAUTHORIZED,
