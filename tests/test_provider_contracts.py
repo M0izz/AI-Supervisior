@@ -272,3 +272,62 @@ async def test_gemma_bounded_supervisor_intelligence():
     assert len(mem) == 2
     assert any(m["type"] == "VERIFIED_FACT" for m in mem)
     assert any(m["type"] == "REJECTED_APPROACH" for m in mem)
+
+
+@pytest.mark.asyncio
+async def test_openrouter_provider_and_descriptor():
+    """Verifies OpenRouter provider descriptor, capabilities, and model catalog."""
+    from integrations.openrouter import OpenRouterProvider, OpenRouterClient
+
+    client = OpenRouterClient()
+    provider = OpenRouterProvider(client=client)
+
+    desc = await provider.get_descriptor()
+    assert desc.provider_id == "openrouter"
+    assert "multi_model_routing" in desc.capabilities
+    assert "serverless_inference" in desc.capabilities
+    assert desc.inference_endpoint == "https://openrouter.ai/api/v1"
+
+    models = await provider.get_models()
+    assert len(models) >= 4
+    model_ids = [m.model_id for m in models]
+    assert any("claude" in mid.lower() for mid in model_ids)
+    assert any("deepseek" in mid.lower() for mid in model_ids)
+
+
+@pytest.mark.asyncio
+async def test_openrouter_reasoner_contract():
+    """Verifies OpenRouter reasoning engine and structured decision outputs."""
+    from integrations.openrouter import OpenRouterReasoner
+
+    reasoner = OpenRouterReasoner()
+    health = await reasoner.check_health()
+    assert health["provider"] == "openrouter"
+    assert health["status"] in ("healthy", "degraded")
+
+    decision = await reasoner.reason_about_situation({
+        "anomaly_type": "LOOP_DETECTED",
+        "error_signature": "AssertionError: 401 Unauthorized != 200 OK"
+    })
+    assert decision.decision in ("CONTINUE", "RETRY", "CHANGE_STRATEGY", "DELEGATE", "PAUSE", "REQUEST_APPROVAL")
+    assert decision.confidence > 0.0
+    assert len(decision.reason) > 5
+
+
+@pytest.mark.asyncio
+async def test_backboard_provider_and_descriptor():
+    """Verifies Backboard.io sovereign AI infrastructure descriptor and capabilities."""
+    from integrations.backboard import BackboardProvider, BackboardClient
+
+    client = BackboardClient()
+    provider = BackboardProvider(client=client)
+
+    desc = await provider.get_descriptor()
+    assert desc.provider_id == "backboard"
+    assert "persistent_memory" in desc.capabilities
+    assert "sovereign_ai" in desc.capabilities
+    assert desc.inference_endpoint == "https://app.backboard.io/api"
+
+    models = await provider.get_models()
+    assert len(models) >= 2
+    assert any("sovereign" in m.model_id.lower() or "context" in m.model_id.lower() for m in models)

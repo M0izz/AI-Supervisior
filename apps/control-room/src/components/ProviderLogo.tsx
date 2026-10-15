@@ -232,6 +232,75 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 14. OpenRouter — Multi-Model Ray Routing Prism
+  if (id.includes('openrouter') || id.includes('router')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="orGrad" x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#6366F1" />
+            <stop offset="0.5" stopColor="#8B5CF6" />
+            <stop offset="1" stopColor="#EC4899" />
+          </linearGradient>
+        </defs>
+        {/* Hexagonal Prism Base */}
+        <path
+          d="M20 5L33 12.5V27.5L20 35L7 27.5V12.5L20 5Z"
+          stroke="url(#orGrad)"
+          strokeWidth="2.2"
+          strokeLinejoin="round"
+          fill="#6366F1"
+          fillOpacity="0.12"
+        />
+        {/* Central Router Nexus */}
+        <circle cx="20" cy="20" r="4" fill="url(#orGrad)" />
+        {/* Route Rays */}
+        <path d="M20 5V16M33 12.5L23.5 18M33 27.5L23.5 22M20 35V24M7 27.5L16.5 22M7 12.5L16.5 18" stroke="#A78BFA" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  // 15. Backboard.io (Espri.ai) — Sovereign AI Memory Grid & Adaptive Context Slate
+  if (id.includes('backboard') || id.includes('espri')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bbGrad" x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#10B981" />
+            <stop offset="0.5" stopColor="#06B6D4" />
+            <stop offset="1" stopColor="#3B82F6" />
+          </linearGradient>
+        </defs>
+        {/* Memory Slate Frame */}
+        <rect
+          x="7"
+          y="7"
+          width="26"
+          height="26"
+          rx="5"
+          stroke="url(#bbGrad)"
+          strokeWidth="2.2"
+          fill="#0F172A"
+          fillOpacity="0.8"
+        />
+        {/* Persistent Memory Grid Interconnect */}
+        <path d="M13 14H27M13 20H23M13 26H20" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="25" cy="26" r="2.5" fill="#10B981" />
+        <circle cx="27" cy="14" r="2" fill="#38BDF8" />
+      </svg>
+    );
+  }
+
+  // 16. Nebius Token Factory
+  if (id.includes('nebius')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="8" y="8" width="24" height="24" rx="4" stroke="#00D2FF" strokeWidth="2" fill="#00D2FF" fillOpacity="0.1" />
+        <path d="M14 26V14L26 26V14" stroke="#00D2FF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
   // Default fallback
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">

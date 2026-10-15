@@ -54,7 +54,10 @@ const INFERENCE_MODELS = [
   { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder', developer: 'Alibaba Cloud', infra: 'NEBIUS', size: '32B', focus: 'Deep syntax repair, algorithm refactoring, and test generation' },
   { id: 'nemotron-4-340b', name: 'NVIDIA Nemotron 4', developer: 'NVIDIA', infra: 'NEBIUS', size: '340B', focus: 'Supervisory situation reasoning, anomaly diagnosis, and recovery planning' },
   { id: 'llama-3.3-70b', name: 'Meta Llama 3.3', developer: 'Meta', infra: 'DIGITALOCEAN', size: '70B', focus: 'General code generation and test crafting' },
-  { id: 'deepseek-r1-distill', name: 'DeepSeek R1 Distill', developer: 'DeepSeek', infra: 'NEBIUS', size: '70B', focus: 'Chain-of-thought logic, math invariants, and test verification' }
+  { id: 'deepseek-r1-distill', name: 'DeepSeek R1 Distill', developer: 'DeepSeek', infra: 'NEBIUS', size: '70B', focus: 'Chain-of-thought logic, math invariants, and test verification' },
+  { id: 'claude-3.7-sonnet', name: 'Claude 3.7 Sonnet', developer: 'Anthropic', infra: 'OPENROUTER', size: 'Hybrid', focus: 'Multi-model agentic coding, hybrid chain-of-thought reasoning, and tool execution' },
+  { id: 'deepseek-r1-openrouter', name: 'DeepSeek R1 (Full)', developer: 'DeepSeek', infra: 'OPENROUTER', size: '671B', focus: 'Ultra-scale reasoning, mathematical invariant validation, and precision code repair' },
+  { id: 'backboard-sovereign-router', name: 'Backboard Sovereign Router', developer: 'Espri.ai', infra: 'BACKBOARD', size: '17k+ Models', focus: 'Sovereign persistent memory, adaptive context window management, and universal model routing' }
 ];
 
 export const Agents: React.FC<AgentsProps> = ({
@@ -534,6 +537,58 @@ export const Agents: React.FC<AgentsProps> = ({
               <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span className="badge badge-neutral" style={{ fontSize: '10px' }}>OPTIONAL INTEGRATION</span>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Configure via Settings</span>
+              </div>
+            </div>
+
+            {/* OpenRouter Card */}
+            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ProviderLogo providerId="openrouter" size={24} />
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>OpenRouter</h3>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Universal Multi-Model Gateway</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Unified access to 200+ frontier models (Claude 3.7 Sonnet, DeepSeek R1, GPT-4o, Gemini 2.5, Llama 3.3) with dynamic model routing and fallback resilience.
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <div>✓ Multi-model inference gateway (200+ models)</div>
+                <div>✓ Dynamic catalog discovery & automatic fallback</div>
+                <div>✓ Supervisory reasoning & diagnostic engine</div>
+              </div>
+
+              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge badge-green" style={{ fontSize: '10px' }}>CONNECTED & ACTIVE</span>
+                <span style={{ fontSize: '11px', color: 'var(--success)' }}>API Authorized</span>
+              </div>
+            </div>
+
+            {/* Backboard.io Card */}
+            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ProviderLogo providerId="backboard" size={24} />
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Backboard.io (Espri.ai)</h3>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sovereign AI & Persistent Memory</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Enterprise sovereign infrastructure providing persistent cross-mission AI memory, adaptive context window management, and routing across 17,000+ models.
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <div>✓ Persistent AI memory & state retention</div>
+                <div>✓ Adaptive context management across model shifts</div>
+                <div>✓ Unified routing across 17,000+ LLMs</div>
+              </div>
+
+              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge badge-green" style={{ fontSize: '10px' }}>CONNECTED & ACTIVE</span>
+                <span style={{ fontSize: '11px', color: 'var(--success)' }}>API Authorized</span>
               </div>
             </div>
 

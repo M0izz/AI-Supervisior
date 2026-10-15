@@ -332,6 +332,68 @@ export const Settings: React.FC = () => {
                   <span>✓ Fallback offline safety</span>
                 </div>
               </div>
+
+              {/* OpenRouter */}
+              <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ProviderLogo providerId="openrouter" size={24} />
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>OpenRouter</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Multi-Model Inference Gateway · Claude 3.7 · DeepSeek R1 · GPT-4o · Llama 3.3</div>
+                    </div>
+                  </div>
+                  <span className="badge badge-green" style={{ fontSize: '11px' }}>Connected & Active</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>API Key (OPENROUTER_API_KEY)</label>
+                    <input type="password" defaultValue="sk-or-v1-••••••••••••••••••••••••••••••••••••••••" style={{ fontSize: '12px' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Base URL</label>
+                    <input type="text" defaultValue="https://openrouter.ai/api/v1" style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span>✓ Universal gateway (200+ models)</span>
+                  <span>✓ Dynamic routing & automatic fallbacks</span>
+                  <span>✓ Supervisory situation reasoning</span>
+                </div>
+              </div>
+
+              {/* Backboard.io */}
+              <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ProviderLogo providerId="backboard" size={24} />
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Backboard.io (Espri.ai)</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sovereign AI Infrastructure · Persistent Memory · Adaptive Context · 17k+ Models</div>
+                    </div>
+                  </div>
+                  <span className="badge badge-green" style={{ fontSize: '11px' }}>Connected & Active</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>API Key (BACKBOARD_API_KEY)</label>
+                    <input type="password" defaultValue="espr_••••••••••••••••••••••••••••••••" style={{ fontSize: '12px' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Base URL</label>
+                    <input type="text" defaultValue="https://app.backboard.io/api" style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span>✓ Cross-mission persistent state</span>
+                  <span>✓ Adaptive context management</span>
+                  <span>✓ Sovereign unified model router</span>
+                </div>
+              </div>
             </div>
           )}
 

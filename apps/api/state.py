@@ -154,6 +154,16 @@ class AppState:
         self.gemini_provider = GeminiProvider(client=self.gemini_client)
         self.gemini_reasoner = GeminiReasoner(client=self.gemini_client)
 
+        from integrations.openrouter import OpenRouterProvider, OpenRouterClient, OpenRouterReasoner
+        from integrations.backboard import BackboardProvider, BackboardClient
+
+        self.openrouter_client = OpenRouterClient()
+        self.openrouter_provider = OpenRouterProvider(client=self.openrouter_client)
+        self.openrouter_reasoner = OpenRouterReasoner(client=self.openrouter_client)
+
+        self.backboard_client = BackboardClient()
+        self.backboard_provider = BackboardProvider(client=self.backboard_client)
+
         self.hermes_adapter = HermesAdapter(
             event_bus=self.event_bus,
             worktree_manager=self.worktree_manager,

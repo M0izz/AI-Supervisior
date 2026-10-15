@@ -3,6 +3,10 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
+from dotenv import load_dotenv
+
+# Load local environment configuration
+load_dotenv()
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -1057,7 +1061,15 @@ async def list_providers():
     gemini_desc = await app_state.gemini_provider.get_descriptor()
     providers.append(gemini_desc.model_dump())
 
-    # 4. Local Workstation Substrate
+    # 4. OpenRouter Multi-Model Inference Provider
+    openrouter_desc = await app_state.openrouter_provider.get_descriptor()
+    providers.append(openrouter_desc.model_dump())
+
+    # 5. Backboard.io Sovereign AI Infrastructure Provider
+    backboard_desc = await app_state.backboard_provider.get_descriptor()
+    providers.append(backboard_desc.model_dump())
+
+    # 6. Local Workstation Substrate
     providers.append({
         "provider_id": "local",
         "name": "Local Workstation",
@@ -1076,7 +1088,7 @@ async def list_providers():
 
 @app.get("/api/models")
 async def list_models():
-    """Lists available models from DigitalOcean Inference, Nebius, Google Gemini, and Local providers."""
+    """Lists available models from DigitalOcean Inference, Nebius, Google Gemini, OpenRouter, Backboard, and Local providers."""
     from integrations.nebius.provider import NebiusNemotronProvider
     models = []
 
@@ -1103,6 +1115,16 @@ async def list_models():
     # 3. Google Gemini models
     gemini_models = await app_state.gemini_provider.get_models()
     for m in gemini_models:
+        models.append(m.model_dump())
+
+    # 4. OpenRouter Multi-Model Inference Catalog
+    openrouter_models = await app_state.openrouter_provider.get_models()
+    for m in openrouter_models:
+        models.append(m.model_dump())
+
+    # 5. Backboard.io Models
+    backboard_models = await app_state.backboard_provider.get_models()
+    for m in backboard_models:
         models.append(m.model_dump())
 
     return {"models": models, "count": len(models)}
