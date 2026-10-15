@@ -31,6 +31,7 @@ import { ProviderLogo } from '../components/ProviderLogo';
 import { HandoffSequence } from '../components/HandoffSequence';
 import { TaskDAGView } from '../components/TaskDAGView';
 import { SupervisorDecisionCard } from '../components/SupervisorDecisionCard';
+import { PlanReview } from '../components/PlanReview';
 
 interface MissionsProps {
   missions: Mission[];
@@ -53,7 +54,7 @@ export const Missions: React.FC<MissionsProps> = ({
   const [events, setEvents] = useState<any[]>([]);
   const [absenceInfo, setAbsenceInfo] = useState<any>(null);
   const [isActing, setIsActing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'story' | 'tasks' | 'verification' | 'policy'>('story');
+  const [activeTab, setActiveTab] = useState<'plan' | 'story' | 'tasks' | 'verification' | 'policy'>('plan');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [missionDecisions, setMissionDecisions] = useState<SupervisorDecision[]>([]);
   const [verificationRecords, setVerificationRecords] = useState<any[]>([]);
@@ -67,6 +68,10 @@ export const Missions: React.FC<MissionsProps> = ({
   // Load tasks, events, and decisions when selected mission changes
   useEffect(() => {
     if (!selectedMission) return;
+
+    if (['AWAITING_APPROVAL', 'NEEDS_CLARIFICATION', 'DRAFT', 'PLANNING'].includes(selectedMission.status)) {
+      setActiveTab('plan');
+    }
 
     // Load tasks
     if (selectedMission.tasks && selectedMission.tasks.length > 0) {
@@ -354,6 +359,7 @@ export const Missions: React.FC<MissionsProps> = ({
           {/* Detail Tabs */}
           <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
             {[
+              { id: 'plan', label: 'Mandatory Plan Review', icon: ShieldCheck },
               { id: 'story', label: 'Mission Story & Handoffs', icon: Compass },
               { id: 'tasks', label: `Execution Plan (${tasks.length})`, icon: Layers },
               { id: 'verification', label: 'Independent Verification', icon: ShieldCheck },
@@ -374,6 +380,21 @@ export const Missions: React.FC<MissionsProps> = ({
             );
           })}
         </div>
+
+        {/* Tab 0: Mandatory Plan Review & Approval Gate */}
+        {activeTab === 'plan' && (
+          <PlanReview
+            missionId={selectedMission.id}
+            onPlanApproved={() => {
+              onRefresh();
+              setActiveTab('story');
+            }}
+            onPlanRejected={() => {
+              onRefresh();
+            }}
+            onRefresh={onRefresh}
+          />
+        )}
 
         {/* Tab 1: Timeline Story & Handoffs */}
         {activeTab === 'story' && (

@@ -73,7 +73,7 @@ def test_natural_language_draft_mission(client):
     assert create_res.status_code == 200
     created = create_res.json()
     assert created["title"] == draft["title"]
-    assert created["status"] in ["CREATED", "PLANNING", "RUNNING"]
+    assert created["status"] in ["CREATED", "PLANNING", "RUNNING", "AWAITING_APPROVAL"]
 
     # Verify initialized tasks exist on the mission
     tasks_res = client.get(f"/api/missions/{created['id']}/tasks")

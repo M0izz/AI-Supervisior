@@ -22,6 +22,7 @@ from integrations.jenkins.mock import MockJenkinsProvider
 from storage.sqlite import (
     DatabaseManager,
     MissionRepository,
+    PlanRepository,
     TaskRepository,
     AgentRepository,
     EventRepository,
@@ -48,6 +49,7 @@ class AppState:
         db_path = os.getenv("SUPERVISOR_DB_PATH", "./supervisor.db")
         self.db = DatabaseManager(db_path=db_path)
         self.mission_repo = MissionRepository(self.db)
+        self.plan_repo = PlanRepository(self.db)
         self.task_repo = TaskRepository(self.db)
         self.agent_repo = AgentRepository(self.db)
         self.event_repo = EventRepository(self.db)
@@ -249,8 +251,8 @@ class AppState:
             self.reasoning_provider = MockReasoningProvider()
         self.reasoner = SupervisoryReasoner(provider=self.reasoning_provider)
 
-        # Jenkins Provider (HTTP client when URL configured, otherwise deterministic mock)
-        if os.getenv("JENKINS_URL") and os.getenv("JENKINS_URL") != "mock":
+        # Jenkins Provider (HTTP client when URL configured and enabled, otherwise deterministic mock)
+        if os.getenv("JENKINS_ENABLED", "false").lower() == "true" and os.getenv("JENKINS_URL") and os.getenv("JENKINS_URL") != "mock":
             self.jenkins_client = JenkinsHttpClient()
         else:
             self.jenkins_client = MockJenkinsProvider()

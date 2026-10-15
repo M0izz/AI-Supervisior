@@ -22,15 +22,19 @@ class MissionManager:
         self,
         title: str,
         goal: str,
+        original_request: Optional[str] = None,
         repository_path: str = "./demo/sample-project",
-        constraints: Optional[MissionConstraints] = None
+        constraints: Optional[MissionConstraints] = None,
+        status: MissionStatus = MissionStatus.CREATED
     ) -> Mission:
         async with self._lock:
             mission = Mission(
                 title=title,
                 goal=goal,
+                original_request=original_request or goal,
                 repository_path=repository_path,
                 constraints=constraints or MissionConstraints(),
+                status=status
             )
             self._missions[mission.id] = mission
 
@@ -223,3 +227,91 @@ class MissionManager:
 
     async def complete_mission(self, mission_id: str, summary: Optional[str] = None) -> Optional[Mission]:
         return await self.update_status(mission_id, MissionStatus.COMPLETED, reason=summary or "Verified and completed")
+
+    async def approve_mission(self, mission_id: str, plan_version: int, approved_by: Optional[str] = None) -> Optional[Mission]:
+        async with self._lock:
+            mission = self._missions.get(mission_id)
+            if not mission and self._repository:
+                data = await self._repository.get(mission_id)
+                if data:
+                    mission = Mission.model_validate(data)
+                    self._missions[mission.id] = mission
+            if not mission:
+                return None
+            mission.status = MissionStatus.APPROVED
+            mission.approved_plan_version = plan_version
+            mission.updated_at = datetime.now(timezone.utc)
+            if self._repository:
+                try:
+                    await self._repository.save(mission)
+                except Exception as e:
+                    logger.warning(f"Failed to persist approved mission {mission_id}: {e}")
+
+        await self._event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                type=EventType.PLAN_APPROVED,
+                payload={
+                    "mission_id": mission_id,
+                    "plan_version": plan_version,
+                    "approved_by": approved_by or "operator"
+                }
+            )
+        )
+        await self._event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                type=EventType.MISSION_STATUS_CHANGED,
+                payload={
+                    "old_status": "AWAITING_APPROVAL",
+                    "new_status": MissionStatus.APPROVED.value,
+                    "reason": f"Plan version {plan_version} approved by {approved_by or 'operator'}"
+                }
+            )
+        )
+        return mission
+
+    async def reject_mission(self, mission_id: str, reason: str = "Plan rejected by operator") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.REJECTED, reason=reason)
+
+    async def clarify_mission(self, mission_id: str, reason: str = "Operator clarification required") -> Optional[Mission]:
+        return await self.update_status(mission_id, MissionStatus.NEEDS_CLARIFICATION, reason=reason)
+
+    async def invalidate_approval(self, mission_id: str, reason: str = "Plan modified, approval invalidated") -> Optional[Mission]:
+        async with self._lock:
+            mission = self._missions.get(mission_id)
+            if not mission and self._repository:
+                data = await self._repository.get(mission_id)
+                if data:
+                    mission = Mission.model_validate(data)
+                    self._missions[mission.id] = mission
+            if not mission:
+                return None
+            mission.approved_plan_version = None
+            mission.status = MissionStatus.AWAITING_APPROVAL
+            mission.updated_at = datetime.now(timezone.utc)
+            if self._repository:
+                try:
+                    await self._repository.save(mission)
+                except Exception as e:
+                    logger.warning(f"Failed to persist invalidated mission approval for {mission_id}: {e}")
+
+        await self._event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                type=EventType.PLAN_INVALIDATED,
+                payload={"mission_id": mission_id, "reason": reason}
+            )
+        )
+        await self._event_bus.publish(
+            Event(
+                mission_id=mission_id,
+                type=EventType.MISSION_STATUS_CHANGED,
+                payload={
+                    "old_status": "APPROVED",
+                    "new_status": MissionStatus.AWAITING_APPROVAL.value,
+                    "reason": reason
+                }
+            )
+        )
+        return mission

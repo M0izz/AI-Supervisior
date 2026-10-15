@@ -101,12 +101,12 @@ export const Agents: React.FC<AgentsProps> = ({
     const isWorking = liveInstance?.status === 'RUNNING' || liveInstance?.status === 'BUSY';
     const isPaused = liveInstance?.status === 'PAUSED';
 
-    let statusDisplay = 'NOT CONFIGURED';
-    if (isWorking) statusDisplay = 'RUNNING';
+    let statusDisplay = 'STANDBY (NOT INSTALLED)';
+    if (isWorking) statusDisplay = 'BUSY';
     else if (isPaused) statusDisplay = 'PAUSED';
-    else if (isInstalled && isAvail) statusDisplay = 'READY';
+    else if (isInstalled && isAvail) statusDisplay = 'AVAILABLE';
     else if (isInstalled && !isAvail) statusDisplay = 'UNAVAILABLE';
-    else statusDisplay = 'NOT CONFIGURED';
+    else statusDisplay = 'STANDBY (NOT INSTALLED)';
 
     const capabilities = matchedAdapter?.capabilities || reg.defaultCaps;
 
@@ -301,7 +301,7 @@ export const Agents: React.FC<AgentsProps> = ({
                       </div>
 
                       <span className="status-pill">
-                        <span className={`status-dot ${item.isWorking ? 'running' : item.isAvailable ? 'active' : 'idle'}`} />
+                        <span className={`status-dot ${item.isWorking ? 'running' : item.isInstalled && item.isAvailable ? 'active' : 'idle'}`} />
                         <span style={{ fontSize: '10px' }}>{item.statusDisplay}</span>
                       </span>
                     </div>

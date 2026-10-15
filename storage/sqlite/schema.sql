@@ -15,7 +15,10 @@ CREATE TABLE IF NOT EXISTS missions (
     constraints TEXT DEFAULT '{}',
     metrics TEXT DEFAULT '{}',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    original_request TEXT,
+    current_plan_version INTEGER DEFAULT 0,
+    approved_plan_version INTEGER
 );
 
 -- 2. Tasks Table
@@ -302,5 +305,27 @@ CREATE INDEX IF NOT EXISTS idx_sync_inbox_record ON sync_inbox(record_id);
 CREATE INDEX IF NOT EXISTS idx_sync_tombstones_record ON sync_tombstones(record_id);
 CREATE INDEX IF NOT EXISTS idx_sync_tombstones_project ON sync_tombstones(project_id);
 CREATE INDEX IF NOT EXISTS idx_sync_conflicts_project ON sync_conflicts(project_id);
+
+-- 18. Plan Versions Table (Phase 2 Mandatory Plan Approval Gate)
+CREATE TABLE IF NOT EXISTS plan_versions (
+    plan_id TEXT PRIMARY KEY,
+    mission_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    interpretation TEXT NOT NULL,
+    tasks TEXT NOT NULL,
+    validation_status TEXT NOT NULL,
+    approval_status TEXT NOT NULL,
+    approved_by TEXT,
+    approved_at TEXT,
+    rejection_reason TEXT,
+    execution_started_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_plan_versions_mission ON plan_versions(mission_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_versions_mission_ver ON plan_versions(mission_id, version);
+
 
 

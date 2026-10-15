@@ -60,6 +60,13 @@ class EventType(str, Enum):
     APPROVAL_REQUESTED = "approval.requested"
     APPROVAL_RESOLVED = "approval.resolved"
 
+    # Plan Lifecycle events
+    PLAN_GENERATED = "plan.generated"
+    PLAN_APPROVED = "plan.approved"
+    PLAN_REJECTED = "plan.rejected"
+    PLAN_INVALIDATED = "plan.invalidated"
+    PLAN_CLARIFICATION_REQUIRED = "plan.clarification_required"
+
     # Recovery events
     RECOVERY_STARTED = "recovery.started"
     RECOVERY_CONTEXT_CREATED = "recovery.context_created"

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -12,7 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from core.events.schema import Event, EventType, EventSeverity
-from core.missions.models import Mission, MissionStatus, MissionConstraints
+from core.missions.models import (
+    Mission,
+    MissionStatus,
+    MissionConstraints,
+    PlanVersion,
+    StructuredInterpretation,
+    PlanTaskItem,
+    PlanApprovalStatus,
+)
 from core.tasks.models import Task, TaskStatus
 from core.policies.models import PolicyConfig
 from agents.registry import AgentStatus, AgentHealth
@@ -91,6 +100,28 @@ class CreateMissionRequest(BaseModel):
     repository_path: Optional[str] = "./demo/sample-project"
     constraints: Optional[MissionConstraints] = None
     tasks: Optional[List[Dict[str, Any]]] = None
+
+
+class ApprovePlanRequest(BaseModel):
+    version: int
+    approved_by: Optional[str] = "operator"
+
+
+class RejectPlanRequest(BaseModel):
+    reason: str = "Plan rejected by operator"
+
+
+class ClarifyPlanRequest(BaseModel):
+    answers: Dict[str, str]
+
+
+class EditPlanRequest(BaseModel):
+    interpretation: Optional[Dict[str, Any]] = None
+    tasks: Optional[List[Dict[str, Any]]] = None
+
+
+class RegeneratePlanRequest(BaseModel):
+    feedback: Optional[str] = None
 
 
 class PauseMissionRequest(BaseModel):
@@ -346,30 +377,276 @@ async def draft_mission(req: DraftMissionRequest):
     )
 
 
+def synthesize_plan_and_interpretation(
+    goal: str,
+    repo: str,
+    original_request: Optional[str] = None,
+    feedback: Optional[str] = None
+) -> tuple[StructuredInterpretation, List[PlanTaskItem]]:
+    goal_lower = goal.lower()
+    raw_req = original_request or goal
+
+    blocking_questions: List[str] = []
+    non_blocking: List[str] = []
+    in_scope: List[str] = []
+    exclusions: List[str] = [
+        "Modifying root credentials or .env secrets",
+        "Direct production deployment without operator sign-off",
+        "Modifying files outside target repository boundary"
+    ]
+    constraints: List[str] = [
+        "Preserve existing unit test pass rate",
+        "Strict file boundary isolation",
+        "Zero regressions in surrounding components"
+    ]
+    risks: List[str] = ["File modifications in project directory", "Process timeout during test suite execution"]
+    deliverables: List[str] = []
+    verification_methods: List[str] = ["Automated test suite execution", "Git diff boundary inspection", "Clean exit code validation"]
+    tasks: List[PlanTaskItem] = []
+
+    words = goal.split()
+    if len(words) < 3:
+        blocking_questions.append("Goal description is too brief. What specific functionality or component should be targeted?")
+
+    if any(k in goal_lower for k in ["auth", "login", "jwt", "session", "token"]):
+        interpreted_goal = f"Implement secure session handling and authentication resilience for: {goal}"
+        in_scope = ["Session decoding and validation", "Expired token handling", "Regression tests for session timeout"]
+        exclusions.append("Replacing existing password hashing or user database schema")
+        non_blocking = ["Assumes standard JWT or Bearer session cookies unless otherwise configured"]
+        deliverables = ["Updated session validation logic", "Session regression test suite"]
+        definition_of_success = "Expired session tokens refresh or reject cleanly without unhandled 500 exceptions, and all auth unit tests pass."
+        tasks = [
+            PlanTaskItem(
+                task_id="TASK-001",
+                title="Inspect session flow & model",
+                description="Audit session timeout handling and token decoding",
+                proposed_agent="worker_01",
+                required_capabilities=["file_editing", "command_execution"],
+                expected_files=["src/auth/session.py"],
+                risk_classification="LOW",
+                acceptance_criteria=["Existing token decoder identified", "No unhandled exceptions on null payload"],
+                verification_strategy="file_check"
+            ),
+            PlanTaskItem(
+                task_id="TASK-002",
+                title="Implement session renewal fix",
+                description="Ensure expired tokens refresh cleanly without 500 error",
+                dependencies=["TASK-001"],
+                proposed_agent="worker_01",
+                required_capabilities=["file_editing", "command_execution"],
+                expected_files=["src/auth/handler.py"],
+                risk_classification="MEDIUM",
+                acceptance_criteria=["Expired token renewal returns HTTP 401 or refreshes token gracefully"],
+                verification_strategy="diff_review"
+            ),
+            PlanTaskItem(
+                task_id="TASK-003",
+                title="Add regression tests",
+                description="Coverage for expired tokens and malformed signatures",
+                dependencies=["TASK-002"],
+                proposed_agent="worker_01",
+                required_capabilities=["file_editing", "command_execution"],
+                expected_files=["tests/test_auth.py"],
+                risk_classification="LOW",
+                acceptance_criteria=["Test suite passes with 100% assertions satisfied"],
+                verification_strategy="automated_test"
+            ),
+            PlanTaskItem(
+                task_id="TASK-004",
+                title="Independent verification",
+                description="Run pytest test_auth.py and verify git diff scope",
+                dependencies=["TASK-003"],
+                proposed_agent="worker_01",
+                required_capabilities=["command_execution"],
+                expected_files=["tests/test_auth.py"],
+                risk_classification="LOW",
+                acceptance_criteria=["Zero unexpected files modified", "Tests exit with code 0"],
+                verification_strategy="automated_test"
+            ),
+        ]
+    elif any(k in goal_lower for k in ["dark", "mode", "theme", "ui", "css", "color"]):
+        interpreted_goal = f"Implement theme toggle and CSS styling for: {goal}"
+        in_scope = ["CSS design tokens", "Theme toggle component", "Local storage persistence"]
+        deliverables = ["Updated CSS variables", "Theme switch controller"]
+        definition_of_success = "Theme switch renders without layout shifts and persists preference in storage."
+        tasks = [
+            PlanTaskItem(
+                task_id="TASK-001",
+                title="Audit CSS tokens & surface variables",
+                description="Define surface, text, and border CSS custom properties",
+                proposed_agent="worker_01",
+                required_capabilities=["file_editing"],
+                expected_files=["src/theme.css"],
+                risk_classification="LOW",
+                acceptance_criteria=["CSS variables define light and dark contrasts"],
+                verification_strategy="file_check"
+            ),
+            PlanTaskItem(
+                task_id="TASK-002",
+                title="Wire theme toggle & persistence",
+                description="Connect toggle to settings and browser persistence",
+                dependencies=["TASK-001"],
+                proposed_agent="worker_01",
+                required_capabilities=["file_editing"],
+                expected_files=["src/settings.tsx"],
+                risk_classification="LOW",
+                acceptance_criteria=["Toggle flips root CSS theme class"],
+                verification_strategy="diff_review"
+            ),
+            PlanTaskItem(
+                task_id="TASK-003",
+                title="Independent styling verification",
+                description="Verify contrast tokens and run component tests",
+                dependencies=["TASK-002"],
+                proposed_agent="worker_01",
+                required_capabilities=["command_execution"],
+                expected_files=[],
+                risk_classification="LOW",
+                acceptance_criteria=["All UI unit tests pass"],
+                verification_strategy="automated_test"
+            ),
+        ]
+    else:
+        interpreted_goal = f"Execute requested task: {goal}"
+        in_scope = ["Analyze target repository", "Apply minimal required code changes", "Verify with automated tests"]
+        deliverables = ["Code modifications addressing goal", "Test verification results"]
+        definition_of_success = f"Goal '{goal}' is satisfied and verified with passing test exit code."
+        tasks = [
+            PlanTaskItem(
+                task_id="TASK-001",
+                title="Inspect repository context & plan changes",
+                description=f"Analyze repository files relevant to '{goal}'",
+                proposed_agent="worker_01",
+                required_capabilities=["file_editing", "command_execution"],
+                expected_files=[],
+                risk_classification="LOW",
+                acceptance_criteria=["Target source files identified"],
+                verification_strategy="file_check"
+            ),
+            PlanTaskItem(
+                task_id="TASK-002",
+                title="Implement core functionality",
+                description=f"Apply code modifications to achieve: {goal}",
+                dependencies=["TASK-001"],
+                proposed_agent="worker_01",
+                required_capabilities=["file_editing", "command_execution"],
+                expected_files=[],
+                risk_classification="MEDIUM",
+                acceptance_criteria=["Implementation adheres to repository conventions"],
+                verification_strategy="diff_review"
+            ),
+            PlanTaskItem(
+                task_id="TASK-003",
+                title="Automated test verification",
+                description="Execute test suite and certify diff scope",
+                dependencies=["TASK-002"],
+                proposed_agent="worker_01",
+                required_capabilities=["command_execution"],
+                expected_files=[],
+                risk_classification="LOW",
+                acceptance_criteria=["Automated tests pass with zero errors"],
+                verification_strategy="automated_test"
+            ),
+        ]
+
+    if feedback:
+        non_blocking.append(f"Incorporated user feedback: {feedback}")
+
+    interp = StructuredInterpretation(
+        original_request=raw_req,
+        interpreted_goal=interpreted_goal,
+        expected_deliverables=deliverables,
+        in_scope=in_scope,
+        explicit_exclusions=exclusions,
+        constraints=constraints,
+        assumptions=["Executing within isolated local worktree"],
+        blocking_questions=blocking_questions,
+        non_blocking_assumptions=non_blocking,
+        risks=risks,
+        definition_of_success=definition_of_success,
+        proposed_verification_methods=verification_methods
+    )
+    return interp, tasks
+
+
 @app.post("/api/missions", response_model=Mission)
 async def create_mission(req: CreateMissionRequest):
-    mission = await app_state.mission_manager.create_mission(
-        title=req.title,
-        goal=req.goal,
-        repository_path=req.repository_path or "./demo/sample-project",
-        constraints=req.constraints
+    goal = req.goal.strip()
+    raw_title = req.title.strip() if req.title else (goal[:40] + "...")
+
+    interp, tasks = synthesize_plan_and_interpretation(
+        goal=goal,
+        repo=req.repository_path or "./demo/sample-project",
+        original_request=goal
     )
 
     if req.tasks:
-        from core.tasks.models import Task as CoreTask
-        task_objs = []
+        merged_tasks = []
         for i, t in enumerate(req.tasks):
-            t_id = t.get("id") or f"TASK-{str(i+1).zfill(3)}"
-            task_objs.append(CoreTask(
-                id=t_id,
-                mission_id=mission.id,
+            t_id = t.get("id") or t.get("task_id") or f"TASK-{str(i+1).zfill(3)}"
+            merged_tasks.append(PlanTaskItem(
+                task_id=t_id,
                 title=t.get("title", f"Task {i+1}"),
                 description=t.get("description", ""),
                 dependencies=t.get("dependencies", []),
-                order=t.get("order", i+1),
-                expected_files=t.get("expected_files", [])
+                expected_files=t.get("expected_files", []),
+                acceptance_criteria=t.get("acceptance_criteria", ["Task completed"]),
+                verification_strategy=t.get("verification_strategy", "automated_test")
             ))
-        await app_state.task_manager.initialize_mission_tasks(mission.id, task_objs)
+        tasks = merged_tasks
+
+    initial_status = MissionStatus.NEEDS_CLARIFICATION if interp.blocking_questions else MissionStatus.AWAITING_APPROVAL
+    val_status = "NEEDS_CLARIFICATION" if interp.blocking_questions else "VALID"
+
+    mission = await app_state.mission_manager.create_mission(
+        title=raw_title,
+        goal=goal,
+        original_request=goal,
+        repository_path=req.repository_path or "./demo/sample-project",
+        constraints=req.constraints,
+        status=initial_status
+    )
+    mission.current_plan_version = 1
+
+    plan_v1 = PlanVersion(
+        mission_id=mission.id,
+        version=1,
+        interpretation=interp,
+        tasks=tasks,
+        validation_status=val_status,
+        approval_status=PlanApprovalStatus.PENDING
+    )
+    await app_state.plan_repo.save_plan(plan_v1)
+    await app_state.mission_repo.save(mission)
+
+    from core.tasks.models import Task as CoreTask
+    core_tasks = [
+        CoreTask(
+            id=t.task_id,
+            mission_id=mission.id,
+            title=t.title,
+            description=t.description,
+            dependencies=t.dependencies,
+            order=idx + 1,
+            expected_files=t.expected_files
+        )
+        for idx, t in enumerate(tasks)
+    ]
+    await app_state.task_manager.initialize_mission_tasks(mission.id, core_tasks)
+
+    await app_state.event_bus.publish(
+        Event(
+            mission_id=mission.id,
+            type=EventType.PLAN_GENERATED,
+            payload={
+                "mission_id": mission.id,
+                "version": 1,
+                "validation_status": val_status,
+                "blocking_questions_count": len(interp.blocking_questions),
+                "tasks_count": len(tasks)
+            }
+        )
+    )
 
     return mission
 
@@ -414,6 +691,8 @@ async def get_mission_state(mission_id: str):
         "constraints": mission.constraints.model_dump(),
         "metrics": mission.metrics.model_dump(),
         "telemetry": telem.model_dump(),
+        "current_plan_version": mission.current_plan_version,
+        "approved_plan_version": mission.approved_plan_version,
         "created_at": mission.created_at.isoformat(),
         "updated_at": mission.updated_at.isoformat()
     }
@@ -432,6 +711,229 @@ async def update_mission_state(mission_id: str, req: UpdateMissionStatusRequest)
     return {"status": "updated", "mission": mission}
 
 
+# --- Plan Review & Interaction Endpoints ---
+@app.get("/api/missions/{mission_id}/plan")
+async def get_mission_plan(mission_id: str, version: Optional[int] = None):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    
+    if version is not None:
+        plan = await app_state.plan_repo.get_plan_by_version(mission_id, version)
+    else:
+        plan = await app_state.plan_repo.get_latest_plan(mission_id)
+    
+    if not plan:
+        interp, tasks = synthesize_plan_and_interpretation(mission.goal, mission.repository_path, mission.original_request)
+        plan_v1 = PlanVersion(
+            mission_id=mission.id,
+            version=1,
+            interpretation=interp,
+            tasks=tasks,
+            validation_status="VALID",
+            approval_status=PlanApprovalStatus.PENDING
+        )
+        plan = await app_state.plan_repo.save_plan(plan_v1)
+    return plan
+
+
+@app.get("/api/missions/{mission_id}/plans")
+async def list_mission_plans(mission_id: str):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    return await app_state.plan_repo.list_plans(mission_id)
+
+
+@app.post("/api/missions/{mission_id}/plan/edit")
+async def edit_mission_plan(mission_id: str, req: EditPlanRequest):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    
+    latest = await app_state.plan_repo.get_latest_plan(mission_id)
+    new_version_num = (latest["version"] + 1) if latest else 1
+
+    existing_interp = latest.get("interpretation", {}) if latest else {}
+    if req.interpretation:
+        existing_interp.update(req.interpretation)
+    
+    interp_obj = StructuredInterpretation.model_validate(existing_interp) if existing_interp else synthesize_plan_and_interpretation(mission.goal, mission.repository_path)[0]
+
+    tasks_list = []
+    if req.tasks:
+        for idx, t in enumerate(req.tasks):
+            t_id = t.get("task_id") or t.get("id") or f"TASK-{str(idx+1).zfill(3)}"
+            tasks_list.append(PlanTaskItem(
+                task_id=t_id,
+                title=t.get("title", f"Task {idx+1}"),
+                description=t.get("description", ""),
+                dependencies=t.get("dependencies", []),
+                proposed_agent=t.get("proposed_agent", "worker_01"),
+                expected_files=t.get("expected_files", []),
+                risk_classification=t.get("risk_classification", "LOW"),
+                acceptance_criteria=t.get("acceptance_criteria", []),
+                verification_strategy=t.get("verification_strategy", "automated_test")
+            ))
+    elif latest and latest.get("tasks"):
+        tasks_list = [PlanTaskItem.model_validate(t) for t in latest["tasks"]]
+
+    val_status = "NEEDS_CLARIFICATION" if interp_obj.blocking_questions else "VALID"
+
+    await app_state.mission_manager.invalidate_approval(mission_id, reason=f"Plan edited to version {new_version_num}")
+    
+    new_plan = PlanVersion(
+        mission_id=mission_id,
+        version=new_version_num,
+        interpretation=interp_obj,
+        tasks=tasks_list,
+        validation_status=val_status,
+        approval_status=PlanApprovalStatus.PENDING
+    )
+    saved = await app_state.plan_repo.save_plan(new_plan)
+    return saved
+
+
+@app.post("/api/missions/{mission_id}/plan/regenerate")
+async def regenerate_mission_plan(mission_id: str, req: Optional[RegeneratePlanRequest] = None):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    
+    latest = await app_state.plan_repo.get_latest_plan(mission_id)
+    new_version_num = (latest["version"] + 1) if latest else 1
+
+    feedback = req.feedback if req else None
+    interp, tasks = synthesize_plan_and_interpretation(
+        goal=mission.goal,
+        repo=mission.repository_path,
+        original_request=mission.original_request or mission.goal,
+        feedback=feedback
+    )
+
+    val_status = "NEEDS_CLARIFICATION" if interp.blocking_questions else "VALID"
+    await app_state.mission_manager.invalidate_approval(mission_id, reason=f"Plan regenerated to version {new_version_num}")
+
+    new_plan = PlanVersion(
+        mission_id=mission_id,
+        version=new_version_num,
+        interpretation=interp,
+        tasks=tasks,
+        validation_status=val_status,
+        approval_status=PlanApprovalStatus.PENDING
+    )
+    saved = await app_state.plan_repo.save_plan(new_plan)
+    return saved
+
+
+@app.post("/api/missions/{mission_id}/plan/clarify")
+async def clarify_mission_plan(mission_id: str, req: ClarifyPlanRequest):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    
+    latest = await app_state.plan_repo.get_latest_plan(mission_id)
+    if not latest:
+        raise HTTPException(status_code=400, detail="No plan found to clarify")
+
+    interp_dict = latest.get("interpretation", {})
+    blocking = list(interp_dict.get("blocking_questions", []))
+    non_blocking = list(interp_dict.get("non_blocking_assumptions", []))
+    constraints = list(interp_dict.get("constraints", []))
+
+    for q, ans in req.answers.items():
+        if q in blocking:
+            blocking.remove(q)
+        constraints.append(f"Operator clarified: {q} -> {ans}")
+        non_blocking.append(f"Clarified answer: {ans}")
+
+    interp_dict["blocking_questions"] = blocking
+    interp_dict["non_blocking_assumptions"] = non_blocking
+    interp_dict["constraints"] = constraints
+
+    new_version_num = latest["version"] + 1
+    val_status = "NEEDS_CLARIFICATION" if blocking else "VALID"
+
+    new_plan = PlanVersion(
+        mission_id=mission_id,
+        version=new_version_num,
+        interpretation=StructuredInterpretation.model_validate(interp_dict),
+        tasks=[PlanTaskItem.model_validate(t) for t in latest.get("tasks", [])],
+        validation_status=val_status,
+        approval_status=PlanApprovalStatus.PENDING
+    )
+    saved = await app_state.plan_repo.save_plan(new_plan)
+
+    if not blocking:
+        await app_state.mission_manager.update_status(mission_id, MissionStatus.AWAITING_APPROVAL, reason="Clarifications answered; ready for approval.")
+    return saved
+
+
+@app.post("/api/missions/{mission_id}/plan/approve")
+async def approve_mission_plan(mission_id: str, req: ApprovePlanRequest):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    
+    latest = await app_state.plan_repo.get_latest_plan(mission_id)
+    if not latest:
+        raise HTTPException(status_code=400, detail="No plan exists to approve.")
+
+    current_version = latest.get("version", 1)
+    if req.version != current_version:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Stale approval attempt. Requested version {req.version} does not match current plan version {current_version}."
+        )
+
+    interp = latest.get("interpretation", {})
+    blocking_questions = interp.get("blocking_questions", [])
+    if blocking_questions:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "BLOCKING_QUESTIONS_UNRESOLVED",
+                "message": "Cannot approve plan while blocking clarification questions remain unresolved.",
+                "blocking_questions": blocking_questions
+            }
+        )
+
+    latest["approval_status"] = "APPROVED"
+    latest["approved_by"] = req.approved_by or "operator"
+    latest["approved_at"] = datetime.now(timezone.utc).isoformat()
+    await app_state.plan_repo.save_plan(latest)
+
+    await app_state.mission_manager.approve_mission(
+        mission_id=mission_id,
+        plan_version=current_version,
+        approved_by=req.approved_by or "operator"
+    )
+
+    return {
+        "status": "approved",
+        "mission_id": mission_id,
+        "plan_version": current_version,
+        "approved_by": req.approved_by or "operator",
+        "approved_at": latest["approved_at"]
+    }
+
+
+@app.post("/api/missions/{mission_id}/plan/reject")
+async def reject_mission_plan(mission_id: str, req: RejectPlanRequest):
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found")
+    
+    latest = await app_state.plan_repo.get_latest_plan(mission_id)
+    if latest:
+        latest["approval_status"] = "REJECTED"
+        latest["rejection_reason"] = req.reason
+        await app_state.plan_repo.save_plan(latest)
+
+    await app_state.mission_manager.reject_mission(mission_id, reason=req.reason)
+    return {"status": "rejected", "mission_id": mission_id, "reason": req.reason}
+
+
 class ExecuteMissionRequest(BaseModel):
     agent_id: str = "worker_01"
     use_worktree: bool = False
@@ -439,23 +941,125 @@ class ExecuteMissionRequest(BaseModel):
 
 @app.post("/api/missions/{mission_id}/start")
 async def start_mission(mission_id: str):
-    mission = await app_state.mission_manager.start_mission(mission_id)
+    mission = await app_state.mission_manager.get_mission(mission_id)
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
-    # Launch real background mission execution
+
+    # Strict plan approval gate
+    latest_plan = await app_state.plan_repo.get_latest_plan(mission_id)
+    if not latest_plan:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "PLAN_REQUIRED", "message": "Mission requires a generated execution plan before dispatch."}
+        )
+
+    blocking = latest_plan.get("interpretation", {}).get("blocking_questions", [])
+    if blocking:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "BLOCKING_QUESTIONS_UNRESOLVED",
+                "message": "Execution rejected: blocking questions must be resolved first.",
+                "blocking_questions": blocking
+            }
+        )
+
+    if latest_plan.get("approval_status") != "APPROVED" or mission.status != MissionStatus.APPROVED:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "PLAN_NOT_APPROVED",
+                "message": "Task dispatch rejected. Explicit plan approval is mandatory before execution.",
+                "plan_status": latest_plan.get("approval_status"),
+                "mission_status": mission.status.value
+            }
+        )
+
+    if mission.approved_plan_version != latest_plan.get("version"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "PLAN_VERSION_MISMATCH",
+                "message": f"Approval is tied to plan version v{mission.approved_plan_version}, but current version is v{latest_plan.get('version')}."
+            }
+        )
+
+    if mission.status == MissionStatus.RUNNING:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "MISSION_ALREADY_RUNNING", "message": "Mission execution is already in progress."}
+        )
+
+    started_mission = await app_state.mission_manager.start_mission(mission_id)
+    latest_plan["execution_started_at"] = datetime.now(timezone.utc).isoformat()
+    await app_state.plan_repo.save_plan(latest_plan)
+
     asyncio.create_task(app_state.mission_runner.execute_mission(mission_id=mission_id))
-    return {"status": "started", "mission": mission}
+    return {"status": "started", "mission": started_mission}
 
 
 @app.post("/api/missions/{mission_id}/execute")
 async def execute_mission_endpoint(mission_id: str, req: Optional[ExecuteMissionRequest] = None):
     """
     Executes a real end-to-end coding mission:
-    Agent availability check -> Workspace setup -> Execution -> Watchdog interception ->
+    Mandatory plan approval check -> Workspace setup -> Execution -> Watchdog interception ->
     Diagnosis -> Repair -> Independent verification -> Persisted SQLite results.
     """
     agent_id = req.agent_id if req else "worker_01"
     use_wt = req.use_worktree if req else False
+
+    mission = await app_state.mission_manager.get_mission(mission_id)
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+
+    # Strict plan approval gate
+    latest_plan = await app_state.plan_repo.get_latest_plan(mission_id)
+    if not latest_plan:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "PLAN_REQUIRED", "message": "Mission requires a generated execution plan before dispatch."}
+        )
+
+    blocking = latest_plan.get("interpretation", {}).get("blocking_questions", [])
+    if blocking:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "BLOCKING_QUESTIONS_UNRESOLVED",
+                "message": "Execution rejected: blocking questions must be resolved first.",
+                "blocking_questions": blocking
+            }
+        )
+
+    if latest_plan.get("approval_status") != "APPROVED" or mission.status != MissionStatus.APPROVED:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "PLAN_NOT_APPROVED",
+                "message": "Task dispatch rejected. Explicit plan approval is mandatory before execution.",
+                "plan_status": latest_plan.get("approval_status"),
+                "mission_status": mission.status.value
+            }
+        )
+
+    if mission.approved_plan_version != latest_plan.get("version"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "PLAN_VERSION_MISMATCH",
+                "message": f"Approval is tied to plan version v{mission.approved_plan_version}, but current version is v{latest_plan.get('version')}."
+            }
+        )
+
+    if mission.status == MissionStatus.RUNNING:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "MISSION_ALREADY_RUNNING", "message": "Mission execution is already in progress."}
+        )
+
+    latest_plan["execution_started_at"] = datetime.now(timezone.utc).isoformat()
+    await app_state.plan_repo.save_plan(latest_plan)
+
     try:
         result = await app_state.mission_runner.execute_mission(
             mission_id=mission_id,

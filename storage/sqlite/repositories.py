@@ -73,12 +73,18 @@ class MissionRepository:
             elif not updated_at:
                 updated_at = datetime.now(timezone.utc).isoformat()
 
+            original_request = d.get("original_request")
+            current_plan_version = int(d.get("current_plan_version", 0))
+            approved_plan_version = d.get("approved_plan_version")
+            if approved_plan_version is not None:
+                approved_plan_version = int(approved_plan_version)
+
             query = """
             INSERT INTO missions (
                 mission_id, title, goal, repository_path, status,
                 assigned_agents, active_agent_id, constraints, metrics,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at, original_request, current_plan_version, approved_plan_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(mission_id) DO UPDATE SET
                 title = excluded.title,
                 goal = excluded.goal,
@@ -88,14 +94,18 @@ class MissionRepository:
                 active_agent_id = excluded.active_agent_id,
                 constraints = excluded.constraints,
                 metrics = excluded.metrics,
-                updated_at = excluded.updated_at;
+                updated_at = excluded.updated_at,
+                original_request = excluded.original_request,
+                current_plan_version = excluded.current_plan_version,
+                approved_plan_version = excluded.approved_plan_version;
             """
             await conn.execute(
                 query,
                 (
                     mission_id, title, goal, repository_path, str(status),
                     assigned_agents, active_agent_id, constraints, metrics,
-                    str(created_at), str(updated_at)
+                    str(created_at), str(updated_at),
+                    original_request, current_plan_version, approved_plan_version
                 )
             )
             await conn.commit()
@@ -117,6 +127,9 @@ class MissionRepository:
             res["assigned_agents"] = _from_json(res.get("assigned_agents"), [])
             res["constraints"] = _from_json(res.get("constraints"), {})
             res["metrics"] = _from_json(res.get("metrics"), {})
+            res["original_request"] = res.get("original_request")
+            res["current_plan_version"] = res.get("current_plan_version", 0)
+            res["approved_plan_version"] = res.get("approved_plan_version")
             return res
         finally:
             await conn.close()
@@ -134,10 +147,168 @@ class MissionRepository:
                 m["assigned_agents"] = _from_json(m.get("assigned_agents"), [])
                 m["constraints"] = _from_json(m.get("constraints"), {})
                 m["metrics"] = _from_json(m.get("metrics"), {})
+                m["original_request"] = m.get("original_request")
+                m["current_plan_version"] = m.get("current_plan_version", 0)
+                m["approved_plan_version"] = m.get("approved_plan_version")
                 missions.append(m)
             return missions
         finally:
             await conn.close()
+
+
+class PlanRepository:
+    """Repository for PlanVersion persistence, revisioning, and approvals."""
+
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    async def save_plan(self, plan_data: Union[Dict[str, Any], Any]) -> Dict[str, Any]:
+        """Save a new or updated plan version."""
+        conn = await self.db.get_connection()
+        try:
+            if hasattr(plan_data, "model_dump"):
+                d = plan_data.model_dump()
+            elif hasattr(plan_data, "dict"):
+                d = plan_data.dict()
+            else:
+                d = dict(plan_data)
+
+            plan_id = d.get("plan_id") or f"pln_{uuid.uuid4().hex[:8]}"
+            mission_id = d.get("mission_id")
+            version = int(d.get("version", 1))
+            interpretation = _to_json(d.get("interpretation", {}))
+            tasks = _to_json(d.get("tasks", []))
+            validation_status = d.get("validation_status", "VALID")
+            approval_status = d.get("approval_status", "PENDING")
+            if hasattr(approval_status, "value"):
+                approval_status = approval_status.value
+            approved_by = d.get("approved_by")
+            approved_at = d.get("approved_at")
+            if isinstance(approved_at, datetime):
+                approved_at = approved_at.isoformat()
+            rejection_reason = d.get("rejection_reason")
+            execution_started_at = d.get("execution_started_at")
+            if isinstance(execution_started_at, datetime):
+                execution_started_at = execution_started_at.isoformat()
+
+            created_at = d.get("created_at")
+            if isinstance(created_at, datetime):
+                created_at = created_at.isoformat()
+            elif not created_at:
+                created_at = datetime.now(timezone.utc).isoformat()
+
+            updated_at = d.get("updated_at")
+            if isinstance(updated_at, datetime):
+                updated_at = updated_at.isoformat()
+            elif not updated_at:
+                updated_at = datetime.now(timezone.utc).isoformat()
+
+            query = """
+            INSERT INTO plan_versions (
+                plan_id, mission_id, version, interpretation, tasks,
+                validation_status, approval_status, approved_by, approved_at,
+                rejection_reason, execution_started_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(plan_id) DO UPDATE SET
+                interpretation = excluded.interpretation,
+                tasks = excluded.tasks,
+                validation_status = excluded.validation_status,
+                approval_status = excluded.approval_status,
+                approved_by = excluded.approved_by,
+                approved_at = excluded.approved_at,
+                rejection_reason = excluded.rejection_reason,
+                execution_started_at = excluded.execution_started_at,
+                updated_at = excluded.updated_at;
+            """
+            await conn.execute(
+                query,
+                (
+                    plan_id, mission_id, version, interpretation, tasks,
+                    validation_status, str(approval_status), approved_by, approved_at,
+                    rejection_reason, execution_started_at, str(created_at), str(updated_at)
+                )
+            )
+
+            # Update mission current_plan_version
+            await conn.execute(
+                "UPDATE missions SET current_plan_version = ?, updated_at = ? WHERE mission_id = ?;",
+                (version, str(updated_at), mission_id)
+            )
+            await conn.commit()
+
+            res = await self.get_plan_by_id(plan_id)
+            return res or d
+        finally:
+            await conn.close()
+
+    async def get_plan_by_id(self, plan_id: str) -> Optional[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM plan_versions WHERE plan_id = ?;", (plan_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res["interpretation"] = _from_json(res.get("interpretation"), {})
+            res["tasks"] = _from_json(res.get("tasks"), [])
+            return res
+        finally:
+            await conn.close()
+
+    async def get_latest_plan(self, mission_id: str) -> Optional[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM plan_versions WHERE mission_id = ? ORDER BY version DESC LIMIT 1;",
+                (mission_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res["interpretation"] = _from_json(res.get("interpretation"), {})
+            res["tasks"] = _from_json(res.get("tasks"), [])
+            return res
+        finally:
+            await conn.close()
+
+    async def get_plan_by_version(self, mission_id: str, version: int) -> Optional[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM plan_versions WHERE mission_id = ? AND version = ?;",
+                (mission_id, version)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res["interpretation"] = _from_json(res.get("interpretation"), {})
+            res["tasks"] = _from_json(res.get("tasks"), [])
+            return res
+        finally:
+            await conn.close()
+
+    async def list_plans(self, mission_id: str) -> List[Dict[str, Any]]:
+        conn = await self.db.get_connection()
+        try:
+            cursor = await conn.execute(
+                "SELECT * FROM plan_versions WHERE mission_id = ? ORDER BY version ASC;",
+                (mission_id,)
+            )
+            rows = await cursor.fetchall()
+            plans = []
+            for row in rows:
+                r = dict(row)
+                r["interpretation"] = _from_json(r.get("interpretation"), {})
+                r["tasks"] = _from_json(r.get("tasks"), [])
+                plans.append(r)
+            return plans
+        finally:
+            await conn.close()
+
 
 
 class TaskRepository:

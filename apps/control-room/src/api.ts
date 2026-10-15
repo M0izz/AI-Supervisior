@@ -14,7 +14,8 @@ import type {
   ModelInfo,
   CustomAgentRegistrationRequest,
   SyncStatus,
-  SyncDevice
+  SyncDevice,
+  PlanVersion
 } from './types';
 
 const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
@@ -435,6 +436,47 @@ export async function analyzeComplexFailure(payload: {
   return fetchJson('/api/supervisor/analyze-failure', {
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+// Mandatory Plan Approval Gate API
+export async function getMissionPlan(missionId: string, version?: number): Promise<PlanVersion> {
+  const q = version ? `?version=${version}` : '';
+  return fetchJson<PlanVersion>(`/api/missions/${missionId}/plan${q}`);
+}
+
+export async function approveMissionPlan(missionId: string, version: number, approvedBy?: string): Promise<{ status: string; plan_version: number; approved_by: string; approved_at: string }> {
+  return fetchJson(`/api/missions/${missionId}/plan/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ version, approved_by: approvedBy || 'operator' })
+  });
+}
+
+export async function rejectMissionPlan(missionId: string, reason: string): Promise<{ status: string; reason: string }> {
+  return fetchJson(`/api/missions/${missionId}/plan/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  });
+}
+
+export async function clarifyMissionPlan(missionId: string, answers: Record<string, string>): Promise<PlanVersion> {
+  return fetchJson<PlanVersion>(`/api/missions/${missionId}/plan/clarify`, {
+    method: 'POST',
+    body: JSON.stringify({ answers })
+  });
+}
+
+export async function editMissionPlan(missionId: string, payload: { interpretation?: any; tasks?: any[] }): Promise<PlanVersion> {
+  return fetchJson<PlanVersion>(`/api/missions/${missionId}/plan/edit`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function regenerateMissionPlan(missionId: string, feedback?: string): Promise<PlanVersion> {
+  return fetchJson<PlanVersion>(`/api/missions/${missionId}/plan/regenerate`, {
+    method: 'POST',
+    body: JSON.stringify({ feedback })
   });
 }
 

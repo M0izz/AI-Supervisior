@@ -180,6 +180,10 @@ class OpenRouterClient:
                                     "available": True
                                 })
                         if discovered:
+                            existing_ids = {d["model_id"] for d in discovered}
+                            for dm in default_catalog:
+                                if dm["model_id"] not in existing_ids:
+                                    discovered.insert(0, dm)
                             return discovered
         except Exception as e:
             logger.debug(f"Dynamic OpenRouter catalog query error: {e}")

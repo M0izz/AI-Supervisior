@@ -1,16 +1,67 @@
 export type MissionStatus = 
-  | 'CREATED'
+  | 'DRAFT'
   | 'PLANNING'
+  | 'AWAITING_APPROVAL'
+  | 'APPROVED'
   | 'RUNNING'
+  | 'VERIFYING'
+  | 'COMPLETED'
+  | 'NEEDS_CLARIFICATION'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'FAILED'
+  | 'NEEDS_REVIEW'
+  | 'CREATED'
+  | 'PENDING'
+  | 'WAITING_APPROVAL'
   | 'PAUSED'
   | 'INVESTIGATING'
   | 'RECOVERING'
-  | 'VERIFYING'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'BLOCKED'
-  | 'WAITING_APPROVAL'
-  | 'CANCELLED';
+  | 'BLOCKED';
+
+export interface PlanTaskItem {
+  task_id: string;
+  title: string;
+  description?: string;
+  dependencies: string[];
+  proposed_agent: string;
+  required_capabilities: string[];
+  expected_files: string[];
+  risk_classification: string;
+  acceptance_criteria: string[];
+  verification_strategy: string;
+}
+
+export interface StructuredInterpretation {
+  original_request: string;
+  interpreted_goal: string;
+  expected_deliverables: string[];
+  in_scope: string[];
+  explicit_exclusions: string[];
+  constraints: string[];
+  assumptions: string[];
+  blocking_questions: string[];
+  non_blocking_assumptions: string[];
+  risks: string[];
+  definition_of_success: string;
+  proposed_verification_methods: string[];
+}
+
+export interface PlanVersion {
+  plan_id: string;
+  mission_id: string;
+  version: number;
+  interpretation: StructuredInterpretation;
+  tasks: PlanTaskItem[];
+  validation_status: 'VALID' | 'INVALID' | 'NEEDS_CLARIFICATION';
+  approval_status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejection_reason?: string | null;
+  execution_started_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export type TaskStatus = 
   | 'PENDING'

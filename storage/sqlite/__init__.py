@@ -6,6 +6,7 @@ Provides durable, local-first persistence layers.
 from storage.sqlite.db import DatabaseManager
 from storage.sqlite.repositories import (
     MissionRepository,
+    PlanRepository,
     TaskRepository,
     AgentRepository,
     EventRepository,
@@ -22,6 +23,7 @@ from storage.sqlite.sync_repo import SyncRepository
 __all__ = [
     "DatabaseManager",
     "MissionRepository",
+    "PlanRepository",
     "TaskRepository",
     "AgentRepository",
     "EventRepository",

@@ -6,21 +6,77 @@ import uuid
 
 
 class MissionStatus(str, Enum):
-    CREATED = "CREATED"
+    DRAFT = "DRAFT"
     PLANNING = "PLANNING"
-    PENDING = "PENDING"  # Compatibility alias
-    STARTING = "STARTING"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    APPROVED = "APPROVED"
     RUNNING = "RUNNING"
+    VERIFYING = "VERIFYING"
+    COMPLETED = "COMPLETED"
+    NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    # Backward compatibility aliases
+    CREATED = "CREATED"
+    PENDING = "PENDING"
+    STARTING = "STARTING"
     PAUSED = "PAUSED"
     INVESTIGATING = "INVESTIGATING"
     RECOVERING = "RECOVERING"
-    VERIFYING = "VERIFYING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
     BLOCKED = "BLOCKED"
     WAITING_APPROVAL = "WAITING_APPROVAL"
-    AWAITING_APPROVAL = "AWAITING_APPROVAL"  # Compatibility alias
-    CANCELLED = "CANCELLED"
+
+
+class PlanTaskItem(BaseModel):
+    task_id: str
+    title: str
+    description: str = ""
+    dependencies: List[str] = Field(default_factory=list)
+    proposed_agent: str = "worker_01"
+    required_capabilities: List[str] = Field(default_factory=lambda: ["file_editing", "command_execution"])
+    expected_files: List[str] = Field(default_factory=list)
+    risk_classification: str = "LOW"  # LOW, MEDIUM, HIGH
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    verification_strategy: str = "automated_test"
+
+
+class StructuredInterpretation(BaseModel):
+    original_request: str
+    interpreted_goal: str
+    expected_deliverables: List[str] = Field(default_factory=list)
+    in_scope: List[str] = Field(default_factory=list)
+    explicit_exclusions: List[str] = Field(default_factory=list)
+    constraints: List[str] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    blocking_questions: List[str] = Field(default_factory=list)
+    non_blocking_assumptions: List[str] = Field(default_factory=list)
+    risks: List[str] = Field(default_factory=list)
+    definition_of_success: str = ""
+    proposed_verification_methods: List[str] = Field(default_factory=list)
+
+
+class PlanApprovalStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class PlanVersion(BaseModel):
+    plan_id: str = Field(default_factory=lambda: f"pln_{uuid.uuid4().hex[:8]}")
+    mission_id: str
+    version: int = 1
+    interpretation: StructuredInterpretation
+    tasks: List[PlanTaskItem] = Field(default_factory=list)
+    validation_status: str = "VALID"  # VALID, INVALID, NEEDS_CLARIFICATION
+    approval_status: PlanApprovalStatus = PlanApprovalStatus.PENDING
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    execution_started_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class MissionConstraints(BaseModel):
@@ -58,8 +114,11 @@ class Mission(BaseModel):
     id: str = Field(default_factory=generate_mission_id)
     title: str
     goal: str
+    original_request: Optional[str] = None
     repository_path: str = "./demo/sample-project"
     status: MissionStatus = MissionStatus.CREATED
+    current_plan_version: int = 0
+    approved_plan_version: Optional[int] = None
     constraints: MissionConstraints = Field(default_factory=MissionConstraints)
     metrics: MissionMetrics = Field(default_factory=MissionMetrics)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

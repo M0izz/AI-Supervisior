@@ -65,6 +65,22 @@ class DatabaseManager:
                     except Exception as me:
                         logger.debug(f"Migration check completed: {me}")
 
+                    # Migration: ensure missions has Phase 2 plan versioning columns
+                    try:
+                        cursor = await db.execute("PRAGMA table_info(missions);")
+                        existing_mcols = [c[1] for c in await cursor.fetchall()]
+                        mission_additions = [
+                            ("original_request", "TEXT"),
+                            ("current_plan_version", "INTEGER DEFAULT 0"),
+                            ("approved_plan_version", "INTEGER")
+                        ]
+                        for col_name, col_def in mission_additions:
+                            if existing_mcols and col_name not in existing_mcols:
+                                await db.execute(f"ALTER TABLE missions ADD COLUMN {col_name} {col_def};")
+                        await db.commit()
+                    except Exception as me:
+                        logger.debug(f"Missions migration check completed: {me}")
+
                     await db.executescript(schema_sql)
                     await db.commit()
                 else:
