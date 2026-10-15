@@ -394,6 +394,37 @@ export const Settings: React.FC = () => {
                   <span>✓ Sovereign unified model router</span>
                 </div>
               </div>
+
+              {/* Hugging Face */}
+              <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <ProviderLogo providerId="huggingface" size={24} />
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Hugging Face Hub & Inference</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Open Model Hub · Serverless Inference · Llama 3.3 · StarCoder 2 · DeepSeek R1</div>
+                    </div>
+                  </div>
+                  <span className="badge badge-green" style={{ fontSize: '11px' }}>Connected & Active</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>User Access Token (HUGGINGFACE_API_KEY)</label>
+                    <input type="password" defaultValue="hf_••••••••••••••••••••••••••••••••" style={{ fontSize: '12px' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>Inference Endpoint</label>
+                    <input type="text" defaultValue="https://api-inference.huggingface.co" style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <span>✓ Serverless open-weights execution</span>
+                  <span>✓ Model Hub repository access</span>
+                  <span>✓ Authenticated account: M0izz</span>
+                </div>
+              </div>
             </div>
           )}
 

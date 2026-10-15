@@ -1069,7 +1069,11 @@ async def list_providers():
     backboard_desc = await app_state.backboard_provider.get_descriptor()
     providers.append(backboard_desc.model_dump())
 
-    # 6. Local Workstation Substrate
+    # 6. Hugging Face Open Inference & Model Hub
+    huggingface_desc = await app_state.huggingface_provider.get_descriptor()
+    providers.append(huggingface_desc.model_dump())
+
+    # 7. Local Workstation Substrate
     providers.append({
         "provider_id": "local",
         "name": "Local Workstation",
@@ -1088,7 +1092,7 @@ async def list_providers():
 
 @app.get("/api/models")
 async def list_models():
-    """Lists available models from DigitalOcean Inference, Nebius, Google Gemini, OpenRouter, Backboard, and Local providers."""
+    """Lists available models from DigitalOcean Inference, Nebius, Google Gemini, OpenRouter, Backboard, Hugging Face, and Local providers."""
     from integrations.nebius.provider import NebiusNemotronProvider
     models = []
 
@@ -1125,6 +1129,11 @@ async def list_models():
     # 5. Backboard.io Models
     backboard_models = await app_state.backboard_provider.get_models()
     for m in backboard_models:
+        models.append(m.model_dump())
+
+    # 6. Hugging Face Models
+    hf_models = await app_state.huggingface_provider.get_models()
+    for m in hf_models:
         models.append(m.model_dump())
 
     return {"models": models, "count": len(models)}

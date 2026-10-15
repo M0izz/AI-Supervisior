@@ -331,3 +331,25 @@ async def test_backboard_provider_and_descriptor():
     models = await provider.get_models()
     assert len(models) >= 2
     assert any("sovereign" in m.model_id.lower() or "context" in m.model_id.lower() for m in models)
+
+
+@pytest.mark.asyncio
+async def test_huggingface_provider_and_descriptor():
+    """Verifies Hugging Face provider descriptor, capabilities, and open model catalog."""
+    from integrations.huggingface import HuggingFaceProvider, HuggingFaceClient
+
+    client = HuggingFaceClient()
+    provider = HuggingFaceProvider(client=client)
+
+    desc = await provider.get_descriptor()
+    assert desc.provider_id == "huggingface"
+    assert "serverless_inference" in desc.capabilities
+    assert "open_weights" in desc.capabilities
+    assert "model_hub" in desc.capabilities
+    assert desc.inference_endpoint == "https://api-inference.huggingface.co"
+
+    models = await provider.get_models()
+    assert len(models) >= 3
+    model_ids = [m.model_id for m in models]
+    assert any("llama" in mid.lower() for mid in model_ids)
+    assert any("qwen" in mid.lower() for mid in model_ids)

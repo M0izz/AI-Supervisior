@@ -164,6 +164,11 @@ class AppState:
         self.backboard_client = BackboardClient()
         self.backboard_provider = BackboardProvider(client=self.backboard_client)
 
+        from integrations.huggingface import HuggingFaceProvider, HuggingFaceClient
+
+        self.huggingface_client = HuggingFaceClient()
+        self.huggingface_provider = HuggingFaceProvider(client=self.huggingface_client)
+
         self.hermes_adapter = HermesAdapter(
             event_bus=self.event_bus,
             worktree_manager=self.worktree_manager,

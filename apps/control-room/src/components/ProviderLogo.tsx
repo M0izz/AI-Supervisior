@@ -301,6 +301,25 @@ export const ProviderLogo: React.FC<ProviderLogoProps> = ({ providerId, name, si
     );
   }
 
+  // 17. Hugging Face — Open-Source AI Hub & Inference 🤗
+  if (id.includes('hugging') || id.includes('hf')) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="14" fill="#FFD21E" />
+        {/* Smiling Eyes */}
+        <path d="M14 16C14 15 15.5 14 17 14C18.5 14 20 15 20 16" stroke="#2B1A00" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M20 16C20 15 21.5 14 23 14C24.5 14 26 15 26 16" stroke="#2B1A00" strokeWidth="1.8" strokeLinecap="round" />
+        {/* Smile */}
+        <path d="M15 21C16.5 24 23.5 24 25 21" stroke="#2B1A00" strokeWidth="2" strokeLinecap="round" />
+        {/* Hugging hands */}
+        <path d="M7 23C7 21 9 19 11 20L13 22" stroke="#FF9D00" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M33 23C33 21 31 19 29 20L27 22" stroke="#FF9D00" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx="12" cy="21" r="1.5" fill="#FF9D00" />
+        <circle cx="28" cy="21" r="1.5" fill="#FF9D00" />
+      </svg>
+    );
+  }
+
   // Default fallback
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">

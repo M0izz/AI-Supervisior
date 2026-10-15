@@ -57,7 +57,9 @@ const INFERENCE_MODELS = [
   { id: 'deepseek-r1-distill', name: 'DeepSeek R1 Distill', developer: 'DeepSeek', infra: 'NEBIUS', size: '70B', focus: 'Chain-of-thought logic, math invariants, and test verification' },
   { id: 'claude-3.7-sonnet', name: 'Claude 3.7 Sonnet', developer: 'Anthropic', infra: 'OPENROUTER', size: 'Hybrid', focus: 'Multi-model agentic coding, hybrid chain-of-thought reasoning, and tool execution' },
   { id: 'deepseek-r1-openrouter', name: 'DeepSeek R1 (Full)', developer: 'DeepSeek', infra: 'OPENROUTER', size: '671B', focus: 'Ultra-scale reasoning, mathematical invariant validation, and precision code repair' },
-  { id: 'backboard-sovereign-router', name: 'Backboard Sovereign Router', developer: 'Espri.ai', infra: 'BACKBOARD', size: '17k+ Models', focus: 'Sovereign persistent memory, adaptive context window management, and universal model routing' }
+  { id: 'backboard-sovereign-router', name: 'Backboard Sovereign Router', developer: 'Espri.ai', infra: 'BACKBOARD', size: '17k+ Models', focus: 'Sovereign persistent memory, adaptive context window management, and universal model routing' },
+  { id: 'llama-3.3-70b-hf', name: 'Meta Llama 3.3 70B (HF)', developer: 'Meta', infra: 'HUGGINGFACE', size: '70B', focus: 'Open-weights foundation code synthesis, instruction execution, and unit test crafting' },
+  { id: 'starcoder2-15b-hf', name: 'StarCoder 2 15B', developer: 'BigCode / Hugging Face', infra: 'HUGGINGFACE', size: '15B', focus: 'High-speed code completion, low-latency syntax tree generation, and AST refactoring' }
 ];
 
 export const Agents: React.FC<AgentsProps> = ({
@@ -589,6 +591,32 @@ export const Agents: React.FC<AgentsProps> = ({
               <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span className="badge badge-green" style={{ fontSize: '10px' }}>CONNECTED & ACTIVE</span>
                 <span style={{ fontSize: '11px', color: 'var(--success)' }}>API Authorized</span>
+              </div>
+            </div>
+
+            {/* Hugging Face Card */}
+            <div className="surface-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ProviderLogo providerId="huggingface" size={24} />
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Hugging Face</h3>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Open Model Hub & Serverless Inference</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Direct access to Hugging Face Model Hub and Serverless Inference API (Llama 3.3, StarCoder 2, DeepSeek R1, Qwen 2.5) authenticated under user M0izz.
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <div>✓ Serverless inference across open models</div>
+                <div>✓ Model Hub catalog & fine-tune access</div>
+                <div>✓ Verified user account integration (M0izz)</div>
+              </div>
+
+              <div style={{ paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge badge-green" style={{ fontSize: '10px' }}>CONNECTED & ACTIVE</span>
+                <span style={{ fontSize: '11px', color: 'var(--success)' }}>Hub Authorized (M0izz)</span>
               </div>
             </div>
 
