@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from core.events.bus import EventBus
 from core.events.schema import Event, EventSeverity, EventType
 from core.missions.models import Mission, MissionConstraints, MissionStatus
@@ -12,9 +12,15 @@ logger = logging.getLogger("supervisor.missions")
 class MissionManager:
     """Manages mission lifecycles, states, and event notifications."""
 
-    def __init__(self, event_bus: EventBus, repository: Optional[Any] = None):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        repository: Optional[Any] = None,
+        graph_repository: Optional[Any] = None,
+    ):
         self._event_bus = event_bus
         self._repository = repository
+        self._graph_repository = graph_repository
         self._missions: Dict[str, Mission] = {}
         self._lock = asyncio.Lock()
 
@@ -43,6 +49,19 @@ class MissionManager:
                     await self._repository.save(mission)
                 except Exception as e:
                     logger.warning(f"Failed to persist mission {mission.id} to repository: {e}")
+
+            if self._graph_repository:
+                try:
+                    await self._graph_repository.save_mission(
+                        mission_id=mission.id,
+                        title=mission.title,
+                        goal=mission.goal,
+                        repository_path=mission.repository_path,
+                        status=mission.status.value,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to persist mission {mission.id} to FalkorDB: {e}")
+
 
         await self._event_bus.publish(
             Event(
@@ -142,6 +161,17 @@ class MissionManager:
                     await self._repository.save(mission)
                 except Exception as e:
                     logger.warning(f"Failed to persist mission status change to repository: {e}")
+
+            if self._graph_repository:
+                try:
+                    await self._graph_repository.update_mission_status(
+                        mission_id=mission_id,
+                        status=new_status.value,
+                        summary=reason,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to update mission status in FalkorDB: {e}")
+
 
         # Determine severity and event type
         severity = EventSeverity.INFO

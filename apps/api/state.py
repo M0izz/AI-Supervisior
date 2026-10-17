@@ -36,6 +36,7 @@ from storage.sqlite import (
 )
 from core.absence import AbsencePolicyEngine
 from sync import SyncServerStore, SyncEngine, derive_project_id, Device, DeviceStatus
+from storage.graph import FalkorDBClient, FalkorDBGraphRepository
 
 
 class AppState:
@@ -61,6 +62,11 @@ class AppState:
         self.absence_repo = AbsenceRepository(self.db)
         self.sync_repo = SyncRepository(self.db)
 
+        # FalkorDB Authoritative Graph Memory & Coordination Layer
+        self.falkordb_client = FalkorDBClient()
+        self.graph_repo = FalkorDBGraphRepository(self.falkordb_client)
+        self.graph_repo.initialize_schema()
+
         # Cloud Sync & Multi-Device Subsystem (Phase 12)
         self.sync_server = SyncServerStore()
         self.device_id = os.getenv("SUPERVISOR_DEVICE_ID", "dev_local_primary")
@@ -75,14 +81,23 @@ class AppState:
             project_id=self.project_id,
         )
 
-        self.mission_manager = MissionManager(event_bus=self.event_bus, repository=self.mission_repo)
-        self.task_manager = TaskManager(event_bus=self.event_bus, repository=self.task_repo)
+        self.mission_manager = MissionManager(
+            event_bus=self.event_bus,
+            repository=self.mission_repo,
+            graph_repository=self.graph_repo,
+        )
+        self.task_manager = TaskManager(
+            event_bus=self.event_bus,
+            repository=self.task_repo,
+            graph_repository=self.graph_repo,
+        )
         self.policy_config = PolicyConfig()
         self.absence_engine = AbsencePolicyEngine(repository=self.absence_repo, event_bus=self.event_bus)
 
-        # Wire event store (jsonl) and SQLite event repository to record all published events
+        # Wire event store (jsonl), SQLite, and FalkorDB graph event sinks
         self.event_bus._global_subscribers.append(self.event_store.append)
         self.event_bus.subscribe_sync(self._sqlite_event_sink)
+        self.event_bus.subscribe_sync(self._falkordb_event_sink)
 
         # Control Plane Subsystems
         self.memory_store = MemoryStore(event_bus=self.event_bus, repository=self.memory_repo)
@@ -206,7 +221,7 @@ class AppState:
             event_repo=self.event_repo,
         )
 
-        # Independent Verification Engine (Phase 4 + Phase 7 Memory Integration)
+        # Independent Verification Engine (Phase 4 + Phase 7 Memory Integration + FalkorDB)
         from core.verification.engine import VerificationEngine
         self.verification_engine = VerificationEngine(
             event_bus=self.event_bus,
@@ -214,6 +229,7 @@ class AppState:
             task_manager=self.task_manager,
             worktree_manager=self.worktree_manager,
             memory_store=self.memory_store,
+            graph_repository=self.graph_repo,
         )
 
         # Dynamic Agent Router (Phase 6 + Phase 7 Memory Integration)
@@ -227,7 +243,7 @@ class AppState:
             memory_store=self.memory_store,
         )
 
-        # Handoff Engine (Phase 5 + Phase 6 Dynamic Routing + Phase 7 Memory Integration)
+        # Handoff Engine (Phase 5 + Phase 6 Dynamic Routing + Phase 7 Memory Integration + FalkorDB)
         self.handoff_engine = HandoffEngine(
             event_bus=self.event_bus,
             adapter_registry=self.adapter_registry,
@@ -237,6 +253,7 @@ class AppState:
             verification_engine=self.verification_engine,
             routing_engine=self.routing_engine,
             memory_store=self.memory_store,
+            graph_repository=self.graph_repo,
             max_handoffs_per_task=int(os.getenv("SUPERVISOR_MAX_HANDOFFS_PER_TASK", "3")),
         )
 
@@ -281,7 +298,33 @@ class AppState:
         except Exception:
             pass
 
+    async def _falkordb_event_sink(self, event: Any) -> None:
+        """Streams relevant execution events to FalkorDB property graph."""
+        try:
+            task_id = getattr(event, "task_id", None)
+            if task_id and getattr(event, "type", None):
+                evt_type = event.type.value if hasattr(event.type, "value") else str(event.type)
+                # Attach event to current execution attempt
+                payload = getattr(event, "payload", {}) or {}
+                attempt = payload.get("attempt", 1)
+                exec_id = f"exec_{task_id}_{attempt}"
+                evt_id = getattr(event, "id", None) or f"evt_{task_id}_{int(datetime.now(timezone.utc).timestamp())}"
+                severity = event.severity.value if hasattr(event.severity, "value") else str(event.severity)
+                ts = getattr(event, "timestamp", None)
+                ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
+                await self.graph_repo.record_execution_event(
+                    execution_id=exec_id,
+                    event_id=evt_id,
+                    event_type=evt_type,
+                    severity=severity,
+                    payload=payload,
+                    timestamp=ts_str or None,
+                )
+        except Exception:
+            pass
+
 
 # Global instance
 app_state = AppState()
+
 

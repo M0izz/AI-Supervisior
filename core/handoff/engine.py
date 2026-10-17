@@ -45,6 +45,7 @@ class HandoffEngine:
         verification_engine: Optional[Any] = None,
         routing_engine: Optional[Any] = None,
         memory_store: Optional[Any] = None,
+        graph_repository: Optional[Any] = None,
         max_handoffs_per_task: int = 3,
     ):
         self.event_bus = event_bus
@@ -55,6 +56,7 @@ class HandoffEngine:
         self.verification_engine = verification_engine
         self.routing_engine = routing_engine
         self.memory_store = memory_store
+        self.graph_repository = graph_repository
         self.max_handoffs_per_task = max_handoffs_per_task
 
         # Task handoff tracking: task_id -> list of handoff records
@@ -438,6 +440,20 @@ class HandoffEngine:
                 )
             except Exception as e:
                 logger.warning(f"[HANDOFF] Failed to persist handoff to SQLite: {e}")
+
+        if self.graph_repository:
+            try:
+                await self.graph_repository.record_handoff(
+                    handoff_id=record.handoff_id,
+                    task_id=record.task_id,
+                    source_agent=record.source_agent_id,
+                    target_agent=record.target_agent_id,
+                    trigger=record.trigger.value if hasattr(record.trigger, "value") else str(record.trigger),
+                    status=record.status.value if hasattr(record.status, "value") else str(record.status),
+                    context_summary=f"Handoff from {record.source_agent_id} to {record.target_agent_id}: {record.reason or ''}",
+                )
+            except Exception as e:
+                logger.warning(f"[HANDOFF] Failed to persist handoff to FalkorDB: {e}")
 
     async def _emit_handoff_event(
         self,

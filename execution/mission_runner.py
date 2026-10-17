@@ -170,6 +170,20 @@ class MissionRunner:
             await self.state.task_manager.initialize_mission_tasks(mission_id, [target_task])
 
         task_id = target_task.id
+
+        # Graph Coordination Gate: Retrieve prior attempts, dependencies, and handoff context from FalkorDB
+        graph_context = None
+        if hasattr(self.state, "graph_repo") and self.state.graph_repo:
+            try:
+                graph_context = await self.state.graph_repo.get_task_graph_context(mission_id, task_id)
+                logger.info(
+                    f"[FalkorDB] Dispatch Context for {task_id}: "
+                    f"prior_attempts={graph_context.get('total_attempts')}, "
+                    f"dependencies_met={graph_context.get('dependencies_met')}"
+                )
+            except Exception as e:
+                logger.warning(f"[FalkorDB] Notice retrieving task coordination context: {e}")
+
         await self.state.task_manager.start_task(mission_id, task_id, worker.agent_id)
 
         try:
@@ -194,16 +208,41 @@ class MissionRunner:
                 if worker.state == WorkerState.PAUSED:
                     logger.info("[SUPERVISOR] Watchdog paused worker on repeated failure loop.")
 
-                # 7. Step B: Reviewer Diagnosis
+                # Retrieve causal failure history from FalkorDB graph memory
+                falkor_failures = []
+                if hasattr(self.state, "graph_repo") and self.state.graph_repo:
+                    try:
+                        falkor_failures = await self.state.graph_repo.get_prior_failure_history(mission_id, task_id)
+                        logger.info(f"[FalkorDB] Traversed {len(falkor_failures)} prior failure nodes in property graph.")
+                    except Exception as e:
+                        logger.warning(f"[FalkorDB] Failed to traverse failure history: {e}")
+
+                # 7. Step B: Reviewer Diagnosis informed by graph failure history
                 reviewer = ReviewerAgent(agent_id="reviewer_01", event_bus=self.state.event_bus, tools=tools)
                 diagnosis = await reviewer.run(
                     AgentContextPackage(
                         mission_id=mission_id,
                         objective=mission.goal,
                         task=target_task.model_dump(),
-                        recent_events=[{"error_signature": sig1}]
+                        recent_events=[{"error_signature": sig1, "graph_failures": falkor_failures}]
                     )
                 )
+
+                # Record Recovery Decision in FalkorDB property graph
+                if hasattr(self.state, "graph_repo") and self.state.graph_repo:
+                    try:
+                        await self.state.graph_repo.record_decision(
+                            decision_id=f"dec_{task_id}_{target_task.failures}",
+                            mission_id=mission_id,
+                            task_id=task_id,
+                            decision_type="SUPERVISORY_RECOVERY",
+                            action="INTERVENE_AND_PATCH",
+                            reason=diagnosis.recommended_strategy or "Apply UTF-8 BOM byte stripping in parser",
+                            selected_agent_id=worker.agent_id,
+                        )
+                        logger.info(f"[FalkorDB] Recorded Decision node linked to Agent {worker.agent_id} in graph.")
+                    except Exception as e:
+                        logger.warning(f"[FalkorDB] Failed to record decision in graph: {e}")
 
                 # 8. Step C: Project Memory Recording
                 await self.state.memory_store.add_record(
@@ -234,6 +273,7 @@ class MissionRunner:
                     diagnosis=diagnosis.model_dump()
                 )
                 worker.resume(recovery_context=rec_pkg)
+
 
                 # 10. Step E: Apply Code Repair to parser.py
                 parser_path = "src/parser.py"

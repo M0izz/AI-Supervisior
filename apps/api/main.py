@@ -2233,6 +2233,115 @@ async def trigger_sync():
     return {"status": "triggered", "sync_status": status.model_dump()}
 
 
+# --- FalkorDB Graph Memory & Coordination Endpoints ---
+@app.get("/api/graph/health")
+async def get_graph_health():
+    """Returns real-time health, connectivity, and graph statistics from FalkorDB."""
+    health = app_state.falkordb_client.check_health()
+    return health
+
+
+@app.get("/api/missions/{mission_id}/graph")
+async def get_mission_graph(mission_id: str):
+    """
+    Returns the complete property graph for a mission from FalkorDB,
+    including Mission, Tasks, Executions, Events, Decisions, Handoffs, and Verifications.
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        subgraph = await app_state.graph_repo.get_mission_subgraph(mission_id)
+        return subgraph
+    except FalkorDBUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"FalkorDB graph memory is unavailable: {e}"
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving mission subgraph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/missions/{mission_id}/tasks/{task_id}/graph-context")
+async def get_task_graph_context(mission_id: str, task_id: str):
+    """
+    Retrieves bounded, dependency-aware task coordination context from FalkorDB,
+    including dependencies, prior attempts, failure signatures, decisions, and handoffs.
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        context = await app_state.graph_repo.get_task_graph_context(mission_id, task_id)
+        return context
+    except FalkorDBUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"FalkorDB graph memory is unavailable: {e}"
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving task graph context: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/missions/{mission_id}/failures")
+async def get_mission_failures(mission_id: str, task_id: Optional[str] = None):
+    """
+    Returns prior failure history and causal paths traversed from FalkorDB graph.
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        failures = await app_state.graph_repo.get_prior_failure_history(mission_id, task_id=task_id)
+        return {"mission_id": mission_id, "task_id": task_id, "failures": failures}
+    except FalkorDBUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"FalkorDB graph memory is unavailable: {e}"
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving failure history from graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/missions/{mission_id}/decisions")
+async def get_mission_decisions(mission_id: str):
+    """
+    Explains supervisory routing and recovery decisions via their supporting graph path:
+    Decision -> RESPONDS_TO -> ExecutionEvent
+    Decision -> SELECTS -> Agent
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        lineage = await app_state.graph_repo.get_decision_lineage(mission_id)
+        return {"mission_id": mission_id, "decisions": lineage}
+    except FalkorDBUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"FalkorDB graph memory is unavailable: {e}"
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving decision lineage from graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/missions/{mission_id}/tasks/{task_id}/verification-trace")
+async def get_task_verification_trace(mission_id: str, task_id: str):
+    """
+    Traverses FalkorDB graph to trace Verification decision directly to objective Evidence.
+    Verification -> EVALUATES -> Task
+    Verification -> SUPPORTED_BY -> Evidence
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        trace = await app_state.graph_repo.get_verification_trace(task_id)
+        return trace
+    except FalkorDBUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"FalkorDB graph memory is unavailable: {e}"
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving verification trace from graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- WebSocket Stream ---
 @app.websocket("/ws/events")
 async def websocket_event_stream(websocket: WebSocket):
@@ -2249,4 +2358,5 @@ async def websocket_event_stream(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket connection error: {e}")
         await ws_hub.disconnect(websocket)
+
 

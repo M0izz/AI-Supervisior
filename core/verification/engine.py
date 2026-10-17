@@ -41,12 +41,14 @@ class VerificationEngine:
         task_manager: Optional[Any] = None,
         worktree_manager: Optional[Any] = None,
         memory_store: Optional[Any] = None,
+        graph_repository: Optional[Any] = None,
     ):
         self.event_bus = event_bus
         self.repository = repository
         self.task_manager = task_manager
         self.worktree_manager = worktree_manager
         self.memory_store = memory_store
+        self.graph_repository = graph_repository
         self._lock = asyncio.Lock()
 
     async def verify(self, context: VerificationContext) -> VerificationResult:
@@ -237,6 +239,30 @@ class VerificationEngine:
                     )
             except Exception as e:
                 logger.warning(f"[VERIFIER] Non-fatal error updating memory store: {e}")
+
+        # 5.6 Persist Verification and Evidence to FalkorDB Property Graph
+        if self.graph_repository:
+            try:
+                evidence_items = []
+                for check in checks:
+                    c_type = check.check_type.value if hasattr(check.check_type, "value") else str(check.check_type)
+                    evidence_items.append({
+                        "type": c_type,
+                        "description": f"{check.description}: {check.message or ''}",
+                        "passed": check.status == VerificationCheckStatus.PASS,
+                        "data": check.evidence or {},
+                    })
+                await self.graph_repository.record_verification(
+                    verification_id=verification_id,
+                    task_id=context.task_id,
+                    mission_id=context.mission_id,
+                    decision=decision.value,
+                    summary=summary or "",
+                    evidence_items=evidence_items,
+                )
+            except Exception as e:
+                logger.warning(f"[VERIFIER] Failed to persist verification to FalkorDB: {e}")
+
 
         # 6. Publish outcome events onto EventBus
         if self.event_bus:

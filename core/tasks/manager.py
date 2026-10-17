@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from core.events.bus import EventBus
 from core.events.schema import Event, EventSeverity, EventType
 from core.tasks.models import Task, TaskGraph, TaskStatus
@@ -12,9 +12,15 @@ logger = logging.getLogger("supervisor.tasks")
 class TaskManager:
     """Manages tasks, dependencies, and DAG lifecycle for missions."""
 
-    def __init__(self, event_bus: EventBus, repository: Optional[Any] = None):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        repository: Optional[Any] = None,
+        graph_repository: Optional[Any] = None,
+    ):
         self._event_bus = event_bus
         self._repository = repository
+        self._graph_repository = graph_repository
         self._graphs: Dict[str, TaskGraph] = {}  # mission_id -> TaskGraph
         self._lock = asyncio.Lock()
 
@@ -52,6 +58,16 @@ class TaskManager:
                     }
                 )
             )
+
+        if self._graph_repository:
+            try:
+                await self._graph_repository.save_task_dag(
+                    mission_id=mission_id,
+                    tasks=[t.model_dump() for t in tasks],
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save task DAG to FalkorDB: {e}")
+
         return graph
 
     async def get_graph(self, mission_id: str) -> Optional[TaskGraph]:
@@ -102,6 +118,18 @@ class TaskManager:
             task.started_at = datetime.now(timezone.utc)
             task.attempts += 1
             await self._persist_task(task)
+
+        if self._graph_repository:
+            try:
+                await self._graph_repository.record_execution_start(
+                    execution_id=f"exec_{task_id}_{task.attempts}",
+                    task_id=task_id,
+                    mission_id=mission_id,
+                    agent_id=agent_id,
+                    attempt_number=task.attempts,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record execution start in FalkorDB: {e}")
 
         await self._event_bus.publish(
             Event(
@@ -166,6 +194,16 @@ class TaskManager:
             task.result_summary = summary
             await self._persist_task(task)
 
+        if self._graph_repository:
+            try:
+                await self._graph_repository.record_execution_success(
+                    execution_id=f"exec_{task_id}_{task.attempts}",
+                    summary=summary,
+                    artifacts=[{"path": f} for f in task.actual_modified_files] if task.actual_modified_files else None,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record execution success in FalkorDB: {e}")
+
         await self._event_bus.publish(
             Event(
                 mission_id=mission_id,
@@ -219,6 +257,23 @@ class TaskManager:
             task.metadata["verification_evidence"] = evidence or {}
             await self._persist_task(task)
 
+        if self._graph_repository:
+            try:
+                evidence_items = []
+                if evidence:
+                    for k, v in evidence.items():
+                        evidence_items.append({"type": str(k), "description": str(v), "passed": True})
+                await self._graph_repository.record_verification(
+                    verification_id=f"ver_{task_id}_{int(datetime.now(timezone.utc).timestamp())}",
+                    task_id=task_id,
+                    mission_id=mission_id,
+                    decision="ACCEPT",
+                    summary="Empirical verification criteria met",
+                    evidence_items=evidence_items,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record verification in FalkorDB: {e}")
+
         await self._event_bus.publish(
             Event(
                 mission_id=mission_id,
@@ -253,6 +308,16 @@ class TaskManager:
             task.failures += 1
             task.last_error_signature = error_signature
             await self._persist_task(task)
+
+        if self._graph_repository:
+            try:
+                await self._graph_repository.record_execution_failure(
+                    execution_id=f"exec_{task_id}_{task.attempts}",
+                    error_signature=error_signature or "UnknownError",
+                    reason=reason,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record execution failure in FalkorDB: {e}")
 
         await self._event_bus.publish(
             Event(
