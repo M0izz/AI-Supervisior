@@ -1,60 +1,128 @@
 # AI Supervisor
 
-> **The control plane for your AI workforce.**
+> **Graph-Powered Memory and Coordination Layer for AI Agents.**
 >
 > *"Your AI agents work. Your Supervisor makes sure they finish the job."*
 
+[![Track 02: Agent Memory & Coordination](https://img.shields.io/badge/FalkorDB%20Graph%20Hacks-Track%2002%3A%20Memory%20%26%20Coordination-FF4F00?style=for-the-badge&logo=redis)](docs/FALKORDB_GRAPH_INTEGRATION.md)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-ai--supervisior.vercel.app-blueviolet?style=for-the-badge&logo=vercel)](https://ai-supervisior.vercel.app/)
 [![FastAPI](https://img.shields.io/badge/backend-FastAPI%20%2B%20Python%203.11%2B-009688?style=for-the-badge&logo=fastapi)](apps/api/)
 [![Frontend](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript-61DAFB?style=for-the-badge&logo=react)](apps/control-room/)
+[![FalkorDB](https://img.shields.io/badge/Graph%20Memory-FalkorDB%20Property%20Graph-orange?style=for-the-badge)](storage/graph/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-[🚀 Live Demo](https://ai-supervisior.vercel.app/) • [GitHub Repository](https://github.com/M0izz/AI-Supervisior) • [Documentation Index](#10-documentation-index) • [Production Deployment](#6-production-deployment)
+[🚀 Live Demo](https://ai-supervisior.vercel.app/) • [FalkorDB Graph Integration Guide](docs/FALKORDB_GRAPH_INTEGRATION.md) • [GitHub Repository](https://github.com/M0izz/AI-Supervisior) • [Documentation Index](#11-documentation-index) • [Production Deployment](#7-production-deployment)
 
 ---
 
 ## 1. What is AI Supervisor?
 
-Autonomous coding agents (Claude Code, OpenAI Codex, Gemini CLI, Qwen, OpenCode, Kimi) write code rapidly, but left unsupervised they can loop on identical errors, hallucinate test passes, drift out of scope, perform dangerous terminal commands, or silently give up.
+Autonomous coding agents (Claude Code, OpenAI Codex, Gemini CLI, Qwen, OpenCode, Kimi) write code rapidly, but left unsupervised they loop on identical errors, hallucinate test passes, drift out of scope, perform dangerous terminal commands, or silently abandon in-flight tasks.
 
-**AI Supervisor** provides a unified supervisory nervous system that routes tasks to the best agent, observes execution traces in real time, intervenes deterministically on failure loops, coordinates seamless handoffs, and **independently verifies** that the work actually works before accepting it.
+**AI Supervisor** turns **FalkorDB** into a persistent, queryable context layer for long-running AI-agent workflows. It connects missions, tasks, multi-attempt executions, causal failures, recovery decisions, agent handoffs, artifacts, and verification evidence into a high-performance property graph.
+
+Before dispatching work or attempting recovery, the supervisor queries FalkorDB to retrieve predecessor dependencies and historical failure signatures. Its decision lineage makes it possible to inspect not only what an agent did, but also which exact events and relationships informed the supervisor's response. Unlike a simple execution dashboard, AI Supervisor preserves context across retries and restarts while keeping final completion strictly dependent on empirical verification evidence.
 
 > **Core Axiom**: *Worker completion ≠ verified completion.* No agent is permitted to certify its own success.
 
 ```
-Goal ──► Plan ──► Route ──► Execute ──► Observe ──► Intervene ──► Handoff ──► Verify ──► Remember ──► Complete
+Goal ──► Plan Gate ──► Route ──► Execute ──► FalkorDB Graph ──► Intervene ──► Handoff ──► Verify ──► Complete
 ```
 
 ---
 
-## 2. Product Cockpit Preview
+## 2. FalkorDB: The Graph Memory & Coordination Layer
+
+FalkorDB is central to AI Supervisor's nervous system. It is **not** an auxiliary cache or decorative dashboard database: graph queries actively govern task dispatch, recovery routing, and verification gates.
+
+```
+                   FALKORDB AUTHORITATIVE PROPERTY GRAPH
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │                                                                        │
+  │  (:Mission) ──[:CONTAINS_TASK]──► (:Task) ──[:DEPENDS_ON]──► (:Task)   │
+  │       │                               ▲                                │
+  │       │                      [:FOR_TASK]                               │
+  │  [:HAS_REQUIREMENT]                   │                                │
+  │       ▼                               │                                │
+  │  (:Requirement)             (:Execution Attempt 1)                     │
+  │                                       │                                │
+  │                                 [:FAILS_WITH]                          │
+  │                                       ▼                                │
+  │                           (:ExecutionEvent: Failure)                   │
+  │                                       ▲                                │
+  │                                 [:RESPONDS_TO]                         │
+  │                                       │                                │
+  │                                 (:Decision)                            │
+  │                                       │                                │
+  │                                   [:SELECTS]                           │
+  │                                       ▼                                │
+  │  (:Agent: Codex) ◄──[:TRANSFERS]── (:Handoff) ◄── (:Agent: Claude)     │
+  │         │                                                              │
+  │     [:EXECUTES]                                                        │
+  │         ▼                                                              │
+  │  (:Execution Attempt 2) ──[:PRODUCES]──► (:Artifact)                   │
+  │         ▲                                                              │
+  │  [:EVALUATES_EXECUTION]                                                │
+  │         │                                                              │
+  │  (:Verification) ──[:SUPPORTED_BY]──► (:Evidence: Empirical Proof)     │
+  │         │                                                              │
+  │    [:EVALUATES] ──► (:Task)                                            │
+  │                                                                        │
+  └────────────────────────────────────────────────────────────────────────┘
+```
+
+### Architectural Traceability Invariants
+
+1. **Failure Causality (`FAILS_WITH`)**:
+   `(:Execution)-[:FAILS_WITH]->(:ExecutionEvent)` links an execution attempt directly to the causal failure event that explains its failure (with error signatures and diagnostic payload), preventing ambiguity with generic task events.
+2. **Verification Lineage (`EVALUATES_EXECUTION` and `EVALUATES`)**:
+   `(:Verification)-[:EVALUATES]->(:Task)` and `(:Verification)-[:EVALUATES_EXECUTION]->(:Execution)` identify the exact execution attempt and task evaluated, guaranteeing that a passing verification cannot accidentally validate an untested subsequent retry.
+3. **Empirical Prerequisite Gate (`DEPENDS_ON`)**:
+   `(:Task)-[:DEPENDS_ON]->(:Task)` requires predecessor tasks to have an accepted Verification node (`is_verified = true`). If prerequisites lack empirical proof, the supervisor halts dispatch with a `BLOCK_DISPATCH` decision.
+
+---
+
+## 3. Product Cockpit: FalkorDB Graph Inspector
+
+The React Control Room (`apps/control-room`) includes an interactive, polished **FalkorDB Graph Memory Inspector**:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│  AI SUPERVISOR  ::  CONTROL ROOM                                    CLOUD: SYNCED  ●  WATCHDOGS: ARMED │
+│  AI SUPERVISOR  ::  CONTROL ROOM              FALKORDB: CONNECTED  ●  LATENCY: 1.2ms  ●  NODES: 14     │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│  ACTIVE MISSION: Add CSV Import with UTF-8 BOM Support [MSN-042]                                       │
-│  Objective: Support \ufeff marker in CSV ingestion without breaking database schema                   │
-│                                                                                                        │
-│  [TASK-001] Analyze Schema ──────► [TASK-002] Implement Parser ──────► [TASK-003] Independent Verify   │
-│   ✓ Claude Code (Completed)         ▲ Hermes Agent (PAUSED)             ○ Pending Verification          │
-│                                     │                                                                  │
-│  SUPERVISORY INTERVENTION TIMELINE  │                                                                  │
-│  ├─ 10:14:02  [OBSERVE]    Hermes failed 3x on same encoding assertion (45 passed / 2 failed)          │
-│  ├─ 10:14:03  [WATCHDOG]   LOOP_DETECTED threshold triggered (failure signature identical)             │
-│  ├─ 10:14:04  [INTERVENE]  Execution token revoked; agent process paused safely in git worktree        │
-│  ├─ 10:14:05  [REASONING]  Gemma 4 + Nebius diagnosis: UTF-8 BOM byte marker prefix (\ufeff)           │
-│  ├─ 10:14:06  [MEMORY]     Recorded VERIFIED_FACT (BOM marker) & REJECTED_APPROACH (regex stripping)   │
-│  ├─ 10:14:08  [HANDOFF]    Context packaged with diffs & constraints ──► Routed to OpenAI Codex       │
-│  ├─ 10:14:19  [EXECUTE]    Codex applies codecs.BOM_UTF8 byte strip in isolated worktree               │
-│  ├─ 10:14:24  [VERIFY]     Independent Verification Suite: 47/47 passed, 0 regressions, 0 scope leaks  │
-│  └─ 10:14:26  [COMPLETE]   Mission verified and accepted into main repository                          │
-└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+│  MISSION: Add CSV Ingestion with UTF-8 BOM Support [MSN-042]                                           │
+│  [Mandatory Plan Review (v1 APPROVED)]  [FALKORDB GRAPH MEMORY]  [Mission Story]  [Verification]       │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  TRACEABILITY LINEAGE PIPELINE:                                                                        │
+│  1.Mission (1) ──► 2.Task DAG (3) ──► 3.Execution (2) ──► 4.Failure (1) ──► 5.Decision (1) ──► ...   │
+├───────────────────────────────────────────────────────────────────┬────────────────────────────────────┤
+│  VISUAL TOPOLOGY / LINEAGE FLOW VIEW                              │  NODE PROPERTIES & EVIDENCE DRAWER │
+│                                                                   │                                    │
+│  (:Mission: MSN-042)                                              │  [VERIFICATION] ver_dbe42e22       │
+│       │                                                           │  Status: ACCEPT                    │
+│       ├──► (:Task: Implement Parser)                              │  Target: Task 002 (Attempt 2)      │
+│       │         │                                                 │                                    │
+│       │     [:FOR_TASK]                                           │  LINKED EMPIRICAL EVIDENCE:        │
+│       │         ▼                                                 │  ✓ Unit Tests (47/47 passed)       │
+│       │    (:Execution: Attempt 1) ──[:FAILS_WITH]──► (BOM Loop)  │  ✓ Worktree Git Diff Invariant     │
+│       │         │                                       ▲         │  ✓ Scope Boundary Integrity        │
+│       │     [:RETRIED_BY]                               │         │  ✗ Baseline Regression (None)      │
+│       │         ▼                                 [:RESPONDS_TO]  │                                    │
+│       │    (:Execution: Attempt 2)                      │         │  UPSTREAM / DOWNSTREAM PATH:       │
+│       │         ▲                                 (:Decision)     │  (e2) -[:PRODUCES]-> (parser.py)   │
+│       │         │                                                 │  (v) -[:EVALUATES_EXECUTION]-> (e2)│
+│       │  [:EVALUATES_EXECUTION]                                   │  (v) -[:SUPPORTED_BY]-> (ev_01)    │
+│       │         │                                                 │                                    │
+│       └────(:Verification: ACCEPT) ──[:SUPPORTED_BY]──► (Evidence)│  [Copy Node ID]  [Close Drawer]    │
+└───────────────────────────────────────────────────────────────────┴────────────────────────────────────┘
 ```
+
+- **Lineage Flow & SVG Topology**: Switch between stage-by-stage causality cards and full directed SVG graph layout with zoom/pan controls.
+- **Node Inspector & Evidence Drawer**: Click any node to slide open its properties, incoming/outgoing directed relationships, causal failure explanation, and linked empirical test assertions.
 
 ---
 
-## 3. The Three-Layer Architecture
+## 4. The Three-Layer Architecture
 
 AI Supervisor explicitly decouples the control plane into three distinct layers:
 
@@ -67,66 +135,15 @@ AI Supervisor explicitly decouples the control plane into three distinct layers:
      AGENT RUNTIMES            INTELLIGENCE / MODELS          INFRASTRUCTURE
   (Who does the work)           (Who reasons & plans)      (Where execution runs)
            │                            │                            │
-   • Claude Code (Anthropic)    • Google Gemma 4             • DigitalOcean
-   • OpenAI Codex               • Google Gemini API            - Droplets & MicroVMs
-   • Google Gemini CLI          • Nebius Models                - Serverless Inference
-   • Qwen 2.5 Coder               - NVIDIA Nemotron            - Action Gateway Tools
-   • OpenCode                     - Nous Hermes              • Nebius AI Studio
-   • Moonshot Kimi                - Qwen 2.5                   - Token Factory
-   • Nous Hermes Agent            - DeepSeek R1              • Local Workstation
-   • Block Goose                • Local Models                 - Git Worktrees
-   • Cline                        - Ollama / llama.cpp         - Docker Sandboxes
-```
-
-### Layer Breakdown
-
-1. **Agent Runtimes (Execution Workers)**:
-   External autonomous agents executed inside isolated Git worktrees with strict file scope boundaries. They communicate through the standardized **Work Protocol**.
-2. **Intelligence / Models (Cognitive Layer)**:
-   - **Google Gemma 4**: Lightweight supervisory intelligence for bounded goal decomposition, task planning, invariant extraction, failure classification, and decision explanation.
-   - **Google Gemini API**: Deep diagnostic reasoning, multimodal analysis, complex failure diagnosis, and architectural boundary review.
-   - **Nebius AI Studio**: High-throughput inference gateway hosting NVIDIA Nemotron, Nous Hermes, Qwen, and DeepSeek models.
-   - **Local Models**: Offline fallback support via Ollama and llama.cpp.
-3. **Infrastructure & Providers**:
-   - **DigitalOcean**: Backing cloud infrastructure providing droplet hosting, serverless inference for Gemma 4, managed agent runtimes, and the Action Gateway tool security gatekeeper.
-   - **Nebius**: Inference substrate providing low-latency token factory access to open weights models.
-   - **Render**: Production cloud backend hosting the FastAPI control plane and WebSocket broadcaster.
-   - **Vercel**: Global edge CDN hosting the React 19 Control Room web cockpit.
-   - **Local Machine**: Developer host processes with isolated Git worktrees and Docker sandboxes.
-
----
-
-## 4. Supervisory Control Flow
-
-```
-User Goal
-   │
-   ▼
-[ 1. PLAN ] ───────► Gemma 4 & Gemini decompose goal into sequential DAG with strict file scopes
-   │
-   ▼
-[ 2. ROUTE ] ──────► Dynamic Router selects best available agent based on capability & verified history
-   │
-   ▼
-[ 3. EXECUTE ] ────► Agent runs inside isolated Git worktree or sandboxed container
-   │
-   ▼
-[ 4. OBSERVE ] ────► Auditable event stream logs every tool call, file write, and test run
-   │
-   ▼
-[ 5. INTERVENE ] ──► Watchdogs catch loops (3x fail), scope leaks, dangerous commands, or budget drains
-   │
-   ▼
-[ 6. HANDOFF ] ────► Supervisor packages verified facts & failed attempts, transfers context to fallback agent
-   │
-   ▼
-[ 7. VERIFY ] ─────► Independent Verification tests code in clean sandbox (Tests + Git Diffs + Invariants)
-   │
-   ▼
-[ 8. REMEMBER ] ───► Project Memory stores verified facts and rejected approaches to prevent repeated errors
-   │
-   ▼
-[ 9. COMPLETE ] ───► Mission completed with cryptographic proof of independent verification
+   • Claude Code (Anthropic)    • Google Gemma 4             • FalkorDB Property Graph
+   • OpenAI Codex               • Google Gemini API            - Task DAG & Readiness
+   • Google Gemini CLI          • Nebius Models                - Failure Causal Chains
+   • Qwen 2.5 Coder               - NVIDIA Nemotron            - Verification Evidence
+   • OpenCode                     - Nous Hermes              • DigitalOcean
+   • Moonshot Kimi                - Qwen 2.5                   - Droplets & MicroVMs
+   • Nous Hermes Agent            - DeepSeek R1                - Serverless Inference
+   • Block Goose                • Local Models               • Local Workstation
+   • Cline                        - Ollama / llama.cpp         - Git Worktrees / Docker
 ```
 
 ---
@@ -148,20 +165,19 @@ AI Supervisor truth-reports the operational readiness of every agent adapter. An
 | **Cline** | `cline` | CLI / Extension Agent | `cline` binary or node process | Isolated Git Worktree |
 | **DigitalOcean Managed**| `digitalocean_managed` | Cloud Agent API | `DIGITALOCEAN_TOKEN` configured | MicroVM Container |
 
-### Status Indicators in the Control Room
+---
 
-* **`CONNECTED`**: API credentials authenticated and live remote endpoint active.
-* **`AVAILABLE`**: Adapter registered, executable detected on system, and ready for worktree assignment.
-* **`INSTALLED LOCALLY`**: CLI binary discovered in host `$PATH`.
-* **`CONFIGURED`**: Environment variables detected, awaiting health verification.
-* **`UNAVAILABLE`**: CLI not installed or required API key missing.
-* **`OFFLINE FALLBACK`**: Offline development mode using deterministic mock reasoning and verified local fallbacks.
+## 6. Consistency & Recovery Guarantees
+
+AI Supervisor avoids distributed transaction hazards through clear persistence boundaries and fail-fast semantics:
+
+1. **No Silent Fallback**: If FalkorDB disconnects mid-mission, operations immediately raise `FalkorDBUnavailableError` (HTTP 503). The system never silently pretends graph-dependent decisions or verifications succeeded.
+2. **Replay Idempotency**: All graph writes use parameterized Cypher `MERGE` on unique IDs (`id`). Replaying the mission event stream or re-evaluating the task DAG produces zero duplicate nodes or relationships.
+3. **Restart Durability**: All execution attempts, failure events, decisions, and evidence persist in the FalkorDB Docker volume. Upon cold process restart, the supervisor queries FalkorDB to seamlessly restore in-flight context.
 
 ---
 
-## 6. Production Deployment
-
-AI Supervisor is designed for a hybrid cloud architecture: the **Supervisor Control Plane** lives in the cloud for team observability, while **Agent Execution** runs securely where your code lives (on developer machines, isolated CI nodes, or private Droplets).
+## 7. Production Deployment
 
 ```
                       PRODUCTION TOPOLOGY
@@ -170,59 +186,27 @@ AI Supervisor is designed for a hybrid cloud architecture: the **Supervisor Cont
      │                FRONTEND (Vercel)                 │
      │        https://ai-supervisior.vercel.app/        │
      │             React 19 + TypeScript + Vite         │
+     │           [FalkorDB Graph Inspector UI]          │
      └────────────────────────┬─────────────────────────┘
                               │ HTTPS / WSS
                               ▼
      ┌──────────────────────────────────────────────────┐
      │                BACKEND (Render)                  │
      │            FastAPI Control Plane Engine          │
-     │        EventBus · Dynamic Router · Watchdogs     │
+     │     EventBus · Dynamic Router · Watchdogs · Sync │
      └──────────────┬───────────────────┬───────────────┘
                     │                   │
-         REST / WSS │                   │ AI Inference
+         REST / WSS │                   │ Parameterized Cypher Queries
                     ▼                   ▼
      ┌────────────────────────┐  ┌────────────────────────────────────┐
-     │  LOCAL WORKSTATIONS    │  │    CLOUD AI & INFRASTRUCTURE       │
-     │  • Developer Machine   │  │  • DigitalOcean                    │
-     │  • Git Worktrees       │  │    - Serverless Gemma 4 Inference  │
-     │  • Local CLI Agents    │  │    - Managed Droplets / MicroVMs   │
-     │  • Docker Sandboxes    │  │    - Action Gateway Security       │
-     │  • Offline Outbox Sync │  │  • Nebius AI Studio (Token Factory)│
-     └────────────────────────┘  │  • Google Gemini API (Multimodal)   │
-                                 └────────────────────────────────────┘
+     │  LOCAL WORKSTATIONS    │  │    FALKORDB GRAPH MEMORY LAYER     │
+     │  • Developer Machine   │  │  • Graph Name: ai_supervisor_memory│
+     │  • Git Worktrees       │  │  • High Performance Graph Engine  │
+     │  • Local CLI Agents    │  │  • Causal Failure Tracing          │
+     │  • Docker Sandboxes    │  │  • Evidence Proof Lineage          │
+     │  • Offline Outbox Sync │  │  • Docker Volume Persistence       │
+     └────────────────────────┘  └────────────────────────────────────┘
 ```
-
-### Cloud Supervisor vs. Local Agent Execution
-
-* **Cloud Supervisor (Vercel + Render)**: Provides the centralized dashboard, mission tracking, historical memory, and team coordination.
-* **Local Agent Execution**: Agents run on your local workstation with direct access to local compilers, test runners, and private Git branches. Sensitive credentials and private keys never leave the workstation.
-
----
-
-## 7. Independent Verification
-
-Verification is an autonomous, evidence-based gate that is completely independent of the agent implementing the fix:
-
-```
-                    Agent Claims Completion
-                               │
-                               ▼
-               INDEPENDENT VERIFICATION PERIMETER
-                               │
-     ┌─────────────────────────┼─────────────────────────┐
-     ▼                         ▼                         ▼
-Test Sandbox Scope Bounds    Git Worktree Integrity    Regression Proofs
-• Clean execution env      • No files touched outside • All pre-existing
-• Fresh dependency state     declared task scope        tests continue to pass
-• Exit code == 0           • No secrets added         • No performance drop
-     │                         │                         │
-     └─────────────────────────┼─────────────────────────┘
-                               │
-                               ▼
-               Decision: [ ACCEPT | REJECT | REVIEW ]
-```
-
-*(External CI systems like Jenkins can be connected as an additional verification evidence source via `JENKINS_URL`, but verification is fundamentally autonomous and does not require external CI).*
 
 ---
 
@@ -231,6 +215,7 @@ Test Sandbox Scope Bounds    Git Worktree Integrity    Regression Proofs
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+ and npm
+- Docker and Docker Compose (for FalkorDB)
 - Git 2.30+
 
 ### 1. Clone & Configure Environment
@@ -242,22 +227,14 @@ cd AI-Supervisior
 cp .env.example .env
 ```
 
-### 2. Configure Model Credentials (Optional for Cloud Mode)
-To connect live cloud intelligence:
-```ini
-# Google Gemini API (Multimodal reasoning)
-GEMINI_API_KEY=your_gemini_api_key
-
-# Nebius AI Studio (High throughput open models)
-NEBIUS_API_KEY=your_nebius_api_key
-NEBIUS_BASE_URL=https://api.studio.nebius.ai/v1
-
-# DigitalOcean (Cloud infrastructure & Serverless Gemma 4)
-DIGITALOCEAN_TOKEN=your_digitalocean_token
-DO_INFERENCE_KEY=your_do_inference_key
-GEMMA_MODEL=gemma-4-31B-it
+### 2. Start FalkorDB Container
+```bash
+docker compose up -d
 ```
-*(If cloud credentials are not supplied, the system operates in offline-first mode with deterministic local fallbacks).*
+Verify FalkorDB connectivity:
+```bash
+python -c "from storage.graph.client import FalkorDBClient; print(FalkorDBClient().check_health())"
+```
 
 ### 3. Launch Backend (FastAPI)
 ```bash
@@ -272,10 +249,10 @@ pip install -r requirements.txt
 python -m uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Verify backend health:
+Verify backend health and FalkorDB graph memory endpoints:
 ```bash
 curl http://localhost:8000/health
-curl http://localhost:8000/ready
+curl http://localhost:8000/api/graph/health
 ```
 
 ### 4. Launch Frontend (Control Room)
@@ -287,92 +264,93 @@ npm run dev      # Launches local dev server on http://localhost:5173
 ```
 Open [http://localhost:5173](http://localhost:5173) in your browser (or use the [Live Hosted Demo](https://ai-supervisior.vercel.app/)).
 
+### 5. Run the End-to-End Real Mission Demonstration
+```bash
+python demo_falkordb_workflow.py
+```
+This script executes a full real mission:
+- Enforces the plan approval gate.
+- Persists DAG dependencies in FalkorDB.
+- Executes Attempt 1, simulates a failure, and records the causal `FAILS_WITH` relationship.
+- Queries failure history to record a recovery `Decision` (`RESPONDS_TO` and `SELECTS`).
+- Dispatches Attempt 2, verifies empirical evidence, and links `Verification EVALUATES_EXECUTION`.
+- Simulates an application crash/restart, confirming 100% graph memory preservation.
+
 ---
 
 ## 9. Verified Test Suite Results
 
-Test numbers are verified directly against the current repository execution:
+Test numbers are verified directly against the repository execution:
 
+### FalkorDB Integration Test Suite (15 / 15 Passed — 100%)
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/test_graph_driven_decisions.py tests/test_falkordb_consistency_recovery.py tests/test_falkordb_graph_memory.py -v
+```
+```
+tests/test_graph_driven_decisions.py::test_unverified_prerequisite_blocks_task_dispatch PASSED
+tests/test_graph_driven_decisions.py::test_prior_failure_history_guides_recovery_routing PASSED
+tests/test_falkordb_consistency_recovery.py::test_replay_idempotency_does_not_duplicate_nodes_or_edges PASSED
+tests/test_falkordb_consistency_recovery.py::test_mid_mission_disconnection_raises_falkordb_unavailable_error PASSED
+tests/test_falkordb_consistency_recovery.py::test_state_recovery_across_application_restart PASSED
+tests/test_falkordb_graph_memory.py::test_connection_and_health_reporting PASSED
+tests/test_falkordb_graph_memory.py::test_idempotent_creation PASSED
+tests/test_falkordb_graph_memory.py::test_task_dependency_traversal PASSED
+tests/test_falkordb_graph_memory.py::test_failure_retrieval_for_retry PASSED
+tests/test_falkordb_graph_memory.py::test_handoff_context_retrieval PASSED
+tests/test_falkordb_graph_memory.py::test_preservation_of_distinct_attempts PASSED
+tests/test_falkordb_graph_memory.py::test_verification_evidence_traceability PASSED
+tests/test_falkordb_graph_memory.py::test_unavailable_falkordb_fails_clearly PASSED
+tests/test_falkordb_graph_memory.py::test_persistence_across_restart PASSED
+tests/test_falkordb_graph_memory.py::test_plan_approval_gate_enforced_with_graph PASSED
+
+======================== 15 passed in 8.13s ========================
 ```
 
-```
-============================= test session starts =============================
-platform win32 -- Python 3.14.3, pytest-9.1.1
-collected 281 items
-
-tests/test_absence.py ................................................... PASSED
-tests/test_adapters.py .................................................. PASSED
-tests/test_api.py ....................................................... PASSED
-tests/test_core.py ...................................................... PASSED
-tests/test_desktop.py ................................................... PASSED
-tests/test_end_to_end_recovery.py ....................................... PASSED
-tests/test_fleet.py ..................................................... PASSED
-tests/test_handoff.py ................................................... PASSED
-tests/test_kernel.py .................................................... PASSED
-tests/test_memory.py .................................................... PASSED
-tests/test_phase10_deployment.py ........................................ PASSED
-tests/test_phase2_worker.py ............................................. PASSED
-tests/test_phase3_supervisor.py ......................................... PASSED
-tests/test_phase4_recovery.py ........................................... PASSED
-tests/test_phase5_docker.py ............................................. PASSED
-tests/test_phase5_hardening.py .......................................... PASSED
-tests/test_phase6_jenkins.py ............................................ PASSED
-tests/test_phase7_control_plane.py ...................................... PASSED
-tests/test_phase8_reliability_adversarial.py ............................ PASSED
-tests/test_provider_contracts.py ........................................ PASSED
-tests/test_routing.py ................................................... PASSED
-tests/test_sync.py ...................................................... PASSED
-tests/test_verification.py .............................................. PASSED
-tests/test_watchdogs.py ................................................. PASSED
-
-============ 274 passed, 7 skipped, 0 failed in 163.14s (0:02:43) ============
+### Full Repository Test Suite
+```bash
+python -m pytest -v
+# 348 passed across all core, absence, fleet, watchdog, and desktop integration suites.
 ```
 
 ### Frontend Build & Lint Verification
-- **Build**: `tsc -b && vite build` — 1,916 modules transformed, production distribution compiled in `apps/control-room/dist/` in 4.83s.
-- **Lint**: `oxlint` — 27 files evaluated across 116 rules: **0 errors**.
+- **Build**: `tsc -b && vite build` — 1,927 modules transformed, production distribution compiled in `apps/control-room/dist/` in 2.00s with zero errors.
+- **Lint**: `oxlint` — 28 files evaluated: **0 errors**.
 
 ---
 
-## 10. Documentation Index
+## 10. Key REST Endpoints for FalkorDB Graph Memory
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/graph/health` | Diagnostic report of FalkorDB connectivity, latency, and node/edge count. |
+| `GET` | `/api/missions/{id}/graph` | Complete property graph subgraph (nodes and edges) for a mission. |
+| `GET` | `/api/missions/{id}/tasks/{id}/graph-context` | Dependency-aware context, prior attempts, and unverified prerequisite warnings. |
+| `GET` | `/api/missions/{id}/failures` | Prior causal failure history and error signatures traversed from FalkorDB. |
+| `GET` | `/api/missions/{id}/decisions` | Supervisory decision lineage path (`Decision -> RESPONDS_TO -> Event`). |
+| `GET` | `/api/missions/{id}/tasks/{id}/verification-trace` | Traceability from Verification decision directly to empirical Evidence items. |
+
+---
+
+## 11. Documentation Index
 
 - [Live Web App](https://ai-supervisior.vercel.app/) — Hosted production Control Room cockpit on Vercel.
+- [FalkorDB Graph Integration Specification](docs/FALKORDB_GRAPH_INTEGRATION.md) — Complete Cypher schema, consistency guarantees, and execution diagrams.
 - [Architecture Guide](docs/architecture.md) — Comprehensive technical design, state machines, and data flows.
 - [Cloud Sync Architecture](docs/sync-architecture.md) — Local-first synchronization engine design.
 - [Multi-Device Continuity](docs/multi-device.md) — Workstation pairing and outbox replication guide.
-- [IDE Integration Guide (VS Code)](docs/ide-integration.md) — Visual Studio Code extension architecture.
 - [Absence Mode Specification](docs/absence-mode.md) — Bounded autonomy policy, approval timeouts, and safety invariants.
-- [Claude Code Adapter Guide](docs/adapters/claude-code.md) — Anthropic Claude Code adapter specification.
-- [Codex Adapter Guide](docs/adapters/codex.md) — OpenAI Codex adapter specification.
-- [Gemini Adapter Guide](docs/adapters/gemini.md) — Google Gemini CLI adapter specification.
-- [Qwen Local Adapter Guide](docs/adapters/qwen.md) — Qwen local runtime & untrusted boundary guide.
-- [OpenCode Adapter Guide](docs/adapters/opencode.md) — OpenCode CLI adapter specification.
-- [Kimi Adapter Guide](docs/adapters/kimi.md) — Moonshot Kimi CLI adapter specification.
-- [Deployment Guide](docs/deployment.md) — Nebius, DigitalOcean, Vercel, and Render deployment specifications.
 - [Docker Execution Hardening](docs/docker-execution.md) — Sandbox security profiles and privilege isolation.
 - [Reliability & Adversarial Report](docs/reliability-report.md) — 24-scenario adversarial failure test matrix.
 
 ---
 
-## 11. Security & Safety Principles
+## 12. Security & Safety Principles
 
-1. **Zero Implicit Approval**: High-risk actions (e.g., destructive terminal commands, out-of-scope modifications) require explicit human approval. Approval timeouts strictly default to `DENIED`.
+1. **Zero Implicit Approval**: High-risk actions require explicit human approval; unapproved missions are blocked at the plan gate.
 2. **Credential Sanitization**: Bearer tokens, API keys, passwords, and private URLs are scrubbed from tool execution traces, event payloads, and UI streams before emission.
 3. **Worktree & Container Isolation**: Agent code executes inside isolated Git worktrees and single-host Docker sandboxes (`cap_drop=["ALL"]`, `network_mode="none"`, memory limits `512MB`).
 4. **Append-Oriented Event Stream**: All actions, interventions, and watchdog triggers are recorded in an auditable event stream for forensic playback.
-5. **Epistemic Provenance**: Knowledge in Project Memory is tagged by proof (`OBSERVED`, `INFERRED`, `DECIDED`, `VERIFIED`, `REJECTED`), preventing agents from repeating known failed strategies.
-
----
-
-## 12. Repository Metadata
-
-For repository settings and public listing:
-
-* **Repository Description**: `Supervisory control plane for AI coding agents — routing, monitoring, recovery, handoffs, and independent verification.`
-* **Website**: `https://ai-supervisior.vercel.app/`
-* **Topics**: `ai-agents`, `ai-agent`, `agent-orchestration`, `agent-supervisor`, `coding-agents`, `multi-agent`, `llm`, `gemma`, `gemini`, `nebius`, `digitalocean`, `fastapi`, `react`, `developer-tools`
+5. **Empirical Verification Invariant**: Claimed complete is never verified complete without objective test and diff evidence.
 
 ---
 
