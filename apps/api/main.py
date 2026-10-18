@@ -2746,6 +2746,54 @@ async def get_graph_activity(limit: int = 25):
         return {"events": [], "count": 0}
 
 
+class SafeGraphQueryRequest(BaseModel):
+    query: str
+    parameters: Optional[Dict[str, Any]] = None
+
+
+@app.get("/api/graph/stats")
+async def get_graph_stats():
+    """
+    Returns live statistics from FalkorDB graph memory:
+    Total node count, relationship count, and breakdown by label/relationship type.
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        stats = await app_state.graph_repo.get_graph_stats()
+        return stats
+    except FalkorDBUnavailableError as e:
+        raise HTTPException(status_code=503, detail=f"FalkorDB is unavailable: {e}")
+    except Exception as e:
+        logger.error(f"Error retrieving graph stats: {e}")
+        return {
+            "connected": False,
+            "nodes_count": 0,
+            "relationships_count": 0,
+            "labels": {},
+            "relationship_types": {},
+            "error": str(e)
+        }
+
+
+@app.post("/api/graph/query")
+async def execute_safe_graph_query(req: SafeGraphQueryRequest):
+    """
+    Safely executes a read-only Cypher query against FalkorDB.
+    Strictly forbids mutations (CREATE, MERGE, DELETE, SET, etc.) and enforces limits.
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        result = await app_state.graph_repo.execute_safe_query(req.query, req.parameters)
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except FalkorDBUnavailableError as fe:
+        raise HTTPException(status_code=503, detail=f"FalkorDB is unavailable: {fe}")
+    except Exception as e:
+        logger.error(f"Error executing safe graph query: {e}")
+        raise HTTPException(status_code=500, detail=f"Query execution error: {e}")
+
+
 # --- WebSocket Stream ---
 @app.websocket("/ws/events")
 async def websocket_event_stream(websocket: WebSocket):

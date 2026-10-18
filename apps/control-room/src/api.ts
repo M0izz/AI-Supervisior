@@ -21,7 +21,9 @@ import type {
   TaskGraphContext,
   VerificationTrace,
   AdapterSetupGuide,
-  GraphActivityEvent
+  GraphActivityEvent,
+  GraphStats,
+  SafeQueryResult
 } from './types';
 
 const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
@@ -537,5 +539,17 @@ export async function testAdapterExecution(adapterId: string): Promise<any> {
 export async function getGraphActivity(limit: number = 25): Promise<{ events: GraphActivityEvent[]; count: number }> {
   return fetchJson<{ events: GraphActivityEvent[]; count: number }>(`/api/graph/activity?limit=${limit}`);
 }
+
+export async function getGraphStats(): Promise<GraphStats> {
+  return fetchJson<GraphStats>('/api/graph/stats');
+}
+
+export async function executeGraphQuery(query: string, parameters?: Record<string, any>): Promise<SafeQueryResult> {
+  return fetchJson<SafeQueryResult>('/api/graph/query', {
+    method: 'POST',
+    body: JSON.stringify({ query, parameters: parameters || {} })
+  });
+}
+
 
 

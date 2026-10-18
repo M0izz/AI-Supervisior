@@ -8,7 +8,8 @@ import {
   ShieldCheck, 
   Settings, 
   FolderGit2, 
-  Cloud
+  Cloud,
+  Network
 } from 'lucide-react';
 import type { TabType, SyncStatus } from '../types';
 
@@ -40,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isOverview = activeTab === 'overview' || activeTab === 'control_room';
   const isMissions = activeTab === 'missions' || activeTab === 'mission_detail';
   const isAgents = activeTab === 'agents' || activeTab === 'agent_detail';
+  const isFalkorDB = activeTab === 'falkordb' || activeTab === 'graph_memory' || activeTab === 'graph';
   const isMemory = activeTab === 'memory' || activeTab === 'project_memory';
   const isActivity = activeTab === 'activity' || activeTab === 'supervisor_events';
   const isApprovals = activeTab === 'approvals' || activeTab === 'approval_queue';
@@ -102,6 +104,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {activeAgentsCount > 0 && (
             <span className="nav-badge">{activeAgentsCount}</span>
           )}
+        </button>
+
+        <button
+          className={`nav-item ${isFalkorDB ? 'active' : ''}`}
+          onClick={() => setActiveTab('falkordb')}
+          title="FalkorDB Graph Memory Workspace: Explorer, Lineage, Health & Cypher"
+        >
+          <Network size={16} />
+          <span>FalkorDB</span>
+          <span className="brand-tag" style={{ marginLeft: 'auto', fontSize: '9px', padding: '1px 5px', color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)', background: 'rgba(59,130,246,0.1)' }}>Graph</span>
         </button>
 
         <button

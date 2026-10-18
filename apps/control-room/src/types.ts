@@ -287,6 +287,7 @@ export type TabType =
   | 'missions'
   | 'agents'
   | 'memory'
+  | 'falkordb'
   | 'activity'
   | 'approvals'
   | 'settings'
@@ -297,7 +298,29 @@ export type TabType =
   | 'agent_detail'
   | 'supervisor_events'
   | 'project_memory'
-  | 'approval_queue';
+  | 'approval_queue'
+  | 'graph_memory'
+  | 'graph';
+
+export interface GraphStats {
+  connected: boolean;
+  graph_name: string;
+  host: string;
+  port: number;
+  nodes_count: number;
+  relationships_count: number;
+  labels: Record<string, number>;
+  relationship_types: Record<string, number>;
+  error?: string | null;
+}
+
+export interface SafeQueryResult {
+  query: string;
+  columns: string[];
+  rows: any[][];
+  row_count: number;
+  execution_time_ms: number;
+}
 
 // Phase 8 Desktop & HUD Types
 export type HudVisualState = 

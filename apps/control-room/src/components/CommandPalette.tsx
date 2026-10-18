@@ -11,7 +11,7 @@ import {
   Plus, 
   FlaskConical, 
   Cloud, 
-  Sparkles
+  Network
 } from 'lucide-react';
 import type { TabType, Mission, AgentRecord } from '../types';
 
@@ -71,8 +71,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     { id: 'nav-memory', label: 'Go to Project Memory', icon: Database, group: 'Navigation', action: () => { onNavigate('memory'); onClose(); } },
     { id: 'nav-activity', label: 'Go to Activity & Events', icon: Compass, group: 'Navigation', action: () => { onNavigate('activity'); onClose(); } },
     { id: 'nav-approvals', label: 'Go to Approvals Queue', icon: ShieldCheck, group: 'Navigation', action: () => { onNavigate('approvals'); onClose(); } },
+    { id: 'nav-falkordb', label: 'Go to FalkorDB Graph Memory', icon: Network, group: 'Navigation', action: () => { onNavigate('falkordb'); onClose(); } },
     { id: 'nav-settings', label: 'Go to Settings', icon: Settings, group: 'Navigation', action: () => { onNavigate('settings'); onClose(); } },
-    { id: 'nav-tour', label: 'Open Product Tour & Architecture', icon: Sparkles, group: 'Navigation', action: () => { onNavigate('landing'); onClose(); } },
     // Actions
     { id: 'act-new', label: 'Start a Mission (Natural Language Composer)', icon: Plus, group: 'Actions', action: () => { onOpenCreateMission(); onClose(); } },
     { id: 'act-demo', label: 'Run Demo Scenario (Loop & Handoff)', icon: FlaskConical, group: 'Actions', action: () => { onSeedDemo(); onClose(); } },

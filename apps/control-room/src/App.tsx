@@ -39,6 +39,7 @@ import { ProjectMemory } from './pages/ProjectMemory';
 import { Approvals } from './pages/Approvals';
 import { Settings } from './pages/Settings';
 import { LandingPage } from './pages/LandingPage';
+import { FalkorDBWorkspace } from './pages/FalkorDBWorkspace';
 
 const getInitialRoute = (): 'landing' | 'app' => {
   if (typeof window === 'undefined') return 'app';
@@ -55,9 +56,25 @@ const getInitialRoute = (): 'landing' | 'app' => {
   return 'app';
 };
 
+const getInitialTab = (): TabType => {
+  if (typeof window === 'undefined') return 'overview';
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  if (path.includes('falkordb') || hash.includes('falkordb') || path.includes('graph')) {
+    return 'falkordb';
+  }
+  if (path.includes('missions') || hash.includes('missions')) return 'missions';
+  if (path.includes('agents') || hash.includes('agents')) return 'agents';
+  if (path.includes('memory') || hash.includes('memory')) return 'memory';
+  if (path.includes('activity') || hash.includes('activity')) return 'activity';
+  if (path.includes('approvals') || hash.includes('approvals')) return 'approvals';
+  if (path.includes('settings') || hash.includes('settings')) return 'settings';
+  return 'overview';
+};
+
 export const App: React.FC = () => {
   const [currentRoute, setCurrentRoute] = useState<'landing' | 'app'>(getInitialRoute);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [selectedMissionId, setSelectedMissionId] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentRecord[]>([]);
@@ -69,10 +86,25 @@ export const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [interventions, setInterventions] = useState<InterventionDetail[]>([]);
 
-  // Route Synchronization
+  // Route & Tab Navigation Handler (survives refresh and direct URL access)
+  const handleTabChange = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+    setCurrentRoute('app');
+    const pathName = tab === 'falkordb' ? '/falkordb' : tab === 'overview' ? '/app' : `/${tab}`;
+    try {
+      if (window.location.pathname !== pathName) {
+        window.history.pushState(null, '', pathName);
+      }
+    } catch {
+      window.location.hash = `#${tab}`;
+    }
+  }, []);
+
+  // Route Synchronization on popstate / hashchange
   useEffect(() => {
     const handleRouteChange = () => {
       setCurrentRoute(getInitialRoute());
+      setActiveTab(getInitialTab());
     };
     window.addEventListener('popstate', handleRouteChange);
     window.addEventListener('hashchange', handleRouteChange);
@@ -83,16 +115,8 @@ export const App: React.FC = () => {
   }, []);
 
   const navigateToControlRoom = useCallback((tab: TabType = 'overview') => {
-    setActiveTab(tab);
-    setCurrentRoute('app');
-    if (window.location.pathname !== '/app') {
-      try {
-        window.history.pushState(null, '', '/app');
-      } catch {
-        window.location.hash = '#control-room';
-      }
-    }
-  }, []);
+    handleTabChange(tab);
+  }, [handleTabChange]);
 
   // Modals
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -263,7 +287,7 @@ export const App: React.FC = () => {
       {/* Restrained Modern Sidebar */}
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         activeMissionsCount={activeMissionsCount}
         activeAgentsCount={activeAgentsCount}
         pendingApprovalsCount={pendingApprovalsCount}
@@ -284,7 +308,7 @@ export const App: React.FC = () => {
           onRefresh={loadData}
           isRefreshing={isRefreshing}
           onOpenHud={window.supervisorDesktop?.showHud ? () => window.supervisorDesktop?.showHud() : undefined}
-          onOpenGraphInspector={() => setActiveTab('missions')}
+          onOpenGraphInspector={() => handleTabChange('falkordb')}
           wsConnected={wsConnected}
           wsLatency={wsLatency}
         />
@@ -294,7 +318,7 @@ export const App: React.FC = () => {
           {/* Landing / Product Tour */}
           {activeTab === 'landing' && (
             <LandingPage
-              onStartSupervising={() => setActiveTab('overview')}
+              onStartSupervising={() => handleTabChange('overview')}
               onRunDemo={handleSeedDemo}
             />
           )}
@@ -311,15 +335,26 @@ export const App: React.FC = () => {
               memoryRecords={memoryRecords}
               onSelectMission={(id) => {
                 setSelectedMissionId(id);
-                setActiveTab('missions');
+                handleTabChange('missions');
               }}
               onSelectAgent={(id) => {
                 setSelectedAgentId(id);
-                setActiveTab('agents');
+                handleTabChange('agents');
               }}
-              onNavigateToTab={setActiveTab}
+              onNavigateToTab={handleTabChange}
               onOpenCreateMission={() => setIsCreateMissionOpen(true)}
               onRefresh={loadData}
+            />
+          )}
+
+          {/* FalkorDB Graph Memory Workspace */}
+          {(activeTab === 'falkordb' || activeTab === 'graph_memory' || activeTab === 'graph') && (
+            <FalkorDBWorkspace
+              missions={missions}
+              selectedMissionId={selectedMissionId}
+              onSelectMission={(id) => setSelectedMissionId(id)}
+              onSeedDemo={handleSeedDemo}
+              isSeeding={isSeeding}
             />
           )}
 
@@ -353,7 +388,7 @@ export const App: React.FC = () => {
               missions={missions}
               onSelectMission={(mid) => {
                 setSelectedMissionId(mid);
-                setActiveTab('missions');
+                handleTabChange('missions');
               }}
               onRefresh={loadData}
             />
@@ -387,7 +422,7 @@ export const App: React.FC = () => {
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
-        onNavigate={setActiveTab}
+        onNavigate={handleTabChange}
         onOpenCreateMission={() => setIsCreateMissionOpen(true)}
         onSeedDemo={handleSeedDemo}
         onOpenSync={() => setIsSyncOpen(true)}

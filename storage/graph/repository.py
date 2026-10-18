@@ -1136,3 +1136,117 @@ class FalkorDBGraphRepository:
                 "success": True,
             })
         return events
+
+    async def get_graph_stats(self) -> Dict[str, Any]:
+        """
+        Retrieves detailed statistics of the FalkorDB graph memory:
+        total node counts, total edge counts, counts by node label,
+        and counts by relationship type.
+        """
+        stats = {
+            "connected": False,
+            "graph_name": self.client.config.graph_name,
+            "host": self.client.config.host,
+            "port": self.client.config.port,
+            "nodes_count": 0,
+            "relationships_count": 0,
+            "labels": {},
+            "relationship_types": {},
+            "error": None
+        }
+        if not self.client.is_available():
+            stats["error"] = self.client._last_error or "FalkorDB is unreachable"
+            return stats
+
+        stats["connected"] = True
+        try:
+            # 1. Total nodes count
+            n_res = self.client.query("MATCH (n) RETURN count(n) AS cnt")
+            stats["nodes_count"] = int(n_res.result_set[0][0]) if n_res.result_set else 0
+
+            # 2. Total edges count
+            e_res = self.client.query("MATCH ()-[r]->() RETURN count(r) AS cnt")
+            stats["relationships_count"] = int(e_res.result_set[0][0]) if e_res.result_set else 0
+
+            # 3. Counts by label
+            l_res = self.client.query("MATCH (n) RETURN labels(n)[0] AS label, count(n) AS cnt")
+            for row in (l_res.result_set or []):
+                if row[0]:
+                    stats["labels"][str(row[0])] = int(row[1])
+
+            # 4. Counts by relationship type
+            r_res = self.client.query("MATCH ()-[r]->() RETURN type(r) AS rel, count(r) AS cnt")
+            for row in (r_res.result_set or []):
+                if row[0]:
+                    stats["relationship_types"][str(row[0])] = int(row[1])
+
+        except Exception as e:
+            stats["error"] = str(e)
+
+        return stats
+
+    async def execute_safe_query(
+        self,
+        cypher: str,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Safely evaluates a read-only Cypher query against FalkorDB.
+        Disallows any write, delete, schema, or system commands.
+        Enforces timeout and limits.
+        """
+        import time
+        t0 = time.perf_counter()
+
+        cleaned = cypher.strip().rstrip(";")
+        if not cleaned:
+            raise ValueError("Query string cannot be empty")
+
+        forbidden = [
+            "CREATE", "MERGE", "DELETE", "DETACH", "SET", "REMOVE",
+            "DROP", "ALTER", "LOAD CSV", "PERIODIC COMMIT", "CALL DBMS", "INDEX"
+        ]
+        upper_tokens = [token.upper() for token in cleaned.split()]
+        for kw in forbidden:
+            if " " in kw:
+                if kw in cleaned.upper():
+                    raise ValueError(f"Prohibited mutation clause: '{kw}'. Safe queries must be strictly read-only.")
+            else:
+                if kw in upper_tokens:
+                    raise ValueError(f"Prohibited mutation keyword: '{kw}'. Safe queries must be strictly read-only.")
+
+        if not cleaned.upper().startswith("MATCH") and not cleaned.upper().startswith("RETURN"):
+            raise ValueError("Safe query must begin with 'MATCH' or 'RETURN'")
+
+        if "RETURN" not in cleaned.upper():
+            raise ValueError("Query must contain a 'RETURN' projection clause")
+
+        if "LIMIT" not in cleaned.upper():
+            cleaned = f"{cleaned} LIMIT 50"
+
+        res = self.client.query(cleaned, params or {}, read_only=True)
+        execution_time_ms = round((time.perf_counter() - t0) * 1000, 2)
+
+        columns = []
+        if hasattr(res, "header") and res.header:
+            columns = [h[1] if isinstance(h, (list, tuple)) and len(h) > 1 else str(h) for h in res.header]
+
+        rows = []
+        for r in (res.result_set or []):
+            formatted_row = []
+            for item in r:
+                if hasattr(item, "properties"):
+                    formatted_row.append(item.properties)
+                elif isinstance(item, (dict, list, int, float, bool, str)) or item is None:
+                    formatted_row.append(item)
+                else:
+                    formatted_row.append(str(item))
+            rows.append(formatted_row)
+
+        return {
+            "query": cleaned,
+            "columns": columns,
+            "rows": rows,
+            "row_count": len(rows),
+            "execution_time_ms": execution_time_ms
+        }

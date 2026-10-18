@@ -95,3 +95,31 @@ def test_task_agent_reassignment_preserves_approval_gate():
     assert mission_resp.status_code == 200
     mission = mission_resp.json()
     assert mission["approved_plan_version"] is None or mission["status"] == "WAITING_APPROVAL"
+
+
+def test_graph_stats_and_safe_query_validation():
+    """Verify graph stats schema and server-side read-only Cypher query validation."""
+    # Test stats endpoint
+    stats_resp = client.get("/api/graph/stats")
+    # Even if FalkorDB container is offline in CI, endpoint returns structured status (or 503 if unavailable)
+    assert stats_resp.status_code in (200, 503)
+    if stats_resp.status_code == 200:
+        stats = stats_resp.json()
+        assert "connected" in stats
+        assert "nodes_count" in stats
+        assert "relationships_count" in stats
+        assert "labels" in stats
+
+    # Test safe query runner rejects mutating commands (CREATE/DELETE/SET)
+    mutate_resp = client.post("/api/graph/query", json={
+        "query": "CREATE (n:TestNode {name: 'illegal_mutate'}) RETURN n"
+    })
+    assert mutate_resp.status_code == 400
+    assert "Prohibited mutation" in mutate_resp.json()["detail"]
+
+    # Test safe query runner rejects query without RETURN
+    no_return_resp = client.post("/api/graph/query", json={
+        "query": "MATCH (n:Mission)"
+    })
+    assert no_return_resp.status_code == 400
+    assert "RETURN" in no_return_resp.json()["detail"]
