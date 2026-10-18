@@ -299,19 +299,71 @@ class AppState:
             pass
 
     async def _falkordb_event_sink(self, event: Any) -> None:
-        """Streams relevant execution events to FalkorDB property graph."""
+        """Streams relevant execution events and lifecycle entities to FalkorDB property graph."""
         try:
             task_id = getattr(event, "task_id", None)
-            if task_id and getattr(event, "type", None):
-                evt_type = event.type.value if hasattr(event.type, "value") else str(event.type)
-                # Attach event to current execution attempt
-                payload = getattr(event, "payload", {}) or {}
-                attempt = payload.get("attempt", 1)
-                exec_id = f"exec_{task_id}_{attempt}"
-                evt_id = getattr(event, "id", None) or f"evt_{task_id}_{int(datetime.now(timezone.utc).timestamp())}"
-                severity = event.severity.value if hasattr(event.severity, "value") else str(event.severity)
-                ts = getattr(event, "timestamp", None)
-                ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
+            mission_id = getattr(event, "mission_id", None)
+            agent_id = getattr(event, "agent_id", None)
+            if not getattr(event, "type", None):
+                return
+
+            evt_type = event.type.value if hasattr(event.type, "value") else str(event.type)
+            payload = getattr(event, "payload", {}) or {}
+            attempt = payload.get("attempt", 1)
+            exec_id = f"exec_{task_id}_{attempt}" if task_id else None
+            evt_id = getattr(event, "id", None) or f"evt_{task_id or 'gen'}_{int(datetime.now(timezone.utc).timestamp())}"
+            severity = event.severity.value if hasattr(event.severity, "value") else str(getattr(event, "severity", "INFO"))
+            ts = getattr(event, "timestamp", None)
+            ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
+
+            # 1. Lifecycle event dispatching to graph
+            if evt_type == "task.started" and task_id:
+                await self.graph_repo.record_execution_start(
+                    execution_id=exec_id,
+                    task_id=task_id,
+                    mission_id=mission_id,
+                    agent_id=agent_id or "worker_01",
+                    attempt_number=attempt,
+                )
+            elif evt_type == "task.failed" and task_id and exec_id:
+                await self.graph_repo.record_execution_failure(
+                    execution_id=exec_id,
+                    error_signature=payload.get("error_signature", "ExecutionFailed"),
+                    reason=payload.get("reason"),
+                    event_id=evt_id,
+                )
+            elif evt_type == "task.completed" and task_id and exec_id:
+                await self.graph_repo.record_execution_success(
+                    execution_id=exec_id,
+                    summary=payload.get("summary", "Task completed"),
+                    artifacts=payload.get("artifacts"),
+                )
+            elif (evt_type == "supervisor.decision" or "decision" in evt_type) and task_id:
+                dec_id = payload.get("decision_id") or f"dec_{task_id}_{attempt}"
+                await self.graph_repo.record_decision(
+                    decision_id=dec_id,
+                    mission_id=mission_id or "",
+                    task_id=task_id,
+                    decision_type=payload.get("decision_type", "SUPERVISORY_DECISION"),
+                    action=payload.get("action", "RESOLVED"),
+                    reason=payload.get("reason", "Automated supervisory decision"),
+                    responding_to_event_id=payload.get("responding_to_event_id"),
+                    selected_agent_id=payload.get("selected_agent_id") or agent_id,
+                )
+            elif evt_type == "verification.result" and task_id:
+                ver_id = payload.get("verification_id") or f"ver_{task_id}_{attempt}"
+                await self.graph_repo.record_verification(
+                    verification_id=ver_id,
+                    task_id=task_id,
+                    mission_id=mission_id or "",
+                    decision=payload.get("decision", "ACCEPT"),
+                    summary=payload.get("summary", "Verified"),
+                    evidence_items=payload.get("evidence_items"),
+                    execution_id=exec_id,
+                )
+
+            # 2. Also emit execution event record if task-scoped
+            if task_id and exec_id:
                 await self.graph_repo.record_execution_event(
                     execution_id=exec_id,
                     event_id=evt_id,

@@ -182,6 +182,7 @@ class FalkorDBGraphRepository:
                 task.expected_files = $expected_files,
                 task.updated_at = $now
             MERGE (m)-[:CONTAINS_TASK]->(task)
+            MERGE (m)-[:HAS_TASK]->(task)
             """
             self.client.query(
                 cypher,
@@ -195,6 +196,25 @@ class FalkorDBGraphRepository:
                     "now": now,
                 },
             )
+
+            # Connect assigned agent if specified in task definition
+            assigned_agent = t.get("assigned_agent_id") or t.get("agent_id")
+            if assigned_agent:
+                agent_cypher = """
+                MATCH (task:Task {id: $task_id})
+                MERGE (a:Agent {id: $agent_id})
+                ON CREATE SET
+                    a.agent_type = 'WORKER',
+                    a.display_name = $agent_id,
+                    a.status = 'IDLE',
+                    a.created_at = $now
+                MERGE (task)-[:ASSIGNED_TO]->(a)
+                SET task.assigned_agent_id = $agent_id
+                """
+                self.client.query(
+                    agent_cypher,
+                    {"task_id": task_id, "agent_id": assigned_agent, "now": now},
+                )
 
         # Step 2: Establish DEPENDS_ON relationships
         for t in tasks:
@@ -254,15 +274,28 @@ class FalkorDBGraphRepository:
         self,
         execution_id: str,
         task_id: str,
-        mission_id: str,
-        agent_id: str,
+        mission_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
         attempt_number: int = 1,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """
         Records the start of a distinct Execution attempt.
         Crucial: Retries are modeled as separate Execution nodes linked to the same task,
         preserving complete historical context.
+        Idempotently links:
+        - (a:Agent)-[:EXECUTES]->(e:Execution)
+        - (e:Execution)-[:FOR_TASK]->(task:Task)
+        - (task:Task)-[:HAS_ATTEMPT]->(e:Execution)
+        - (task:Task)-[:ASSIGNED_TO]->(a:Agent)
         """
+        # Handle positional parameter variation: record_execution_start(exec_id, task_id, agent_id, attempt_number)
+        if isinstance(agent_id, int) and (isinstance(mission_id, str) and not mission_id.startswith("msn_") and not mission_id.startswith("mission_")):
+            attempt_number = agent_id
+            agent_id = mission_id
+            mission_id = ""
+
+        resolved_agent = agent_id or kwargs.get("agent", "worker_01")
         now = _now_iso()
         cypher = """
         MATCH (task:Task {id: $task_id})
@@ -277,24 +310,27 @@ class FalkorDBGraphRepository:
         MERGE (e:Execution {id: $execution_id})
         ON CREATE SET
             e.task_id = $task_id,
-            e.mission_id = $mission_id,
+            e.mission_id = coalesce($mission_id, task.mission_id, ''),
             e.agent_id = $agent_id,
             e.attempt_number = $attempt_number,
             e.status = 'IN_PROGRESS',
             e.started_at = $now
         ON MATCH SET
             e.status = 'IN_PROGRESS',
-            e.agent_id = $agent_id
+            e.agent_id = $agent_id,
+            e.updated_at = $now
         MERGE (a)-[:EXECUTES]->(e)
         MERGE (e)-[:FOR_TASK]->(task)
-        SET task.status = 'IN_PROGRESS'
+        MERGE (task)-[:HAS_ATTEMPT]->(e)
+        MERGE (task)-[:ASSIGNED_TO]->(a)
+        SET task.status = 'IN_PROGRESS', task.assigned_agent_id = $agent_id
         RETURN e.id AS id, e.attempt_number AS attempt
         """
         params = {
             "execution_id": execution_id,
             "task_id": task_id,
-            "mission_id": mission_id,
-            "agent_id": agent_id,
+            "mission_id": mission_id or "",
+            "agent_id": resolved_agent,
             "attempt_number": int(attempt_number),
             "now": now,
         }
@@ -312,11 +348,13 @@ class FalkorDBGraphRepository:
     ) -> None:
         """
         Emits an ExecutionEvent node and links it to Execution with EMITS.
+        Uses MERGE on Execution to avoid dropping events during rapid dispatch.
         """
         now = timestamp or _now_iso()
         payload_str = json.dumps(payload or {})
         cypher = """
-        MATCH (e:Execution {id: $execution_id})
+        MERGE (e:Execution {id: $execution_id})
+        ON CREATE SET e.status = 'IN_PROGRESS', e.started_at = $now
         MERGE (evt:ExecutionEvent {id: $event_id})
         ON CREATE SET
             evt.execution_id = $execution_id,
@@ -341,14 +379,16 @@ class FalkorDBGraphRepository:
     async def record_execution_failure(
         self,
         execution_id: str,
-        error_signature: str,
+        error_signature: str = "UnknownError",
         reason: Optional[str] = None,
         event_id: Optional[str] = None,
     ) -> None:
         """
-        Marks an execution attempt as FAILED, links it to the causal event with FAILS_WITH.
+        Marks an execution attempt as FAILED, creates a Failure node,
+        and connects Attempt -> FAILED_WITH -> Failure (and FAILS_WITH).
         """
         now = _now_iso()
+        fail_id = f"fail_{execution_id}" if not event_id else f"fail_{execution_id}_{event_id}"
         cypher = """
         MATCH (e:Execution {id: $execution_id})
         SET
@@ -356,11 +396,27 @@ class FalkorDBGraphRepository:
             e.error_signature = $error_signature,
             e.reason = $reason,
             e.completed_at = $now
+        WITH e
+        MERGE (f:Failure {id: $fail_id})
+        ON CREATE SET
+            f.execution_id = $execution_id,
+            f.task_id = e.task_id,
+            f.mission_id = e.mission_id,
+            f.error_signature = $error_signature,
+            f.reason = $reason,
+            f.created_at = $now
+        ON MATCH SET
+            f.error_signature = $error_signature,
+            f.reason = $reason,
+            f.updated_at = $now
+        MERGE (e)-[:FAILED_WITH]->(f)
+        MERGE (e)-[:FAILS_WITH]->(f)
         """
         self.client.query(
             cypher,
             {
                 "execution_id": execution_id,
+                "fail_id": fail_id,
                 "error_signature": error_signature,
                 "reason": reason or "",
                 "now": now,
@@ -370,6 +426,7 @@ class FalkorDBGraphRepository:
         if event_id:
             link_cypher = """
             MATCH (e:Execution {id: $execution_id})
+            MATCH (f:Failure {id: $fail_id})
             MERGE (evt:ExecutionEvent {id: $event_id})
             ON CREATE SET
                 evt.execution_id = $execution_id,
@@ -378,11 +435,13 @@ class FalkorDBGraphRepository:
                 evt.payload_json = $payload_str,
                 evt.timestamp = $now
             MERGE (e)-[:FAILS_WITH]->(evt)
+            MERGE (f)-[:CAUSED_BY]->(evt)
             """
             self.client.query(
                 link_cypher,
                 {
                     "execution_id": execution_id,
+                    "fail_id": fail_id,
                     "event_id": event_id,
                     "payload_str": json.dumps({"error_signature": error_signature, "reason": reason or ""}),
                     "now": now,
@@ -396,7 +455,9 @@ class FalkorDBGraphRepository:
         artifacts: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """
-        Marks execution attempt as COMPLETED and links produced Artifacts.
+        Marks execution attempt as COMPLETED and links produced Artifacts:
+        - (Execution)-[:PRODUCES]->(Artifact)
+        - (Task)-[:PRODUCED]->(Artifact)
         """
         now = _now_iso()
         cypher = """
@@ -423,13 +484,22 @@ class FalkorDBGraphRepository:
 
                 art_cypher = """
                 MATCH (e:Execution {id: $execution_id})
+                OPTIONAL MATCH (e)-[:FOR_TASK]->(t:Task)
                 MERGE (a:Artifact {id: $art_id})
                 ON CREATE SET
                     a.file_path = $art_path,
                     a.artifact_type = $art_type,
                     a.hash = $art_hash,
                     a.created_at = $now
+                ON MATCH SET
+                    a.file_path = $art_path,
+                    a.artifact_type = $art_type,
+                    a.hash = $art_hash
                 MERGE (e)-[:PRODUCES]->(a)
+                FOREACH (_ IN CASE WHEN t IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (t)-[:PRODUCED]->(a)
+                    MERGE (t)-[:PRODUCES]->(a)
+                )
                 """
                 self.client.query(
                     art_cypher,
@@ -461,7 +531,9 @@ class FalkorDBGraphRepository:
         """
         Records a supervisory or recovery decision.
         Explicitly links:
-        - (Decision)-[:RESPONDS_TO]->(ExecutionEvent)
+        - (Mission)-[:HAS_DECISION]->(Decision)
+        - (Decision)-[:GOVERNS]->(Task)
+        - (Decision)-[:RESPONDS_TO]->(ExecutionEvent / Failure)
         - (Decision)-[:SELECTS]->(Agent)
         """
         now = _now_iso()
@@ -473,11 +545,23 @@ class FalkorDBGraphRepository:
             d.decision_type = $decision_type,
             d.action = $action,
             d.reason = $reason,
+            d.selected_agent = $selected_agent_id,
             d.timestamp = $now
         ON MATCH SET
             d.action = $action,
             d.reason = $reason,
+            d.selected_agent = $selected_agent_id,
             d.updated_at = $now
+        WITH d
+        OPTIONAL MATCH (m:Mission {id: $mission_id})
+        FOREACH (_ IN CASE WHEN m IS NOT NULL THEN [1] ELSE [] END |
+            MERGE (m)-[:HAS_DECISION]->(d)
+        )
+        WITH d
+        OPTIONAL MATCH (t:Task {id: $task_id})
+        FOREACH (_ IN CASE WHEN t IS NOT NULL THEN [1] ELSE [] END |
+            MERGE (d)-[:GOVERNS]->(t)
+        )
         """
         self.client.query(
             cypher,
@@ -488,6 +572,7 @@ class FalkorDBGraphRepository:
                 "decision_type": decision_type,
                 "action": action,
                 "reason": reason,
+                "selected_agent_id": selected_agent_id or "",
                 "now": now,
             },
         )
@@ -495,8 +580,14 @@ class FalkorDBGraphRepository:
         if responding_to_event_id:
             link_event = """
             MATCH (d:Decision {id: $decision_id})
-            MATCH (evt:ExecutionEvent {id: $event_id})
-            MERGE (d)-[:RESPONDS_TO]->(evt)
+            OPTIONAL MATCH (evt:ExecutionEvent {id: $event_id})
+            OPTIONAL MATCH (f:Failure {id: $event_id})
+            FOREACH (_ IN CASE WHEN evt IS NOT NULL THEN [1] ELSE [] END |
+                MERGE (d)-[:RESPONDS_TO]->(evt)
+            )
+            FOREACH (_ IN CASE WHEN f IS NOT NULL THEN [1] ELSE [] END |
+                MERGE (d)-[:RESPONDS_TO]->(f)
+            )
             """
             self.client.query(link_event, {"decision_id": decision_id, "event_id": responding_to_event_id})
 
@@ -521,11 +612,17 @@ class FalkorDBGraphRepository:
     ) -> None:
         """
         Records a handoff between two agents for a task:
-        (Handoff)-[:TRANSFERS_CONTEXT]->(Task)
+        - (Handoff)-[:TRANSFERS_CONTEXT]->(Task)
+        - (Handoff)-[:FROM_AGENT]->(SourceAgent)
+        - (Handoff)-[:TO_AGENT]->(TargetAgent)
         """
         now = _now_iso()
         cypher = """
         MATCH (task:Task {id: $task_id})
+        MERGE (src:Agent {id: $source_agent})
+        ON CREATE SET src.display_name = $source_agent
+        MERGE (tgt:Agent {id: $target_agent})
+        ON CREATE SET tgt.display_name = $target_agent
         MERGE (h:Handoff {id: $handoff_id})
         ON CREATE SET
             h.task_id = $task_id,
@@ -539,6 +636,8 @@ class FalkorDBGraphRepository:
             h.status = $status,
             h.context_summary = $context_summary
         MERGE (h)-[:TRANSFERS_CONTEXT]->(task)
+        MERGE (h)-[:FROM_AGENT]->(src)
+        MERGE (h)-[:TO_AGENT]->(tgt)
         """
         self.client.query(
             cypher,
@@ -572,7 +671,8 @@ class FalkorDBGraphRepository:
         Records independent verification results.
         Links:
         - (Verification)-[:EVALUATES]->(Task)
-        - (Verification)-[:EVALUATES_EXECUTION]->(Execution)  <-- Exact execution attempt evaluated
+        - (Execution)-[:HAS_RESULT]->(Verification)
+        - (Verification)-[:EVALUATES_EXECUTION]->(Execution)
         - (Verification)-[:SUPPORTED_BY]->(Evidence)
         """
         now = _now_iso()
@@ -610,9 +710,24 @@ class FalkorDBGraphRepository:
             link_exec = """
             MATCH (v:Verification {id: $verification_id})
             MATCH (e:Execution {id: $execution_id})
+            MERGE (e)-[:HAS_RESULT]->(v)
             MERGE (v)-[:EVALUATES_EXECUTION]->(e)
             """
             self.client.query(link_exec, {"verification_id": verification_id, "execution_id": execution_id})
+        else:
+            # Connect to latest execution attempt for this task if one exists
+            link_latest_exec = """
+            MATCH (v:Verification {id: $verification_id})
+            MATCH (t:Task {id: $task_id})<-[:FOR_TASK]-(e:Execution)
+            WITH v, e ORDER BY e.started_at DESC LIMIT 1
+            SET v.execution_id = e.id
+            MERGE (e)-[:HAS_RESULT]->(v)
+            MERGE (v)-[:EVALUATES_EXECUTION]->(e)
+            """
+            try:
+                self.client.query(link_latest_exec, {"verification_id": verification_id, "task_id": task_id})
+            except Exception:
+                pass
 
         if evidence_items:
             for item in evidence_items:
@@ -989,35 +1104,55 @@ class FalkorDBGraphRepository:
     async def get_mission_subgraph(self, mission_id: str) -> Dict[str, Any]:
         """
         Returns all nodes and relationships connected to the mission for graph visualization / API inspection.
+        Traverses Mission, Requirements, Tasks, Executions, Failures, Events, Agents, Decisions, Handoffs,
+        Verifications, Evidence, and Artifacts.
         """
         cypher = """
         MATCH (m:Mission {id: $mission_id})
         OPTIONAL MATCH (m)-[:HAS_REQUIREMENT]->(r:Requirement)
-        OPTIONAL MATCH (m)-[:CONTAINS_TASK]->(t:Task)
+        OPTIONAL MATCH (m)-[:CONTAINS_TASK|HAS_TASK]->(t:Task)
         OPTIONAL MATCH (t)-[:DEPENDS_ON]->(dep:Task)
-        OPTIONAL MATCH (e:Execution)-[:FOR_TASK]->(t)
-        OPTIONAL MATCH (a:Agent)-[:EXECUTES]->(e)
-        OPTIONAL MATCH (e)-[:EMITS]->(evt:ExecutionEvent)
-        OPTIONAL MATCH (e)-[:FAILS_WITH]->(fevt:ExecutionEvent)
-        OPTIONAL MATCH (e)-[:PRODUCES]->(art:Artifact)
-        OPTIONAL MATCH (d:Decision {mission_id: $mission_id})
+        OPTIONAL MATCH (t)-[:HAS_ATTEMPT]->(e1:Execution)
+        OPTIONAL MATCH (e2:Execution)-[:FOR_TASK]->(t)
+        OPTIONAL MATCH (t)-[:ASSIGNED_TO]->(ta:Agent)
+        OPTIONAL MATCH (ea:Agent)-[:EXECUTES]->(e1)
+        OPTIONAL MATCH (e1)-[:EMITS]->(evt:ExecutionEvent)
+        OPTIONAL MATCH (e1)-[:FAILED_WITH|FAILS_WITH]->(f:Failure)
+        OPTIONAL MATCH (e1)-[:FAILS_WITH]->(fevt:ExecutionEvent)
+        OPTIONAL MATCH (e1)-[:PRODUCES]->(art1:Artifact)
+        OPTIONAL MATCH (t)-[:PRODUCED]->(art2:Artifact)
+        OPTIONAL MATCH (d:Decision) WHERE d.mission_id = $mission_id OR d.task_id = t.id
         OPTIONAL MATCH (d)-[:RESPONDS_TO]->(devt:ExecutionEvent)
+        OPTIONAL MATCH (d)-[:RESPONDS_TO]->(dfail:Failure)
         OPTIONAL MATCH (d)-[:SELECTS]->(da:Agent)
-        OPTIONAL MATCH (h:Handoff)-[:TRANSFERS_CONTEXT]->(t)
-        OPTIONAL MATCH (v:Verification)-[:EVALUATES]->(t)
+        OPTIONAL MATCH (h:Handoff) WHERE h.task_id = t.id
+        OPTIONAL MATCH (h)-[:FROM_AGENT]->(hsrc:Agent)
+        OPTIONAL MATCH (h)-[:TO_AGENT]->(htgt:Agent)
+        OPTIONAL MATCH (v:Verification) WHERE v.task_id = t.id OR v.mission_id = $mission_id
         OPTIONAL MATCH (v)-[:SUPPORTED_BY]->(ev:Evidence)
         RETURN
             m,
             collect(DISTINCT r) AS requirements,
             collect(DISTINCT t) AS tasks,
-            collect(DISTINCT e) AS executions,
-            collect(DISTINCT a) AS agents,
-            collect(DISTINCT evt) AS events,
+            collect(DISTINCT dep) AS dep_tasks,
+            collect(DISTINCT e1) AS execs_1,
+            collect(DISTINCT e2) AS execs_2,
+            collect(DISTINCT ta) AS agents_task,
+            collect(DISTINCT ea) AS agents_exec,
+            collect(DISTINCT da) AS agents_dec,
+            collect(DISTINCT hsrc) AS agents_hsrc,
+            collect(DISTINCT htgt) AS agents_htgt,
+            collect(DISTINCT evt) AS events_emit,
+            collect(DISTINCT fevt) AS events_fail,
+            collect(DISTINCT devt) AS events_dec,
+            collect(DISTINCT f) AS failures_exec,
+            collect(DISTINCT dfail) AS failures_dec,
             collect(DISTINCT d) AS decisions,
             collect(DISTINCT h) AS handoffs,
             collect(DISTINCT v) AS verifications,
             collect(DISTINCT ev) AS evidence,
-            collect(DISTINCT art) AS artifacts
+            collect(DISTINCT art1) AS artifacts_exec,
+            collect(DISTINCT art2) AS artifacts_task
         """
         res = self.client.query(cypher, {"mission_id": mission_id})
         nodes: List[Dict[str, Any]] = []
@@ -1042,33 +1177,41 @@ class FalkorDBGraphRepository:
         if res.result_set:
             row = res.result_set[0]
             add_node(row[0], "Mission")
-            for cat_list, lbl in [
-                (row[1], "Requirement"),
-                (row[2], "Task"),
-                (row[3], "Execution"),
-                (row[4], "Agent"),
-                (row[5], "ExecutionEvent"),
-                (row[6], "Decision"),
-                (row[7], "Handoff"),
-                (row[8], "Verification"),
-                (row[9], "Evidence"),
-                (row[10], "Artifact"),
-            ]:
-                if isinstance(cat_list, list):
-                    for elem in cat_list:
-                        add_node(elem, lbl)
+            for elem in (row[1] or []): add_node(elem, "Requirement")
+            for elem in (row[2] or []): add_node(elem, "Task")
+            for elem in (row[3] or []): add_node(elem, "Task")
+            for elem in (row[4] or []): add_node(elem, "Execution")
+            for elem in (row[5] or []): add_node(elem, "Execution")
+            for elem in (row[6] or []): add_node(elem, "Agent")
+            for elem in (row[7] or []): add_node(elem, "Agent")
+            for elem in (row[8] or []): add_node(elem, "Agent")
+            for elem in (row[9] or []): add_node(elem, "Agent")
+            for elem in (row[10] or []): add_node(elem, "Agent")
+            for elem in (row[11] or []): add_node(elem, "ExecutionEvent")
+            for elem in (row[12] or []): add_node(elem, "ExecutionEvent")
+            for elem in (row[13] or []): add_node(elem, "ExecutionEvent")
+            for elem in (row[14] or []): add_node(elem, "Failure")
+            for elem in (row[15] or []): add_node(elem, "Failure")
+            for elem in (row[16] or []): add_node(elem, "Decision")
+            for elem in (row[17] or []): add_node(elem, "Handoff")
+            for elem in (row[18] or []): add_node(elem, "Verification")
+            for elem in (row[19] or []): add_node(elem, "Evidence")
+            for elem in (row[20] or []): add_node(elem, "Artifact")
+            for elem in (row[21] or []): add_node(elem, "Artifact")
 
         # Retrieve all explicit relationships between these discovered nodes
-        edges_query = """
-        MATCH (n)-[r]->(m)
-        WHERE n.id IN $node_ids AND m.id IN $node_ids
-        RETURN n.id AS source, type(r) AS type, m.id AS target
-        """
-        edges_res = self.client.query(edges_query, {"node_ids": list(seen_node_ids)})
-        edges = [
-            {"source": erow[0], "type": erow[1], "target": erow[2]}
-            for erow in (edges_res.result_set or [])
-        ]
+        edges = []
+        if seen_node_ids:
+            edges_query = """
+            MATCH (n)-[r]->(m)
+            WHERE n.id IN $node_ids AND m.id IN $node_ids
+            RETURN n.id AS source, type(r) AS type, m.id AS target
+            """
+            edges_res = self.client.query(edges_query, {"node_ids": list(seen_node_ids)})
+            edges = [
+                {"source": erow[0], "type": erow[1], "target": erow[2]}
+                for erow in (edges_res.result_set or [])
+            ]
 
         return {
             "mission_id": mission_id,
@@ -1077,6 +1220,158 @@ class FalkorDBGraphRepository:
             "nodes": nodes,
             "edges": edges,
         }
+
+    async def backfill_relationships(self) -> Dict[str, int]:
+        """
+        Safely and idempotently backfills missing relationships between historical
+        nodes using real canonical foreign keys.
+        Does NOT fabricate links between unrelated records.
+        """
+        counts = {}
+        # 1. Mission -> Task (HAS_TASK & CONTAINS_TASK)
+        try:
+            r = self.client.query(
+                "MATCH (m:Mission), (t:Task) WHERE t.mission_id = m.id MERGE (m)-[:HAS_TASK]->(t) MERGE (m)-[:CONTAINS_TASK]->(t) RETURN count(t)"
+            )
+            counts["mission_tasks"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill mission_tasks error: {e}")
+
+        # 2. Task -> Execution (HAS_ATTEMPT & FOR_TASK)
+        try:
+            r = self.client.query(
+                "MATCH (t:Task), (e:Execution) WHERE e.task_id = t.id MERGE (t)-[:HAS_ATTEMPT]->(e) MERGE (e)-[:FOR_TASK]->(t) RETURN count(e)"
+            )
+            counts["task_attempts"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill task_attempts error: {e}")
+
+        # 3. Task -> Agent (ASSIGNED_TO) & Agent -> Execution (EXECUTES)
+        try:
+            r = self.client.query(
+                """
+                MATCH (e:Execution)
+                WHERE e.agent_id IS NOT NULL AND e.agent_id <> ''
+                MERGE (a:Agent {id: e.agent_id})
+                ON CREATE SET a.agent_type = 'WORKER', a.display_name = e.agent_id, a.status = 'IDLE'
+                MERGE (a)-[:EXECUTES]->(e)
+                WITH e, a
+                MATCH (t:Task {id: e.task_id})
+                MERGE (t)-[:ASSIGNED_TO]->(a)
+                RETURN count(e)
+                """
+            )
+            counts["agent_executions"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill agent_executions error: {e}")
+
+        # 4. Execution -> Failure (FAILED_WITH & FAILS_WITH)
+        try:
+            r = self.client.query(
+                """
+                MATCH (e:Execution)
+                WHERE e.status = 'FAILED'
+                WITH e, coalesce(e.error_signature, 'UnknownError') AS err, coalesce(e.reason, '') AS rsn
+                MERGE (f:Failure {id: 'fail_' + e.id})
+                ON CREATE SET
+                    f.execution_id = e.id,
+                    f.task_id = e.task_id,
+                    f.mission_id = e.mission_id,
+                    f.error_signature = err,
+                    f.reason = rsn
+                MERGE (e)-[:FAILED_WITH]->(f)
+                MERGE (e)-[:FAILS_WITH]->(f)
+                RETURN count(f)
+                """
+            )
+            counts["failures"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill failures error: {e}")
+
+        # 5. Execution -> Verification (HAS_RESULT) & Task -> Verification (EVALUATES)
+        try:
+            r = self.client.query(
+                """
+                MATCH (v:Verification), (t:Task {id: v.task_id})
+                MERGE (v)-[:EVALUATES]->(t)
+                WITH v, t
+                OPTIONAL MATCH (e:Execution)
+                WHERE (v.execution_id IS NOT NULL AND e.id = v.execution_id)
+                   OR (v.execution_id IS NULL AND e.task_id = t.id)
+                FOREACH (_ IN CASE WHEN e IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (e)-[:HAS_RESULT]->(v)
+                    MERGE (v)-[:EVALUATES_EXECUTION]->(e)
+                )
+                RETURN count(v)
+                """
+            )
+            counts["verifications"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill verifications error: {e}")
+
+        # 6. Task -> Artifact (PRODUCED)
+        try:
+            r = self.client.query(
+                """
+                MATCH (e:Execution)-[:PRODUCES]->(a:Artifact)
+                MATCH (t:Task {id: e.task_id})
+                MERGE (t)-[:PRODUCED]->(a)
+                RETURN count(a)
+                """
+            )
+            counts["artifacts"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill artifacts error: {e}")
+
+        # 7. Mission & Task -> Decision (HAS_DECISION, GOVERNS, SELECTS)
+        try:
+            r = self.client.query(
+                """
+                MATCH (d:Decision)
+                OPTIONAL MATCH (m:Mission {id: d.mission_id})
+                OPTIONAL MATCH (t:Task {id: d.task_id})
+                OPTIONAL MATCH (a:Agent {id: d.selected_agent})
+                FOREACH (_ IN CASE WHEN m IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (m)-[:HAS_DECISION]->(d)
+                )
+                FOREACH (_ IN CASE WHEN t IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (d)-[:GOVERNS]->(t)
+                )
+                FOREACH (_ IN CASE WHEN a IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (d)-[:SELECTS]->(a)
+                )
+                RETURN count(d)
+                """
+            )
+            counts["decisions"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill decisions error: {e}")
+
+        # 8. Handoff -> Agents & Task
+        try:
+            r = self.client.query(
+                """
+                MATCH (h:Handoff)
+                OPTIONAL MATCH (t:Task {id: h.task_id})
+                OPTIONAL MATCH (src:Agent {id: h.source_agent})
+                OPTIONAL MATCH (tgt:Agent {id: h.target_agent})
+                FOREACH (_ IN CASE WHEN t IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (h)-[:TRANSFERS_CONTEXT]->(t)
+                )
+                FOREACH (_ IN CASE WHEN src IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (h)-[:FROM_AGENT]->(src)
+                )
+                FOREACH (_ IN CASE WHEN tgt IS NOT NULL THEN [1] ELSE [] END |
+                    MERGE (h)-[:TO_AGENT]->(tgt)
+                )
+                RETURN count(h)
+                """
+            )
+            counts["handoffs"] = r.result_set[0][0] if r.result_set else 0
+        except Exception as e:
+            logger.warning(f"Backfill handoffs error: {e}")
+
+        return counts
 
     async def get_recent_activity(self, limit: int = 25) -> List[Dict[str, Any]]:
         """

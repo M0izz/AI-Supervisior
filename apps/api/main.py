@@ -2794,6 +2794,24 @@ async def execute_safe_graph_query(req: SafeGraphQueryRequest):
         raise HTTPException(status_code=500, detail=f"Query execution error: {e}")
 
 
+@app.post("/api/graph/backfill")
+async def backfill_graph_relationships():
+    """
+    Safely and idempotently backfills missing relationships between historical
+    nodes using real canonical foreign keys.
+    """
+    from storage.graph import FalkorDBUnavailableError
+    try:
+        backfilled = await app_state.graph_repo.backfill_relationships()
+        stats = await app_state.graph_repo.get_graph_stats()
+        return {"status": "success", "backfilled": backfilled, "stats": stats}
+    except FalkorDBUnavailableError as fe:
+        raise HTTPException(status_code=503, detail=f"FalkorDB is unavailable: {fe}")
+    except Exception as e:
+        logger.error(f"Error backfilling graph relationships: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- WebSocket Stream ---
 @app.websocket("/ws/events")
 async def websocket_event_stream(websocket: WebSocket):

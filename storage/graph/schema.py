@@ -17,6 +17,7 @@ class NodeLabel(str, Enum):
     AGENT = "Agent"
     EXECUTION = "Execution"
     EXECUTION_EVENT = "ExecutionEvent"
+    FAILURE = "Failure"
     DECISION = "Decision"
     HANDOFF = "Handoff"
     ARTIFACT = "Artifact"
@@ -27,17 +28,28 @@ class NodeLabel(str, Enum):
 class RelType(str, Enum):
     HAS_REQUIREMENT = "HAS_REQUIREMENT"
     CONTAINS_TASK = "CONTAINS_TASK"
+    HAS_TASK = "HAS_TASK"
     DEPENDS_ON = "DEPENDS_ON"
-    EXECUTES = "EXECUTES"
+    ASSIGNED_TO = "ASSIGNED_TO"
+    HAS_ATTEMPT = "HAS_ATTEMPT"
     FOR_TASK = "FOR_TASK"
+    EXECUTES = "EXECUTES"
     EMITS = "EMITS"
     PRODUCES = "PRODUCES"
+    PRODUCED = "PRODUCED"
     FAILS_WITH = "FAILS_WITH"
+    FAILED_WITH = "FAILED_WITH"
+    HAS_RESULT = "HAS_RESULT"
+    EVALUATES = "EVALUATES"
+    EVALUATES_EXECUTION = "EVALUATES_EXECUTION"
+    SUPPORTED_BY = "SUPPORTED_BY"
     RESPONDS_TO = "RESPONDS_TO"
     SELECTS = "SELECTS"
+    GOVERNS = "GOVERNS"
+    HAS_DECISION = "HAS_DECISION"
     TRANSFERS_CONTEXT = "TRANSFERS_CONTEXT"
-    EVALUATES = "EVALUATES"
-    SUPPORTED_BY = "SUPPORTED_BY"
+    FROM_AGENT = "FROM_AGENT"
+    TO_AGENT = "TO_AGENT"
 
 
 INDEXED_FIELDS = [
@@ -47,12 +59,16 @@ INDEXED_FIELDS = [
     (NodeLabel.AGENT.value, "id"),
     (NodeLabel.EXECUTION.value, "id"),
     (NodeLabel.EXECUTION.value, "task_id"),
+    (NodeLabel.FAILURE.value, "id"),
+    (NodeLabel.FAILURE.value, "execution_id"),
     (NodeLabel.DECISION.value, "id"),
     (NodeLabel.DECISION.value, "mission_id"),
     (NodeLabel.HANDOFF.value, "id"),
     (NodeLabel.HANDOFF.value, "task_id"),
     (NodeLabel.VERIFICATION.value, "id"),
     (NodeLabel.VERIFICATION.value, "task_id"),
+    (NodeLabel.ARTIFACT.value, "id"),
+    (NodeLabel.EVIDENCE.value, "id"),
 ]
 
 

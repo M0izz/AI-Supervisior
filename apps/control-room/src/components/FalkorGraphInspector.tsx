@@ -103,11 +103,8 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({
     const groups: Record<string, GraphNode[]> = {};
     for (const n of graphData.nodes) {
       let stageKey = n.label;
-      if (n.label === 'ExecutionEvent') {
-        const isFailure = n.properties?.event_type?.includes('FAIL') || 
-                          n.properties?.event_type?.includes('ERROR') || 
-                          n.properties?.severity === 'ERROR';
-        stageKey = isFailure ? 'ExecutionEvent' : 'Execution';
+      if (n.label === 'ExecutionEvent' || n.label === 'Failure') {
+        stageKey = 'ExecutionEvent';
       }
       if (!groups[stageKey]) groups[stageKey] = [];
       groups[stageKey].push(n);
@@ -119,7 +116,7 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({
   const filteredNodes = useMemo(() => {
     if (!graphData) return [];
     return graphData.nodes.filter(n => {
-      const matchesStage = !selectedStage || n.label === selectedStage;
+      const matchesStage = !selectedStage || n.label === selectedStage || (selectedStage === 'ExecutionEvent' && n.label === 'Failure');
       const q = searchQuery.toLowerCase().trim();
       if (!q) return matchesStage;
       const matchesSearch = 
@@ -163,8 +160,9 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({
   // Causal failure event for selected execution or decision
   const causalFailure = useMemo(() => {
     if (!graphData || !selectedNode) return null;
+    if (selectedNode.label === 'Failure') return selectedNode;
     if (selectedNode.label === 'Execution') {
-      const failEdge = graphData.edges.find(e => e.source === selectedNode.id && e.type === 'FAILS_WITH');
+      const failEdge = graphData.edges.find(e => e.source === selectedNode.id && (e.type === 'FAILS_WITH' || e.type === 'FAILED_WITH'));
       if (failEdge) {
         return graphData.nodes.find(n => n.id === failEdge.target) || null;
       }
@@ -187,6 +185,7 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({
       Task: 1,
       Execution: 2,
       ExecutionEvent: 2.8,
+      Failure: 2.8,
       Decision: 3.5,
       Handoff: 4.2,
       Verification: 5,
@@ -232,6 +231,7 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({
   }, [graphData]);
 
   const getNodeColor = (label: string, props?: Record<string, any>) => {
+    if (label === 'Failure') return '#EF4444';
     if (label === 'ExecutionEvent') {
       const isErr = props?.event_type?.includes('FAIL') || props?.severity === 'ERROR';
       return isErr ? '#EF4444' : '#60A5FA';
@@ -244,6 +244,7 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({
   };
 
   const getNodeBadgeClass = (label: string, props?: Record<string, any>) => {
+    if (label === 'Failure') return 'badge-danger';
     if (label === 'ExecutionEvent' && (props?.event_type?.includes('FAIL') || props?.severity === 'ERROR')) {
       return 'badge-danger';
     }
