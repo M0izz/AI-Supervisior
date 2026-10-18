@@ -175,9 +175,27 @@ python -m pytest tests/test_graph_driven_decisions.py tests/test_falkordb_consis
 ## 7. How to Run the Demonstration
 
 ### 1. Start FalkorDB
-```bash
-docker compose up -d
-```
+- **Option A (Local Docker)**:
+  ```bash
+  docker compose up -d
+  ```
+  Uses default settings: `localhost:6379`, no TLS, graph: `ai_supervisor_memory`.
+
+- **Option B (Hosted FalkorDB Cloud)**:
+  Configure environment variables in `.env` or cloud hosting dashboard (Render / Railway / VM):
+  ```env
+  FALKORDB_HOST=your-instance.falkordb.cloud
+  FALKORDB_PORT=14322
+  FALKORDB_USERNAME=default
+  FALKORDB_PASSWORD=your_cloud_password
+  FALKORDB_GRAPH=ai_supervisor_memory
+  FALKORDB_SSL=true
+  FALKORDB_TIMEOUT=15
+  ```
+  Or using a connection URI:
+  ```env
+  FALKORDB_URL=falkors://username:password@your-instance.falkordb.cloud:14322
+  ```
 
 ### 2. Run the End-to-End Real Mission Workflow
 ```bash
@@ -194,4 +212,4 @@ cd apps/control-room
 npm run dev
 ```
 
-Navigate to `http://localhost:5173`, select any mission, and click the **FalkorDB Graph Memory** tab to inspect the live property graph and linked evidence drawer.
+Navigate to `http://localhost:5173` (or `/falkordb`), select any mission, and click the **FalkorDB Graph Memory** tab to inspect the live property graph and linked evidence drawer.
