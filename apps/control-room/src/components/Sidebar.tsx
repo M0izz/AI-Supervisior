@@ -9,7 +9,8 @@ import {
   Settings, 
   FolderGit2, 
   Cloud,
-  Network
+  Network,
+  Globe
 } from 'lucide-react';
 import type { TabType, SyncStatus } from '../types';
 
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSync,
   currentProject = 'AI-Supervisior'
 }) => {
+  const isLanding = activeTab === 'landing';
   const isOverview = activeTab === 'overview' || activeTab === 'control_room';
   const isMissions = activeTab === 'missions' || activeTab === 'mission_detail';
   const isAgents = activeTab === 'agents' || activeTab === 'agent_detail';
@@ -75,6 +77,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation Sections */}
       <nav className="sidebar-nav">
         <div className="nav-section-title">Workspace</div>
+
+        <button
+          className={`nav-item ${isLanding ? 'active' : ''}`}
+          onClick={() => setActiveTab('landing')}
+          title="Product Architecture & Showcase Landing Page"
+        >
+          <Globe size={16} />
+          <span>Landing Page</span>
+        </button>
 
         <button
           className={`nav-item ${isOverview ? 'active' : ''}`}

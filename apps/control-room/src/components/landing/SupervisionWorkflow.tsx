@@ -4,7 +4,8 @@ import {
   Layers, 
   GitBranch, 
   Activity, 
-  ShieldCheck
+  ShieldCheck,
+  Network
 } from 'lucide-react';
 
 interface PipelineStage {
@@ -114,6 +115,25 @@ Test Execution:
 Result: 18 passed in 1.42s
 Verdict: VERIFIED (Ready for operator merge)`,
     badge: '100% Deterministic'
+  },
+  {
+    id: 'falkordb',
+    number: '06',
+    name: 'FalkorDB Provenance',
+    subtitle: 'Temporal Property Graph Memory & Lineage',
+    icon: Network,
+    policy: 'GRAPH LINEAGE & CROSS-SESSION RECALL',
+    governanceDetail: 'Every invariant, subtask assignment, agent tool call, error signature, intervention, and verified output is immutably indexed in FalkorDB Property Graph. Multi-hop Cypher queries trace failure causality and retrieve disproven approach signatures in sub-millisecond latencies.',
+    codeSnippet: `// 6. FalkorDB Temporal Causal Lineage Query
+MATCH (m:Mission {id: "msn_a4ff348e"})-[:HAS_TASK]->(t:Task)
+MATCH (t)-[:HAS_ATTEMPT]->(att:ExecutionAttempt)
+OPTIONAL MATCH (att)-[:FAILED_WITH]->(f:FailureSignature)
+OPTIONAL MATCH (att)-[:PRODUCED]->(art:Artifact)
+RETURN t.title, att.status, f.failure_class, count(art) AS artifacts
+ORDER BY att.attempt_number ASC
+
+// Result: 41 nodes, 69 relationships traversed (2.1ms)`,
+    badge: 'FalkorDB Powered'
   }
 ];
 

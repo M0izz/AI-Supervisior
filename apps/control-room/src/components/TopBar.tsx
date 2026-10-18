@@ -6,7 +6,8 @@ import {
   RefreshCw, 
   Layers,
   Radio,
-  Network
+  Network,
+  Globe
 } from 'lucide-react';
 import type { GraphHealth } from '../types';
 import { getGraphHealth } from '../api';
@@ -18,6 +19,7 @@ interface TopBarProps {
   isSeeding: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  onOpenLanding?: () => void;
   onOpenHud?: () => void;
   onOpenGraphInspector?: () => void;
   wsConnected?: boolean;
@@ -31,6 +33,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   isSeeding,
   onRefresh,
   isRefreshing,
+  onOpenLanding,
   onOpenHud,
   onOpenGraphInspector,
   wsConnected = true,
@@ -107,6 +110,18 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       <div className="topbar-right">
+        {/* Landing Page Overview Link */}
+        {onOpenLanding && (
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={onOpenLanding}
+            title="View Product Overview & Architecture Landing Page"
+          >
+            <Globe size={13} color="var(--primary)" />
+            <span>Landing Page</span>
+          </button>
+        )}
+
         {/* Refresh */}
         <button
           className="btn btn-ghost btn-sm"

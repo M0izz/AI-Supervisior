@@ -11,7 +11,8 @@ import {
   Plus, 
   FlaskConical, 
   Cloud, 
-  Network
+  Network,
+  Globe
 } from 'lucide-react';
 import type { TabType, Mission, AgentRecord } from '../types';
 
@@ -65,6 +66,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   const items: CommandItem[] = [
     // Navigation
+    { id: 'nav-landing', label: 'Go to Landing Page (Product Overview)', icon: Globe, group: 'Navigation', action: () => { onNavigate('landing'); onClose(); } },
     { id: 'nav-overview', label: 'Go to Overview', icon: Activity, group: 'Navigation', action: () => { onNavigate('overview'); onClose(); } },
     { id: 'nav-missions', label: 'Go to Missions', icon: Target, group: 'Navigation', action: () => { onNavigate('missions'); onClose(); } },
     { id: 'nav-agents', label: 'Go to Agents', icon: Bot, group: 'Navigation', action: () => { onNavigate('agents'); onClose(); } },

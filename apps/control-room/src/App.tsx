@@ -42,10 +42,12 @@ import { LandingPage } from './pages/LandingPage';
 import { FalkorDBWorkspace } from './pages/FalkorDBWorkspace';
 
 const getInitialRoute = (): 'landing' | 'app' => {
-  if (typeof window === 'undefined') return 'app';
-  const path = window.location.pathname.toLowerCase();
+  if (typeof window === 'undefined') return 'landing';
+  const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
   const hash = window.location.hash.toLowerCase();
   const search = window.location.search.toLowerCase();
+  
+  // Explicit landing route or query param
   if (
     path.startsWith('/landing') ||
     hash.includes('landing') ||
@@ -53,7 +55,31 @@ const getInitialRoute = (): 'landing' | 'app' => {
   ) {
     return 'landing';
   }
-  return 'app';
+
+  // Explicit control room routes
+  const isControlRoomRoute =
+    path.startsWith('/app') ||
+    path.startsWith('/overview') ||
+    path.startsWith('/missions') ||
+    path.startsWith('/agents') ||
+    path.startsWith('/falkordb') ||
+    path.startsWith('/graph') ||
+    path.startsWith('/memory') ||
+    path.startsWith('/activity') ||
+    path.startsWith('/approvals') ||
+    path.startsWith('/settings') ||
+    hash.includes('overview') ||
+    hash.includes('missions') ||
+    hash.includes('agents') ||
+    hash.includes('falkordb') ||
+    hash.includes('approvals');
+
+  if (isControlRoomRoute) {
+    return 'app';
+  }
+
+  // Root or unmapped paths default to the Landing Page
+  return 'landing';
 };
 
 const getInitialTab = (): TabType => {
@@ -88,9 +114,22 @@ export const App: React.FC = () => {
 
   // Route & Tab Navigation Handler (survives refresh and direct URL access)
   const handleTabChange = useCallback((tab: TabType) => {
+    if (tab === 'landing') {
+      setCurrentRoute('landing');
+      setActiveTab('landing');
+      try {
+        if (window.location.pathname !== '/landing') {
+          window.history.pushState(null, '', '/landing');
+        }
+      } catch {
+        window.location.hash = '#landing';
+      }
+      return;
+    }
+
     setActiveTab(tab);
     setCurrentRoute('app');
-    const pathName = tab === 'falkordb' ? '/falkordb' : tab === 'overview' ? '/app' : `/${tab}`;
+    const pathName = tab === 'falkordb' ? '/falkordb' : tab === 'overview' ? '/overview' : `/${tab}`;
     try {
       if (window.location.pathname !== pathName) {
         window.history.pushState(null, '', pathName);
@@ -103,8 +142,13 @@ export const App: React.FC = () => {
   // Route Synchronization on popstate / hashchange
   useEffect(() => {
     const handleRouteChange = () => {
-      setCurrentRoute(getInitialRoute());
-      setActiveTab(getInitialTab());
+      const route = getInitialRoute();
+      setCurrentRoute(route);
+      if (route === 'app') {
+        setActiveTab(getInitialTab());
+      } else {
+        setActiveTab('landing');
+      }
     };
     window.addEventListener('popstate', handleRouteChange);
     window.addEventListener('hashchange', handleRouteChange);
@@ -308,6 +352,7 @@ export const App: React.FC = () => {
           onRefresh={loadData}
           isRefreshing={isRefreshing}
           onOpenHud={window.supervisorDesktop?.showHud ? () => window.supervisorDesktop?.showHud() : undefined}
+          onOpenLanding={() => handleTabChange('landing')}
           onOpenGraphInspector={() => handleTabChange('falkordb')}
           wsConnected={wsConnected}
           wsLatency={wsLatency}
