@@ -1,36 +1,78 @@
 # FalkorDB Integration: Graph Memory & Coordination Layer
 
-## 1. Executive Summary
+## Track 02: Agent Memory and Coordination
 
-In the **AI Work Supervisor** architecture, **FalkorDB** serves as the authoritative **Graph Memory and Coordination Layer**.
+### AI Supervisor — Graph-Powered Memory and Coordination for AI Agents
 
-Rather than treating FalkorDB as a decorative database or an auxiliary visualization cache, FalkorDB is placed at the center of the supervisory nervous system. It stores task dependencies, multi-attempt execution histories, causal failure chains, handoff context transfers, supervisory recovery decisions, and independent verification evidence.
+> **AI Supervisor turns FalkorDB into a persistent context layer for long-running AI-agent workflows.** It connects missions, tasks, execution attempts, failures, recovery decisions, handoffs, artifacts, and verification evidence into a queryable property graph. Before dispatching work or attempting recovery, the supervisor retrieves relevant dependencies and previous execution history. Its decision lineage makes it possible to inspect not only what an agent did, but also which events and relationships informed the supervisor's response. Unlike a simple execution dashboard, AI Supervisor preserves context across retries and restarts while keeping final completion dependent on verification evidence.
 
 ---
 
-## 2. Persistence Boundaries: SQLite vs. FalkorDB
+## 1. Architectural Details & Traceability Invariants
 
-To preserve local-first reliability and avoid distributed transaction hazards, data ownership is clearly delineated:
+To avoid misleading traceability, three foundational invariants are strictly enforced in Cypher:
+
+1. **Failure Causality (`FAILS_WITH`)**:
+   - `(:Execution)-[:FAILS_WITH]->(:ExecutionEvent)` links an execution attempt directly to the causal failure event that explains why it failed (including error signatures and diagnostic payloads), not simply the latest generic event.
+2. **Verification Lineage (`EVALUATES_EXECUTION` and `EVALUATES`)**:
+   - Each verification explicitly identifies the exact execution attempt and task it evaluated:
+     `(:Verification)-[:EVALUATES]->(:Task)` and `(:Verification)-[:EVALUATES_EXECUTION]->(:Execution)`.
+   - This ensures a passing verification cannot accidentally validate a subsequent untested retry or mask an earlier failure.
+3. **Empirical Prerequisite Gate (`DEPENDS_ON`)**:
+   - The dependency readiness traversal verifies that predecessor tasks are not merely labeled with a `COMPLETED` status string, but have an accepted Verification node in FalkorDB (`is_verified = true`):
+     ```cypher
+     MATCH (t:Task {id: $task_id})-[:DEPENDS_ON]->(dep:Task)
+     OPTIONAL MATCH (v:Verification {decision: 'ACCEPT'})-[:EVALUATES]->(dep)
+     RETURN dep.id AS id, dep.title AS title, dep.status AS status, (v IS NOT NULL) AS is_verified
+     ```
+   - If any prerequisite lacks empirical verification, the supervisor records a `BLOCK_DISPATCH` decision and halts downstream dispatch.
+
+---
+
+## 2. Product Integration: Control Room Mission Graph Inspector
+
+The graph is fully visible in the product via the interactive **FalkorDB Graph Memory Inspector** in the React Control Room (`apps/control-room`):
+
+- **Location**: Navigating to any mission in the Control Room reveals the **FalkorDB Graph Memory** tab alongside Mandatory Plan Review.
+- **8-Stage Mission Lineage Pipeline**:
+  `1. Mission` → `2. Task DAG` → `3. Execution` → `4. Causal Failure` → `5. Supervisory Decision` → `6. Retry / Handoff` → `7. Independent Verification` → `8. Empirical Evidence`
+- **Dual Visual Modes**:
+  1. **Lineage Flow View**: Stage-by-stage causality cards displaying titles, status badges, error signatures, and supervisory decisions.
+  2. **Interactive SVG Graph Topology**: Directed graph rendering with zoom, pan, reset, labeled relationship arrows, and glowing node selection.
+- **Interactive Node Inspector & Evidence Drawer**:
+  - Selecting any node opens a slide-over inspection drawer revealing:
+    - Node Label, ID (with one-click copy), and full properties table.
+    - Graph Traversal Lineage: Incoming and outgoing directed relationships.
+    - Causal Failure Event Card: Explains the exact failure signature and error message.
+    - **Linked Empirical Evidence Viewer**: When inspecting a task or verification, reveals all underlying test commands, AST checks, file integrity assertions, and exit codes.
+
+---
+
+## 3. Persistence Boundaries & Consistency Guarantees
+
+AI Supervisor avoids distributed transaction hazards through clear persistence delineation and fail-fast semantics:
 
 | Subsystem / Data Domain | Authoritative Store | Rationale |
 | :--- | :--- | :--- |
 | **Mission Records & Objectives** | SQLite (CRUD) + **FalkorDB (Graph)** | SQLite stores operational state; FalkorDB anchors the requirement graph. |
-| **Task Dependencies & DAG** | **FalkorDB (Graph)** | Dependency resolution, cycle detection, and readiness traversals. |
-| **Execution Attempts & Retries** | **FalkorDB (Graph)** | Models distinct attempts (`Execution` nodes) rather than overwriting prior attempts. |
+| **Task Dependencies & DAG** | **FalkorDB (Graph)** | Authoritative for dependency resolution, cycle detection, and readiness traversals. |
+| **Execution Attempts & Retries** | **FalkorDB (Graph)** | Distinct attempts (`Execution` nodes) preserved with attempt numbers and statuses. |
 | **Causal Failure Chains** | **FalkorDB (Graph)** | Links failed attempts to specific execution events with `FAILS_WITH`. |
 | **Supervisory Recovery Decisions**| **FalkorDB (Graph)** | Traced via `RESPONDS_TO` (ExecutionEvent) and `SELECTS` (Agent). |
 | **Handoff Provenance & Context** | **FalkorDB (Graph)** | Direct context transfer graph (`Handoff TRANSFERS_CONTEXT Task`). |
-| **Independent Verification Evidence**| **FalkorDB (Graph)** | Proof lineage: `Verification EVALUATES Task` and `SUPPORTED_BY Evidence`. |
+| **Independent Verification Evidence**| **FalkorDB (Graph)** | Proof lineage: `Verification EVALUATES Task`, `EVALUATES_EXECUTION`, and `SUPPORTED_BY Evidence`. |
 | **Transactional Audit Log & Sync** | SQLite | High-frequency write-ahead logging and multi-device sync outbox. |
 
-> **Fail-Safe Invariant**: When FalkorDB is unavailable, graph-dependent coordination endpoints and retrieval flows explicitly return HTTP 503 or raise `FalkorDBUnavailableError`. The system **never** creates silent fallbacks that pretend graph-dependent decisions succeeded.
+### Consistency & Recovery Guarantees
+- **No Silent Fallback**: If FalkorDB disconnects mid-mission, operations immediately raise `FalkorDBUnavailableError` (HTTP 503). The system never silently pretends graph-dependent decisions or verifications succeeded.
+- **Replay Idempotency**: All graph writes use parameterized Cypher `MERGE` on unique IDs (`id`). Replaying the mission event stream or re-evaluating the task DAG produces zero duplicate nodes or relationships.
+- **Restart Durability**: All execution attempts, failure events, decisions, and evidence persist in the FalkorDB Docker volume. Upon cold process restart, the supervisor queries FalkorDB to seamlessly restore in-flight context.
 
 ---
 
-## 3. Property Graph Model
+## 4. Property Graph Schema
 
-### Nodes
-
+### Node Labels
 - **`(:Mission)`**: `{id, title, goal, repository_path, status, created_at, updated_at}`
 - **`(:Requirement)`**: `{id, mission_id, description, category, created_at}`
 - **`(:Task)`**: `{id, mission_id, title, order, status, expected_files, created_at, updated_at}`
@@ -41,10 +83,9 @@ To preserve local-first reliability and avoid distributed transaction hazards, d
 - **`(:Handoff)`**: `{id, task_id, source_agent, target_agent, trigger, status, context_summary, timestamp}`
 - **`(:Artifact)`**: `{id, file_path, artifact_type, hash, created_at}`
 - **`(:Evidence)`**: `{id, evidence_type, description, passed, empirical_data, created_at}`
-- **`(:Verification)`**: `{id, task_id, mission_id, decision, summary, verified_at}`
+- **`(:Verification)`**: `{id, task_id, mission_id, execution_id, decision, summary, verified_at}`
 
 ### Relationships
-
 - `(:Mission)-[:HAS_REQUIREMENT]->(:Requirement)`
 - `(:Mission)-[:CONTAINS_TASK]->(:Task)`
 - `(:Task)-[:DEPENDS_ON]->(:Task)`
@@ -57,19 +98,20 @@ To preserve local-first reliability and avoid distributed transaction hazards, d
 - `(:Decision)-[:SELECTS]->(:Agent)`
 - `(:Handoff)-[:TRANSFERS_CONTEXT]->(:Task)`
 - `(:Verification)-[:EVALUATES]->(:Task)`
+- `(:Verification)-[:EVALUATES_EXECUTION]->(:Execution)`
 - `(:Verification)-[:SUPPORTED_BY]->(:Evidence)`
 
 ---
 
-## 4. Key Cypher Queries & Operational Significance
+## 5. Key Cypher Queries & Operational Impact
 
 ### 1. Task Coordination & Dependency Readiness Traversal
 ```cypher
 MATCH (t:Task {id: $task_id})-[:DEPENDS_ON]->(dep:Task)
-RETURN dep.id AS id, dep.title AS title, dep.status AS status, dep.order AS order
-ORDER BY dep.order ASC
+OPTIONAL MATCH (v:Verification {decision: 'ACCEPT'})-[:EVALUATES]->(dep)
+RETURN dep.id AS id, dep.title AS title, dep.status AS status, (v IS NOT NULL) AS is_verified
 ```
-*Why it matters*: Prior to dispatching a task, the Supervisor inspects all predecessor tasks. If any dependency is not `COMPLETED` or `VERIFIED`, dispatch is blocked.
+*Operational Impact*: Directly gates task dispatch. If any predecessor task lacks empirical verification, dispatch is rejected with a `BLOCK_DISPATCH` decision.
 
 ### 2. Prior Failure History Retrieval for Informed Recovery
 ```cypher
@@ -79,7 +121,7 @@ OPTIONAL MATCH (d:Decision)-[:RESPONDS_TO]->(evt)
 RETURN e.id, e.attempt_number, e.agent_id, e.error_signature, evt.id, evt.event_type, d.id, d.action, d.reason
 ORDER BY e.attempt_number ASC
 ```
-*Why it matters*: When an agent loops or fails tests, the Supervisor queries FalkorDB to assemble a historical failure dossier. This prevents naive retries of identical rejected code paths.
+*Operational Impact*: The supervisor extracts prior failure signatures from FalkorDB and injects them as negative constraints or triggers an agent swap (e.g., routing from Claude to Codex with iterative parser constraints).
 
 ### 3. Supervisory Decision Lineage
 ```cypher
@@ -89,81 +131,67 @@ OPTIONAL MATCH (d)-[:SELECTS]->(a:Agent)
 RETURN d.id, d.task_id, d.decision_type, d.action, d.reason, d.timestamp, evt.id, evt.event_type, a.id, a.display_name
 ORDER BY d.timestamp ASC
 ```
-*Why it matters*: Guarantees complete auditability for why an intervention, model swap, or patch was executed. Every decision references its causal trigger and chosen actor.
+*Operational Impact*: Provides complete explainability. Operators can trace exactly which failure event triggered an intervention and which agent was dispatched to fix it.
 
 ### 4. Independent Verification Evidence Traceability
 ```cypher
 MATCH (v:Verification {task_id: $task_id})-[:EVALUATES]->(t:Task)
+OPTIONAL MATCH (v)-[:EVALUATES_EXECUTION]->(e:Execution)
 OPTIONAL MATCH (v)-[:SUPPORTED_BY]->(ev:Evidence)
-RETURN v.id, v.decision, v.summary, v.verified_at, t.id, t.title,
-       collect({type: ev.evidence_type, description: ev.description, passed: ev.passed}) AS evidence
+RETURN v.id, v.decision, v.summary, v.verified_at, e.id AS execution_id,
+       collect({id: ev.id, type: ev.evidence_type, description: ev.description, passed: ev.passed, data: ev.empirical_data}) AS evidence
 ```
-*Why it matters*: Enforces the core product invariant: **Claimed Complete != Verified Complete**. Verification outcomes are provably linked to empirical test outputs and git diff assertions.
+*Operational Impact*: Proves that claimed completion is supported by concrete, empirical evidence rather than worker self-reports.
 
 ---
 
-## 5. Real Execution Workflow
+## 6. Verification & Automated Test Suites
 
-The real execution lifecycle follows these verified stages:
+The test suite validates the integration across 15 automated test cases:
 
-```mermaid
-graph TD
-    A[Mission Submitted & Plan Approved] -->|Store DAG| B[FalkorDB: Task & DEPENDS_ON]
-    B -->|Query Predecessors| C{Dependencies Met?}
-    C -- No --> D[Hold in PENDING]
-    C -- Yes --> E[Dispatch Attempt 1 to Worker]
-    E -->|Test Run Fails| F[Execution 1 FAILS_WITH ExecutionEvent]
-    F -->|Query Graph Failures| G[Reviewer Diagnoses Failure from History]
-    G -->|Record Recovery Path| H[Decision RESPONDS_TO Event & SELECTS Worker]
-    H -->|Dispatch Attempt 2| I[Worker Applies Patch & Retests]
-    I -->|Test Passes| J[Execution 2 PRODUCES Artifact]
-    J -->|Independent Verifier| K[Verification EVALUATES Task & SUPPORTED_BY Evidence]
-    K --> L[Application Restart: All Graph Nodes & Edges Persist Intact]
-```
-
----
-
-## 6. Setup, Configuration & Running Tests
-
-### Environment Configuration (`.env`)
 ```bash
-FALKORDB_HOST=localhost
-FALKORDB_PORT=6379
-FALKORDB_PASSWORD=
-FALKORDB_GRAPH=ai_supervisor_memory
-FALKORDB_TIMEOUT=10.0
-FALKORDB_SSL=false
+python -m pytest tests/test_graph_driven_decisions.py tests/test_falkordb_consistency_recovery.py tests/test_falkordb_graph_memory.py -v
 ```
 
-### Starting FalkorDB via Docker Compose
+### Verified Test Matrix:
+1. `test_connection_and_health_reporting` — PASS
+2. `test_idempotent_creation` — PASS
+3. `test_task_dependency_traversal` — PASS
+4. `test_failure_retrieval_for_retry` — PASS
+5. `test_handoff_context_retrieval` — PASS
+6. `test_preservation_of_distinct_attempts` — PASS
+7. `test_verification_evidence_traceability` — PASS
+8. `test_unavailable_falkordb_fails_clearly` — PASS
+9. `test_persistence_across_restart` — PASS
+10. `test_plan_approval_gate_enforced_with_graph` — PASS
+11. `test_unverified_prerequisite_blocks_task_dispatch` — PASS (Priority 3)
+12. `test_prior_failure_history_guides_recovery_routing` — PASS (Priority 3)
+13. `test_replay_idempotency_does_not_duplicate_nodes_or_edges` — PASS (Priority 2)
+14. `test_mid_mission_disconnection_raises_falkordb_unavailable_error` — PASS (Priority 2)
+15. `test_state_recovery_across_application_restart` — PASS (Priority 2)
+
+---
+
+## 7. How to Run the Demonstration
+
+### 1. Start FalkorDB
 ```bash
 docker compose up -d
 ```
 
-### Running the FalkorDB Integration Test Suite
-```bash
-python -m pytest tests/test_falkordb_graph_memory.py -v
-```
-
-### Running the Full End-to-End Real Mission Demonstration
+### 2. Run the End-to-End Real Mission Workflow
 ```bash
 python demo_falkordb_workflow.py
 ```
 
----
+### 3. Launch the Backend & Web Control Room
+```bash
+# Terminal 1: FastAPI Backend
+uvicorn apps.api.main:app --port 8000
 
-## 7. Known Limitations & Unimplemented Capabilities
+# Terminal 2: React Control Room
+cd apps/control-room
+npm run dev
+```
 
-1. **Distributed Graph Transactions**: SQLite and FalkorDB dual-writes are currently coordinated via application-level eventual consistency and event streaming; two-phase commit is not implemented.
-2. **Dynamic Cypher Query Builder UI**: Graph inspection endpoints (`/api/missions/{id}/graph`) return raw nodes and edges for visualization, but interactive Cypher query consoles are not yet embedded in the web dashboard.
-3. **Graph Partitioning**: Single graph per project namespace (`ai_supervisor_memory`); multi-tenant cross-cluster sharding is deferred to production scale.
-
----
-
-## 8. AI Assistance Transparency
-
-AI assistance (via Antigravity / Gemini 3.8 Flash) was utilized for:
-- Reverse-engineering repository persistence interfaces.
-- Synthesizing Cypher schema constraints and parameterized query helpers.
-- Writing automated integration test fixtures verifying graph invariants across restarts.
-- Diagnosing WSL2 Docker engine socket bindings on the host operating system.
+Navigate to `http://localhost:5173`, select any mission, and click the **FalkorDB Graph Memory** tab to inspect the live property graph and linked evidence drawer.

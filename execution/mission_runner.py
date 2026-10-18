@@ -181,10 +181,28 @@ class MissionRunner:
                     f"prior_attempts={graph_context.get('total_attempts')}, "
                     f"dependencies_met={graph_context.get('dependencies_met')}"
                 )
+                if not graph_context.get("dependencies_met", True):
+                    unmet = [d["id"] for d in graph_context.get("dependencies", []) if not d.get("is_verified")]
+                    logger.warning(f"[SUPERVISOR] Blocking dispatch of {task_id}: Unverified dependencies {unmet}")
+                    await self.state.graph_repo.record_decision(
+                        decision_id=f"dec_block_{task_id}",
+                        mission_id=mission_id,
+                        task_id=task_id,
+                        decision_type="DEPENDENCY_GATE",
+                        action="BLOCK_DISPATCH",
+                        reason=f"Prerequisites {unmet} not verified in FalkorDB graph memory",
+                        selected_agent_id=worker.agent_id,
+                    )
+                    return {
+                        "status": "BLOCKED",
+                        "reason": f"Prerequisites {unmet} not verified in FalkorDB graph memory",
+                        "unmet_dependencies": unmet,
+                    }
             except Exception as e:
                 logger.warning(f"[FalkorDB] Notice retrieving task coordination context: {e}")
 
         await self.state.task_manager.start_task(mission_id, task_id, worker.agent_id)
+
 
         try:
             # 6. Step A: Initial Test Run (Simulates initial naive codebase state)

@@ -87,9 +87,14 @@ class FalkorDBGraphRepository:
         # Save requirements and link with HAS_REQUIREMENT
         if requirements:
             for i, req in enumerate(requirements):
-                req_id = req.get("id") or f"{mission_id}_req_{i+1}"
-                req_desc = req.get("description") or str(req)
-                req_cat = req.get("category", "in_scope")
+                if isinstance(req, str):
+                    req_id = f"{mission_id}_req_{i+1}"
+                    req_desc = req
+                    req_cat = "in_scope"
+                else:
+                    req_id = req.get("id") or f"{mission_id}_req_{i+1}"
+                    req_desc = req.get("description") or str(req)
+                    req_cat = req.get("category", "in_scope")
                 req_cypher = """
                 MATCH (m:Mission {id: $mission_id})
                 MERGE (r:Requirement {id: $req_id})
@@ -365,10 +370,24 @@ class FalkorDBGraphRepository:
         if event_id:
             link_cypher = """
             MATCH (e:Execution {id: $execution_id})
-            MATCH (evt:ExecutionEvent {id: $event_id})
+            MERGE (evt:ExecutionEvent {id: $event_id})
+            ON CREATE SET
+                evt.execution_id = $execution_id,
+                evt.event_type = 'CAUSAL_FAILURE_EVENT',
+                evt.severity = 'ERROR',
+                evt.payload_json = $payload_str,
+                evt.timestamp = $now
             MERGE (e)-[:FAILS_WITH]->(evt)
             """
-            self.client.query(link_cypher, {"execution_id": execution_id, "event_id": event_id})
+            self.client.query(
+                link_cypher,
+                {
+                    "execution_id": execution_id,
+                    "event_id": event_id,
+                    "payload_str": json.dumps({"error_signature": error_signature, "reason": reason or ""}),
+                    "now": now,
+                },
+            )
 
     async def record_execution_success(
         self,
@@ -484,7 +503,8 @@ class FalkorDBGraphRepository:
         if selected_agent_id:
             link_agent = """
             MATCH (d:Decision {id: $decision_id})
-            MATCH (a:Agent {id: $agent_id})
+            MERGE (a:Agent {id: $agent_id})
+            ON CREATE SET a.display_name = $agent_id
             MERGE (d)-[:SELECTS]->(a)
             """
             self.client.query(link_agent, {"decision_id": decision_id, "agent_id": selected_agent_id})
@@ -546,11 +566,13 @@ class FalkorDBGraphRepository:
         decision: str,
         summary: str,
         evidence_items: Optional[List[Dict[str, Any]]] = None,
+        execution_id: Optional[str] = None,
     ) -> None:
         """
         Records independent verification results.
         Links:
         - (Verification)-[:EVALUATES]->(Task)
+        - (Verification)-[:EVALUATES_EXECUTION]->(Execution)  <-- Exact execution attempt evaluated
         - (Verification)-[:SUPPORTED_BY]->(Evidence)
         """
         now = _now_iso()
@@ -560,10 +582,12 @@ class FalkorDBGraphRepository:
         ON CREATE SET
             v.task_id = $task_id,
             v.mission_id = $mission_id,
+            v.execution_id = $execution_id,
             v.decision = $decision,
             v.summary = $summary,
             v.verified_at = $now
         ON MATCH SET
+            v.execution_id = $execution_id,
             v.decision = $decision,
             v.summary = $summary,
             v.verified_at = $now
@@ -575,11 +599,20 @@ class FalkorDBGraphRepository:
                 "verification_id": verification_id,
                 "task_id": task_id,
                 "mission_id": mission_id,
+                "execution_id": execution_id or "",
                 "decision": decision,
                 "summary": summary,
                 "now": now,
             },
         )
+
+        if execution_id:
+            link_exec = """
+            MATCH (v:Verification {id: $verification_id})
+            MATCH (e:Execution {id: $execution_id})
+            MERGE (v)-[:EVALUATES_EXECUTION]->(e)
+            """
+            self.client.query(link_exec, {"verification_id": verification_id, "execution_id": execution_id})
 
         if evidence_items:
             for item in evidence_items:
@@ -628,15 +661,27 @@ class FalkorDBGraphRepository:
         - Prior decisions & handoff records
         - Verification history
         """
-        # Dependencies query
+        # Dependencies query with empirical verification check
         dep_query = """
         MATCH (t:Task {id: $task_id})-[:DEPENDS_ON]->(dep:Task)
-        RETURN dep.id AS id, dep.title AS title, dep.status AS status, dep.order AS order
+        OPTIONAL MATCH (v:Verification {decision: 'ACCEPT'})-[:EVALUATES]->(dep)
+        RETURN
+            dep.id AS id,
+            dep.title AS title,
+            dep.status AS status,
+            dep.order AS order,
+            (v IS NOT NULL OR dep.status = 'VERIFIED') AS is_verified
         ORDER BY dep.order ASC
         """
         dep_res = self.client.query(dep_query, {"task_id": task_id})
         dependencies = [
-            {"id": row[0], "title": row[1], "status": row[2], "order": row[3]}
+            {
+                "id": row[0],
+                "title": row[1],
+                "status": row[2],
+                "order": row[3],
+                "is_verified": bool(row[4]),
+            }
             for row in (dep_res.result_set or [])
         ]
 
@@ -658,6 +703,7 @@ class FalkorDBGraphRepository:
         executions = [
             {
                 "id": row[0],
+                "execution_id": row[0],
                 "attempt_number": row[1],
                 "status": row[2],
                 "agent_id": row[3],
@@ -711,6 +757,7 @@ class FalkorDBGraphRepository:
         decisions = [
             {
                 "id": row[0],
+                "decision_id": row[0],
                 "decision_type": row[1],
                 "action": row[2],
                 "reason": row[3],
@@ -738,6 +785,7 @@ class FalkorDBGraphRepository:
         handoffs = [
             {
                 "id": row[0],
+                "handoff_id": row[0],
                 "source_agent": row[1],
                 "target_agent": row[2],
                 "trigger": row[3],
@@ -759,13 +807,17 @@ class FalkorDBGraphRepository:
             for row in (ver_res.result_set or [])
         ]
 
+        # Prerequisite tasks must be empirically verified, not merely claiming success
+        dependencies_met = all(bool(d.get("is_verified")) for d in dependencies)
+
         return {
             "mission_id": mission_id,
             "task_id": task_id,
             "dependencies": dependencies,
-            "dependencies_met": all(d["status"] in ("COMPLETED", "VERIFIED") for d in dependencies),
+            "dependencies_met": dependencies_met,
             "total_attempts": len(executions),
             "prior_executions": executions,
+            "prior_attempts": executions,
             "prior_failures": failures,
             "decisions": decisions,
             "handoffs": handoffs,
@@ -829,6 +881,7 @@ class FalkorDBGraphRepository:
                 "error_signature": row[3],
                 "reason": row[4],
                 "event_id": row[5],
+                "causal_event_id": row[5],
                 "event_type": row[6],
                 "decision_id": row[7],
                 "decision_action": row[8],
@@ -864,12 +917,15 @@ class FalkorDBGraphRepository:
         lineage = []
         for row in (res.result_set or []):
             lineage.append({
+                "id": row[0],
                 "decision_id": row[0],
                 "task_id": row[1],
                 "decision_type": row[2],
                 "action": row[3],
                 "reason": row[4],
                 "timestamp": row[5],
+                "responding_to_event_id": row[6],
+                "selected_agent_id": row[9],
                 "causal_event": {
                     "id": row[6],
                     "event_type": row[7],

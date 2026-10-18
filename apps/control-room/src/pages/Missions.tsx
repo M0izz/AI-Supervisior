@@ -16,6 +16,7 @@ import {
   Terminal,
   ChevronRight,
   Activity,
+  Network,
   X
 } from 'lucide-react';
 import type { Mission, Task, Event, SupervisorDecision } from '../types';
@@ -32,6 +33,7 @@ import { HandoffSequence } from '../components/HandoffSequence';
 import { SupervisorDecisionCard } from '../components/SupervisorDecisionCard';
 import { PlanReview } from '../components/PlanReview';
 import { ProviderLogo } from '../components/ProviderLogo';
+import { FalkorGraphInspector } from '../components/FalkorGraphInspector';
 
 interface MissionsProps {
   missions: Mission[];
@@ -48,7 +50,7 @@ export const Missions: React.FC<MissionsProps> = ({
   onRefresh,
   onOpenCreateMission
 }) => {
-  const [activeTab, setActiveTab] = useState<'plan' | 'story' | 'tasks' | 'verification' | 'policy'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'graph' | 'story' | 'tasks' | 'verification' | 'policy'>('plan');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -391,6 +393,7 @@ export const Missions: React.FC<MissionsProps> = ({
         <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px', flexWrap: 'wrap' }}>
           {[
             { id: 'plan', label: 'Mandatory Plan Review', icon: ShieldCheck, badge: selectedMission.approved_plan_version ? `v${selectedMission.approved_plan_version} APPROVED` : 'PLAN GATE' },
+            { id: 'graph', label: 'FalkorDB Graph Memory', icon: Network, badge: 'AUTHORITATIVE' },
             { id: 'story', label: 'Mission Story & Handoffs', icon: Compass },
             { id: 'tasks', label: `Execution Plan (${tasks.length})`, icon: Layers },
             { id: 'verification', label: 'Independent Verification', icon: ShieldCheck },
@@ -423,13 +426,18 @@ export const Missions: React.FC<MissionsProps> = ({
             missionId={selectedMission.id}
             onPlanApproved={() => {
               onRefresh();
-              setActiveTab('story');
+              setActiveTab('graph');
             }}
             onPlanRejected={() => {
               onRefresh();
             }}
             onRefresh={onRefresh}
           />
+        )}
+
+        {/* Tab: FalkorDB Authoritative Graph Memory & Lineage */}
+        {activeTab === 'graph' && (
+          <FalkorGraphInspector missionId={selectedMission.id} />
         )}
 
         {/* Tab 1: Timeline Story & Handoffs */}

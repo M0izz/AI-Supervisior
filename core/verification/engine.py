@@ -252,6 +252,16 @@ class VerificationEngine:
                         "passed": check.status == VerificationCheckStatus.PASS,
                         "data": check.evidence or {},
                     })
+                # Derive exact execution attempt being evaluated for strict verification lineage
+                exec_id = None
+                if self.task_manager:
+                    try:
+                        cur_task = await self.task_manager.get_task(context.mission_id, context.task_id)
+                        if cur_task and cur_task.attempts:
+                            exec_id = f"exec_{context.task_id}_{cur_task.attempts}"
+                    except Exception:
+                        pass
+
                 await self.graph_repository.record_verification(
                     verification_id=verification_id,
                     task_id=context.task_id,
@@ -259,6 +269,7 @@ class VerificationEngine:
                     decision=decision.value,
                     summary=summary or "",
                     evidence_items=evidence_items,
+                    execution_id=exec_id,
                 )
             except Exception as e:
                 logger.warning(f"[VERIFIER] Failed to persist verification to FalkorDB: {e}")

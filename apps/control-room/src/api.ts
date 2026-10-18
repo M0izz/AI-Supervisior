@@ -15,7 +15,11 @@ import type {
   CustomAgentRegistrationRequest,
   SyncStatus,
   SyncDevice,
-  PlanVersion
+  PlanVersion,
+  GraphHealth,
+  MissionGraphData,
+  TaskGraphContext,
+  VerificationTrace
 } from './types';
 
 const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
@@ -478,6 +482,35 @@ export async function regenerateMissionPlan(missionId: string, feedback?: string
     method: 'POST',
     body: JSON.stringify({ feedback })
   });
+}
+
+// ==========================================================
+// FalkorDB Authoritative Graph Memory & Lineage Endpoints
+// ==========================================================
+
+export async function getGraphHealth(): Promise<GraphHealth> {
+  return fetchJson<GraphHealth>('/api/graph/health');
+}
+
+export async function getMissionGraph(missionId: string): Promise<MissionGraphData> {
+  return fetchJson<MissionGraphData>(`/api/missions/${missionId}/graph`);
+}
+
+export async function getTaskGraphContext(missionId: string, taskId: string): Promise<TaskGraphContext> {
+  return fetchJson<TaskGraphContext>(`/api/missions/${missionId}/tasks/${taskId}/graph-context`);
+}
+
+export async function getMissionFailures(missionId: string, taskId?: string): Promise<{ mission_id: string; task_id?: string; failures: any[] }> {
+  const query = taskId ? `?task_id=${encodeURIComponent(taskId)}` : '';
+  return fetchJson<{ mission_id: string; task_id?: string; failures: any[] }>(`/api/missions/${missionId}/failures${query}`);
+}
+
+export async function getMissionDecisions(missionId: string): Promise<{ mission_id: string; decisions: any[] }> {
+  return fetchJson<{ mission_id: string; decisions: any[] }>(`/api/missions/${missionId}/decisions`);
+}
+
+export async function getTaskVerificationTrace(missionId: string, taskId: string): Promise<VerificationTrace> {
+  return fetchJson<VerificationTrace>(`/api/missions/${missionId}/tasks/${taskId}/verification-trace`);
 }
 
 

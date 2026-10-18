@@ -132,6 +132,15 @@ class FalkorDBClient:
             logger.error(f"[FalkorDB] Query failed: {cypher} | Error: {e}")
             raise FalkorDBUnavailableError(f"FalkorDB query execution failed: {e}") from e
 
+    def is_available(self) -> bool:
+        """
+        Returns True if FalkorDB is reachable and responsive, False otherwise.
+        """
+        try:
+            return self.connect()
+        except Exception:
+            return False
+
     def check_health(self) -> Dict[str, Any]:
         """
         Returns structured health diagnostic report for FalkorDB.

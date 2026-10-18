@@ -503,6 +503,102 @@ export interface GeminiAnalysisResponse {
   is_live: boolean;
 }
 
+export interface GraphNode {
+  id: string;
+  label: 'Mission' | 'Requirement' | 'Task' | 'Execution' | 'ExecutionEvent' | 'Decision' | 'Handoff' | 'Verification' | 'Evidence' | 'Artifact' | 'Agent' | string;
+  properties: Record<string, any>;
+}
+
+export interface GraphEdge {
+  source: string;
+  type: string;
+  target: string;
+}
+
+export interface MissionGraphData {
+  mission_id: string;
+  nodes_count: number;
+  edges_count: number;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphHealth {
+  status: 'HEALTHY' | 'UNAVAILABLE' | 'ERROR' | string;
+  connected?: boolean;
+  host: string;
+  port: number;
+  graph_name: string;
+  latency_ms: number;
+  nodes_count?: number;
+  relationships_count?: number;
+  error?: string | null;
+}
+
+export interface TaskGraphContext {
+  task_id: string;
+  mission_id: string;
+  dependencies: Array<{
+    id: string;
+    title: string;
+    status: string;
+    is_verified: boolean;
+  }>;
+  dependencies_met: boolean;
+  prior_attempts: Array<{
+    execution_id: string;
+    attempt_number: number;
+    status: string;
+    agent_id: string;
+    error_signature?: string;
+  }>;
+  causal_failure_history: Array<{
+    execution_id: string;
+    event_id: string;
+    event_type: string;
+    error_signature: string;
+    reason: string;
+  }>;
+  decisions: Array<{
+    decision_id: string;
+    decision_type: string;
+    action: string;
+    reason: string;
+  }>;
+  handoffs: Array<{
+    handoff_id: string;
+    source_agent: string;
+    target_agent: string;
+    trigger: string;
+  }>;
+  verifications: Array<{
+    verification_id: string;
+    execution_id: string;
+    decision: string;
+    summary: string;
+  }>;
+}
+
+export interface VerificationTrace {
+  task_id: string;
+  verification_id: string;
+  decision: string;
+  summary: string;
+  verified_at: string;
+  execution?: {
+    id: string;
+    attempt_number: number;
+    status: string;
+  };
+  evidence: Array<{
+    id: string;
+    type: string;
+    description: string;
+    passed: boolean;
+    empirical_data: any;
+  }>;
+}
+
 declare global {
   interface Window {
     supervisor?: SupervisorDesktopBridge;
