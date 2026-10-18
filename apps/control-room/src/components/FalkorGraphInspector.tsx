@@ -10,7 +10,6 @@ import {
   Terminal, 
   GitBranch, 
   Cpu, 
-  ArrowRight, 
   X, 
   Copy, 
   Check, 
@@ -24,20 +23,32 @@ import { getMissionGraph, getGraphHealth } from '../api';
 
 interface FalkorGraphInspectorProps {
   missionId: string;
+  hideHeader?: boolean;
+  onSeedDemo?: () => void;
+  onSelectMission?: (missionId: string) => void;
+  availableMissions?: Array<{ id: string; title: string; status?: string }>;
+  missionLinks?: Record<string, number>;
 }
 
 const STAGE_ORDER = [
   { id: 'Mission', label: '1. Mission', icon: Sparkles, color: '#3478F6' },
-  { id: 'Task', label: '2. Task DAG', icon: Layers, color: '#06B6D4' },
-  { id: 'Execution', label: '3. Execution', icon: Terminal, color: '#80B5FF' },
-  { id: 'ExecutionEvent', label: '4. Failure', icon: AlertTriangle, color: '#EF4444' },
-  { id: 'Decision', label: '5. Decision', icon: Cpu, color: '#8B5CF6' },
-  { id: 'Handoff', label: '6. Retry / Handoff', icon: GitBranch, color: '#F59E0B' },
-  { id: 'Verification', label: '7. Verification', icon: ShieldCheck, color: '#10B981' },
+  { id: 'Task', label: '2. Tasks', icon: Layers, color: '#06B6D4' },
+  { id: 'Execution', label: '3. Exec', icon: Terminal, color: '#80B5FF' },
+  { id: 'ExecutionEvent', label: '4. Failures', icon: AlertTriangle, color: '#EF4444' },
+  { id: 'Decision', label: '5. Decisions', icon: Cpu, color: '#8B5CF6' },
+  { id: 'Handoff', label: '6. Handoffs', icon: GitBranch, color: '#F59E0B' },
+  { id: 'Verification', label: '7. Verify', icon: ShieldCheck, color: '#10B981' },
   { id: 'Evidence', label: '8. Evidence', icon: CheckCircle2, color: '#14B8A6' }
 ];
 
-export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({ missionId }) => {
+export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({ 
+  missionId, 
+  hideHeader = false, 
+  onSeedDemo,
+  onSelectMission,
+  availableMissions = [],
+  missionLinks = {}
+}) => {
   const [graphData, setGraphData] = useState<MissionGraphData | null>(null);
   const [health, setHealth] = useState<GraphHealth | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -247,67 +258,165 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({ miss
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}>
-      {/* Top Banner: FalkorDB Authoritative Memory Status & Meta */}
+      {/* Top Banner: FalkorDB Authoritative Memory Status & Meta (Hidden when embedded in dedicated workspace) */}
+      {!hideHeader && (
+        <div 
+          className="surface-card" 
+          style={{ 
+            padding: '16px 20px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            gap: '16px', 
+            flexWrap: 'wrap',
+            borderLeft: '4px solid var(--primary)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div 
+              style={{ 
+                width: '36px', 
+                height: '36px', 
+                borderRadius: 'var(--radius-md)', 
+                backgroundColor: 'var(--primary-subtle)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                border: '1px solid var(--primary-border)'
+              }}
+            >
+              <Network size={20} color="var(--primary)" />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  FalkorDB Authoritative Graph Memory
+                </span>
+                <span className="badge badge-blue" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
+                  Track 02: Memory & Coordination
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                <span>Graph: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{health?.graph_name || 'ai_supervisor_memory'}</strong></span>
+                <span>•</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span className={`status-dot ${health?.connected || health?.status === 'HEALTHY' ? 'active' : 'idle'}`} />
+                  {health?.status === 'HEALTHY' ? 'Live & Connected' : 'Checking Connection'}
+                </span>
+                <span>•</span>
+                <span>Latency: <strong style={{ color: 'var(--text-primary)' }}>{health?.latency_ms ? `${health.latency_ms.toFixed(1)}ms` : '< 1ms'}</strong></span>
+                <span>•</span>
+                <span>Nodes: <strong style={{ color: 'var(--primary-ice)' }}>{graphData?.nodes_count ?? 0}</strong></span>
+                <span>•</span>
+                <span>Edges: <strong style={{ color: 'var(--primary-ice)' }}>{graphData?.edges_count ?? 0}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          {/* View Toggle & Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', backgroundColor: 'var(--bg-deep)', borderRadius: 'var(--radius-sm)', padding: '2px', border: '1px solid var(--border-subtle)' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${viewMode === 'lineage' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+                onClick={() => setViewMode('lineage')}
+              >
+                Lineage Flow
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${viewMode === 'topology' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+                onClick={() => setViewMode('topology')}
+              >
+                Graph Topology
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={fetchGraph}
+              disabled={loading}
+            >
+              <RefreshCw size={13} className={loading ? 'spin' : ''} />
+              <span>Refresh Graph</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 8-Stage Supervisory Lineage Stepper Strip */}
       <div 
         className="surface-card" 
         style={{ 
-          padding: '16px 20px', 
+          padding: '8px 12px', 
           display: 'flex', 
           alignItems: 'center', 
-          justifyContent: 'space-between', 
-          gap: '16px', 
+          justifyContent: 'space-between',
+          gap: '10px', 
           flexWrap: 'wrap',
-          borderLeft: '4px solid var(--primary)'
+          backgroundColor: 'var(--surface-elevated)',
+          borderRadius: 'var(--radius-md)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div 
-            style={{ 
-              width: '36px', 
-              height: '36px', 
-              borderRadius: 'var(--radius-md)', 
-              backgroundColor: 'var(--primary-subtle)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              border: '1px solid var(--primary-border)'
-            }}
-          >
-            <Network size={20} color="var(--primary)" />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                FalkorDB Authoritative Graph Memory
-              </span>
-              <span className="badge badge-blue" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
-                Track 02: Memory & Coordination
-              </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              <span>Graph: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{health?.graph_name || 'ai_supervisor_memory'}</strong></span>
-              <span>•</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span className={`status-dot ${health?.connected || health?.status === 'HEALTHY' ? 'active' : 'idle'}`} />
-                {health?.status === 'HEALTHY' ? 'Live & Connected' : 'Checking Connection'}
-              </span>
-              <span>•</span>
-              <span>Latency: <strong style={{ color: 'var(--text-primary)' }}>{health?.latency_ms ? `${health.latency_ms.toFixed(1)}ms` : '< 1ms'}</strong></span>
-              <span>•</span>
-              <span>Nodes: <strong style={{ color: 'var(--primary-ice)' }}>{graphData?.nodes_count ?? 0}</strong></span>
-              <span>•</span>
-              <span>Edges: <strong style={{ color: 'var(--primary-ice)' }}>{graphData?.edges_count ?? 0}</strong></span>
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '4px', whiteSpace: 'nowrap' }}>
+            Stages:
+          </span>
+          {STAGE_ORDER.map((stage) => {
+            const Icon = stage.icon;
+            const count = nodesByStage[stage.id]?.length || 0;
+            const isSelected = selectedStage === stage.id;
+            return (
+              <button
+                key={stage.id}
+                type="button"
+                onClick={() => setSelectedStage(isSelected ? null : stage.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: isSelected ? 'var(--primary-subtle)' : count > 0 ? 'rgba(255, 255, 255, 0.03)' : 'transparent',
+                  border: `1px solid ${isSelected ? 'var(--primary-border)' : count > 0 ? 'var(--border-subtle)' : 'transparent'}`,
+                  color: isSelected ? 'var(--text-primary)' : count > 0 ? 'var(--text-secondary)' : 'var(--text-dim)',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: isSelected ? 600 : 500,
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Icon size={12} color={count > 0 ? stage.color : 'var(--text-dim)'} />
+                <span>{stage.label}</span>
+                <span 
+                  style={{ 
+                    fontSize: '10px', 
+                    padding: '0 4px', 
+                    borderRadius: '10px',
+                    fontWeight: 600,
+                    backgroundColor: count > 0 ? `${stage.color}20` : 'transparent',
+                    color: count > 0 ? stage.color : 'var(--text-dim)'
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* View Toggle & Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* View Mode Switcher + Action Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <div style={{ display: 'flex', backgroundColor: 'var(--bg-deep)', borderRadius: 'var(--radius-sm)', padding: '2px', border: '1px solid var(--border-subtle)' }}>
             <button
               type="button"
               className={`btn btn-sm ${viewMode === 'lineage' ? 'btn-primary' : 'btn-ghost'}`}
-              style={{ padding: '4px 10px', fontSize: '12px' }}
+              style={{ padding: '3px 8px', fontSize: '11.5px' }}
               onClick={() => setViewMode('lineage')}
             >
               Lineage Flow
@@ -315,7 +424,7 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({ miss
             <button
               type="button"
               className={`btn btn-sm ${viewMode === 'topology' ? 'btn-primary' : 'btn-ghost'}`}
-              style={{ padding: '4px 10px', fontSize: '12px' }}
+              style={{ padding: '3px 8px', fontSize: '11.5px' }}
               onClick={() => setViewMode('topology')}
             >
               Graph Topology
@@ -325,76 +434,15 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({ miss
           <button
             type="button"
             className="btn btn-outline btn-sm"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', fontSize: '11.5px' }}
             onClick={fetchGraph}
             disabled={loading}
+            title="Reload graph context for this mission"
           >
-            <RefreshCw size={13} className={loading ? 'spin' : ''} />
-            <span>Refresh Graph</span>
+            <RefreshCw size={12} className={loading ? 'spin' : ''} />
+            <span>Reload</span>
           </button>
         </div>
-      </div>
-
-      {/* 8-Stage Supervisory Lineage Stepper Strip */}
-      <div 
-        className="surface-card" 
-        style={{ 
-          padding: '12px 16px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '8px', 
-          overflowX: 'auto',
-          backgroundColor: 'var(--surface-elevated)'
-        }}
-      >
-        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '4px', whiteSpace: 'nowrap' }}>
-          Traceability Lineage:
-        </span>
-        {STAGE_ORDER.map((stage, idx) => {
-          const Icon = stage.icon;
-          const count = nodesByStage[stage.id]?.length || 0;
-          const isSelected = selectedStage === stage.id;
-          return (
-            <React.Fragment key={stage.id}>
-              <button
-                type="button"
-                onClick={() => setSelectedStage(isSelected ? null : stage.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 10px',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: isSelected ? 'var(--primary-subtle)' : 'var(--bg-deep)',
-                  border: `1px solid ${isSelected ? 'var(--primary-border)' : 'var(--border-subtle)'}`,
-                  color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: isSelected ? 600 : 500,
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Icon size={13} color={stage.color} />
-                <span>{stage.label}</span>
-                <span 
-                  className="badge" 
-                  style={{ 
-                    fontSize: '10px', 
-                    padding: '0 5px', 
-                    backgroundColor: count > 0 ? 'rgba(255,255,255,0.08)' : 'transparent',
-                    color: count > 0 ? 'var(--text-primary)' : 'var(--text-dim)'
-                  }}
-                >
-                  {count}
-                </span>
-              </button>
-              {idx < STAGE_ORDER.length - 1 && (
-                <ArrowRight size={12} color="var(--text-dim)" style={{ flexShrink: 0 }} />
-              )}
-            </React.Fragment>
-          );
-        })}
       </div>
 
       {/* Main Graph Content Area: Lineage Flow vs SVG Topology */}
@@ -415,12 +463,62 @@ export const FalkorGraphInspector: React.FC<FalkorGraphInspectorProps> = ({ miss
           <div>Retrieving mission property graph from FalkorDB...</div>
         </div>
       ) : graphData && graphData.nodes.length === 0 ? (
-        <div className="surface-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <Network size={32} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
-          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>No Graph Nodes for Mission Yet</div>
-          <p style={{ fontSize: '13px', maxWidth: '420px', margin: '6px auto 0 auto' }}>
-            Approve the plan and launch execution tasks. The supervisor will continuously persist DAG nodes, execution attempts, failure events, and verification evidence into FalkorDB.
+        <div className="surface-card" style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 14px auto',
+            color: '#38bdf8'
+          }}>
+            <Network size={22} />
+          </div>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+            No Active Graph Nodes for This Mission Yet
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '460px', margin: '0 auto 18px auto', lineHeight: '1.5' }}>
+            This mission is currently in planning or awaiting approval. As soon as the mission runs, the supervisor continuously writes task DAGs, execution attempts, failure events, recovery decisions, and verification evidence into FalkorDB.
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {onSeedDemo && (
+              <button onClick={onSeedDemo} className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={13} />
+                <span>Populate Graph via Demo Scenario</span>
+              </button>
+            )}
+          </div>
+
+          {availableMissions && availableMissions.length > 0 && availableMissions.some(m => (missionLinks[m.id] || 0) > 0) && (
+            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                Or inspect an existing mission with live graph memory:
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {availableMissions
+                  .filter(m => (missionLinks[m.id] || 0) > 0)
+                  .slice(0, 4)
+                  .map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => onSelectMission && onSelectMission(m.id)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Network size={12} color="#38bdf8" />
+                      <span>{m.title}</span>
+                      <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>
+                        {missionLinks[m.id]} nodes
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: selectedNode ? '1fr 380px' : '1fr', gap: '16px', alignItems: 'start' }}>

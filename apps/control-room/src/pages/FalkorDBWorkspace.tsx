@@ -16,7 +16,6 @@ import {
   GitBranch, 
   Code, 
   Sparkles, 
-  Clock, 
   Play
 } from 'lucide-react';
 import type { 
@@ -71,9 +70,10 @@ ORDER BY e.attempt_number DESC`,
     id: 'empirical-prereq-gate',
     title: '2. Empirical Prerequisite Verification Gate (DEPENDS_ON + EVALUATES)',
     description: 'Enforces the graph invariant: predecessor tasks cannot be merely marked completed; they must possess an accepted independent Verification node in FalkorDB.',
-    cypher: `MATCH (t:Task {mission_id: $mission_id})-[:DEPENDS_ON]->(dep:Task)
+    cypher: `MATCH (m:Mission {id: $mission_id})-[:CONTAINS_TASK]->(t:Task)
+OPTIONAL MATCH (t)-[:DEPENDS_ON]->(dep:Task)
 OPTIONAL MATCH (v:Verification {decision: 'ACCEPT'})-[:EVALUATES]->(dep)
-RETURN t.id AS waiting_task, dep.id AS prerequisite_id, dep.title AS prerequisite_title, dep.status AS dep_status, (v IS NOT NULL) AS is_empirically_verified`,
+RETURN t.id AS task_id, t.title AS task_title, dep.id AS prerequisite_id, dep.status AS dep_status, (v IS NOT NULL) AS is_empirically_verified`,
     defaultParams: { mission_id: '' },
     category: 'Verification'
   },
@@ -149,9 +149,30 @@ export const FalkorDBWorkspace: React.FC<FalkorDBWorkspaceProps> = ({
   // Activity filter state
   const [activityFilter, setActivityFilter] = useState<string>('ALL');
   const [activitySearch, setActivitySearch] = useState<string>('');
+  const [missionLinks, setMissionLinks] = useState<Record<string, number>>({});
 
-  // Keep active mission in sync with params
-  const effectiveMissionId = selectedMissionId || (missions[0]?.id || '');
+  // Auto-select a mission with graph nodes if current one has 0 nodes
+  const effectiveMissionId = useMemo(() => {
+    if (selectedMissionId && (missionLinks[selectedMissionId] || 0) > 0) {
+      return selectedMissionId;
+    }
+    const populated = missions.find(m => (missionLinks[m.id] || 0) > 0);
+    if (!selectedMissionId && populated) {
+      return populated.id;
+    }
+    if (selectedMissionId && (missionLinks[selectedMissionId] || 0) === 0 && populated) {
+      return populated.id;
+    }
+    return selectedMissionId || (missions[0]?.id || '');
+  }, [selectedMissionId, missionLinks, missions]);
+
+  const bestPopulatedMission = useMemo(() => {
+    return missions.find(m => (missionLinks[m.id] || 0) > 0) || null;
+  }, [missions, missionLinks]);
+
+  const selectedMissionObj = useMemo(() => {
+    return missions.find(m => m.id === effectiveMissionId) || null;
+  }, [missions, effectiveMissionId]);
 
   const copyToClipboard = (text: string, label: string = text) => {
     navigator.clipboard.writeText(text);
@@ -170,6 +191,21 @@ export const FalkorDBWorkspace: React.FC<FalkorDBWorkspaceProps> = ({
       setGraphHealth(h);
       setGraphStats(s);
       setActivityEvents(act?.events || []);
+
+      // Query node links per mission to identify populated graphs
+      executeGraphQuery(
+        'MATCH (m:Mission) OPTIONAL MATCH (m)-[r]->(x) RETURN m.id AS id, count(x) AS links'
+      ).then(res => {
+        if (res && res.rows) {
+          const linksMap: Record<string, number> = {};
+          res.rows.forEach((row: any) => {
+            const id = row[0];
+            const count = Number(row[1]) || 0;
+            if (id) linksMap[id] = count;
+          });
+          setMissionLinks(linksMap);
+        }
+      }).catch(() => {});
 
       if (effectiveMissionId) {
         getSupervisorDecisions(effectiveMissionId)
@@ -242,60 +278,106 @@ export const FalkorDBWorkspace: React.FC<FalkorDBWorkspaceProps> = ({
   const isConnected = graphHealth?.connected ?? false;
 
   return (
-    <div className="falkordb-workspace" style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto' }}>
-      {/* 1. Header Section */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(56, 189, 248, 0.12)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#38bdf8'
-            }}>
-              <Network size={18} />
-            </div>
-            <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-              FalkorDB Graph Memory
-            </h1>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: '12px',
-              backgroundColor: isConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-              color: isConnected ? '#10b981' : '#ef4444',
-              border: `1px solid ${isConnected ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px'
-            }}>
-              <span style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: isConnected ? '#10b981' : '#ef4444'
-              }} />
-              {isConnected ? 'FalkorDB Connected' : 'FalkorDB Offline'}
-            </span>
+    <div className="falkordb-workspace" style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 1. Cohesive Hero Header */}
+      <div 
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          flexWrap: 'wrap', 
+          gap: '16px',
+          padding: '18px 22px',
+          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.75) 0%, rgba(30, 41, 59, 0.5) 100%)',
+          borderRadius: '12px',
+          border: '1px solid rgba(56, 189, 248, 0.15)',
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.25)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%)',
+            border: '1px solid rgba(56, 189, 248, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#38bdf8',
+            boxShadow: '0 0 15px rgba(56, 189, 248, 0.2)',
+            flexShrink: 0
+          }}>
+            <Network size={22} />
           </div>
-          <p style={{ margin: 0, fontSize: '13.5px', color: 'var(--text-secondary)' }}>
-            Explore the context, relationships and decisions that power AI Supervisor.
-          </p>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                FalkorDB Graph Memory
+              </h1>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '3px 9px',
+                borderRadius: '12px',
+                backgroundColor: isConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                color: isConnected ? '#10b981' : '#ef4444',
+                border: `1px solid ${isConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: isConnected ? '#10b981' : '#ef4444',
+                  boxShadow: isConnected ? '0 0 8px #10b981' : 'none'
+                }} />
+                {isConnected ? `Connected · ${graphHealth?.latency_ms ? `${Math.round(graphHealth.latency_ms)}ms` : '30ms'}` : 'Offline'}
+              </span>
+            </div>
+            <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Authoritative graph persistence for causal failure chains, prerequisite verification gates, and supervisory decision lineage.
+            </p>
+          </div>
         </div>
 
-        {/* Global Quick Action Bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Global Telemetry & Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 12px',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            fontSize: '12px'
+          }}>
+            <Database size={13} color="#38bdf8" />
+            <span style={{ color: 'var(--text-muted)' }}>Graph:</span>
+            <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+              {graphHealth?.graph_name || 'ai_supervisor_memory'}
+            </strong>
+            <span style={{ color: 'var(--border)' }}>|</span>
+            <span style={{ color: '#10b981', fontWeight: 600 }}>
+              {graphHealth?.nodes_count ?? graphStats?.nodes_count ?? 0} Nodes
+            </span>
+            <span style={{ color: 'var(--border)' }}>•</span>
+            <span style={{ color: '#38bdf8', fontWeight: 600 }}>
+              {graphHealth?.relationships_count ?? graphStats?.relationships_count ?? 0} Edges
+            </span>
+          </div>
+
           <button
             onClick={loadGraphData}
             className="btn btn-secondary btn-sm"
             disabled={isLoading}
             title="Refresh graph health & vitals"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px' }}
           >
             <RefreshCw size={13} className={isLoading ? 'spin' : ''} />
             <span>Refresh</span>
@@ -306,6 +388,7 @@ export const FalkorDBWorkspace: React.FC<FalkorDBWorkspaceProps> = ({
             className="btn btn-primary btn-sm"
             disabled={isSeeding}
             title="Populate graph with realistic authentication recovery mission"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px' }}
           >
             <Sparkles size={13} />
             <span>{isSeeding ? 'Seeding Graph...' : 'Seed Demo Scenario'}</span>
@@ -313,146 +396,120 @@ export const FalkorDBWorkspace: React.FC<FalkorDBWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* 2. Top-Level Mission Selector Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '12px 16px',
-        backgroundColor: 'var(--card-bg)',
-        border: '1px solid var(--border)',
-        borderRadius: '8px',
-        marginBottom: '20px',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
+      {/* 2. Unified Navigation Tabs & Mission Context Control Ribbon */}
+      <div 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: 'var(--card-bg)',
+          border: '1px solid var(--border)',
+          borderRadius: '10px',
+          padding: '6px 10px',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}
+      >
+        {/* Navigation Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'overview', label: 'Overview & Health', icon: Activity },
+            { id: 'explorer', label: 'Graph Explorer', icon: Network },
+            { id: 'lineage', label: 'Execution & Decisions', icon: GitBranch },
+            { id: 'activity', label: 'Graph Activity', icon: Terminal },
+            { id: 'cypher', label: 'Cypher Console', icon: Code }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as WorkspaceTab)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  padding: '7px 14px',
+                  fontSize: '12.5px',
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? '#38bdf8' : 'var(--text-secondary)',
+                  backgroundColor: isActive ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
+                  border: isActive ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid transparent',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Icon size={14} color={isActive ? '#38bdf8' : 'var(--text-muted)'} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Mission Context Selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
             Mission Context:
           </span>
+
           {missions.length > 0 ? (
-            <select
-              value={effectiveMissionId}
-              onChange={(e) => onSelectMission(e.target.value)}
-              style={{
-                backgroundColor: 'var(--bg)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '13px',
-                fontWeight: 500,
-                outline: 'none',
-                minWidth: '260px'
-              }}
-            >
-              {missions.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.title} ({m.id}) — {m.status}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <select
+                value={effectiveMissionId}
+                onChange={(e) => onSelectMission(e.target.value)}
+                style={{
+                  backgroundColor: 'var(--bg)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '12.5px',
+                  fontWeight: 500,
+                  outline: 'none',
+                  minWidth: '280px',
+                  cursor: 'pointer'
+                }}
+              >
+                {missions.map(m => {
+                  const links = missionLinks[m.id];
+                  const nodesLabel = links !== undefined ? `${links} nodes` : '0 nodes';
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {m.title} ({nodesLabel}) — {m.status}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {/* If current mission has 0 nodes and another mission has nodes, give 1-click switcher */}
+              {selectedMissionObj && (missionLinks[effectiveMissionId] || 0) === 0 && bestPopulatedMission && bestPopulatedMission.id !== effectiveMissionId && (
+                <button
+                  type="button"
+                  onClick={() => onSelectMission(bestPopulatedMission.id)}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: '11px',
+                    padding: '4px 8px',
+                    color: '#10b981',
+                    borderColor: 'rgba(16, 185, 129, 0.3)'
+                  }}
+                  title="Switch to mission with populated FalkorDB graph nodes"
+                >
+                  <Sparkles size={11} />
+                  <span>View Populated Mission ({missionLinks[bestPopulatedMission.id]} nodes)</span>
+                </button>
+              )}
+            </div>
           ) : (
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              No active missions found. Click "Seed Demo Scenario" to populate the property graph.
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              No missions found.
             </span>
           )}
         </div>
-
-        {/* Live Vitals Pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 10px',
-            backgroundColor: 'rgba(59, 130, 246, 0.08)',
-            border: '1px solid rgba(59, 130, 246, 0.2)',
-            borderRadius: '6px',
-            color: 'var(--text-secondary)'
-          }}>
-            <Database size={13} color="#3b82f6" />
-            <span>Graph:</span>
-            <strong style={{ color: 'var(--text-primary)' }}>{graphHealth?.graph_name || 'ai_supervisor_memory'}</strong>
-          </div>
-
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 10px',
-            backgroundColor: 'rgba(16, 185, 129, 0.08)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            borderRadius: '6px',
-            color: 'var(--text-secondary)'
-          }}>
-            <span>Nodes:</span>
-            <strong style={{ color: '#10b981' }}>{graphHealth?.nodes_count ?? graphStats?.nodes_count ?? 0}</strong>
-            <span style={{ color: 'var(--border)' }}>•</span>
-            <span>Edges:</span>
-            <strong style={{ color: '#10b981' }}>{graphHealth?.relationships_count ?? graphStats?.relationships_count ?? 0}</strong>
-          </div>
-
-          {isConnected && graphHealth?.latency_ms !== undefined && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              borderRadius: '6px',
-              backgroundColor: 'var(--bg)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-muted)'
-            }}>
-              <Clock size={12} />
-              <span>{Math.round(graphHealth.latency_ms)}ms</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 3. Section Navigation Tabs */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        borderBottom: '1px solid var(--border)',
-        marginBottom: '24px'
-      }}>
-        {[
-          { id: 'overview', label: 'Overview & Health', icon: Activity },
-          { id: 'explorer', label: 'Graph Explorer', icon: Network },
-          { id: 'lineage', label: 'Execution & Decisions', icon: GitBranch },
-          { id: 'activity', label: 'Graph Activity', icon: Terminal },
-          { id: 'cypher', label: 'Cypher & Memory', icon: Code }
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as WorkspaceTab)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                fontSize: '13px',
-                fontWeight: isActive ? 600 : 500,
-                color: isActive ? '#38bdf8' : 'var(--text-secondary)',
-                backgroundColor: 'transparent',
-                border: 'none',
-                borderBottom: isActive ? '2px solid #38bdf8' : '2px solid transparent',
-                cursor: 'pointer',
-                marginBottom: '-1px',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Icon size={15} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
       </div>
 
       {/* 4. Tab Content Panels */}
@@ -654,7 +711,14 @@ export const FalkorDBWorkspace: React.FC<FalkorDBWorkspaceProps> = ({
       {activeTab === 'explorer' && (
         <div>
           {effectiveMissionId ? (
-            <FalkorGraphInspector missionId={effectiveMissionId} />
+            <FalkorGraphInspector 
+              missionId={effectiveMissionId} 
+              hideHeader={true}
+              onSeedDemo={onSeedDemo}
+              onSelectMission={onSelectMission}
+              availableMissions={missions}
+              missionLinks={missionLinks}
+            />
           ) : (
             <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
               <Network size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px auto' }} />
@@ -1009,28 +1073,65 @@ export const FalkorDBWorkspace: React.FC<FalkorDBWorkspaceProps> = ({
                   </span>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: 'var(--bg)', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                        {queryResult.columns.map((col, idx) => (
-                          <th key={idx} style={{ padding: '8px 12px', fontWeight: 600 }}>{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {queryResult.rows.map((row, rIdx) => (
-                        <tr key={rIdx} style={{ borderBottom: '1px solid var(--border)' }}>
-                          {row.map((val, cIdx) => (
-                            <td key={cIdx} style={{ padding: '8px 12px', fontFamily: typeof val === 'object' ? 'monospace' : 'inherit' }}>
-                              {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}
-                            </td>
+                {queryResult.rows.length === 0 ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', backgroundColor: 'var(--bg)', borderRadius: '6px', border: '1px dashed var(--border)' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                      No matching records found for mission <code style={{ color: '#38bdf8', padding: '1px 5px', borderRadius: '3px', backgroundColor: 'rgba(56, 189, 248, 0.1)' }}>{queryParams.mission_id || effectiveMissionId || 'all'}</code>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '580px', margin: '0 auto', lineHeight: '1.5' }}>
+                      This query searches for specific graph relationship invariants (e.g. prerequisite dependencies or failure traces). Because this mission has not triggered these conditions, the property graph has 0 matching edges for this pattern.
+                    </div>
+                    <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tpl = CYPHER_TEMPLATES.find(t => t.id === 'mission-topology-summary') || CYPHER_TEMPLATES[5];
+                          handleSelectTemplate(tpl);
+                        }}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '11.5px' }}
+                      >
+                        Try Query 6 (Full Topology Breakdown)
+                      </button>
+                      {bestPopulatedMission && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQueryParams(prev => ({ ...prev, mission_id: bestPopulatedMission.id }));
+                            onSelectMission(bestPopulatedMission.id);
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '11.5px', color: '#10b981' }}
+                        >
+                          Switch to Populated Mission ({bestPopulatedMission.title})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--bg)', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                          {queryResult.columns.map((col, idx) => (
+                            <th key={idx} style={{ padding: '8px 12px', fontWeight: 600 }}>{col}</th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {queryResult.rows.map((row, rIdx) => (
+                          <tr key={rIdx} style={{ borderBottom: '1px solid var(--border)' }}>
+                            {row.map((val, cIdx) => (
+                              <td key={cIdx} style={{ padding: '8px 12px', fontFamily: typeof val === 'object' ? 'monospace' : 'inherit' }}>
+                                {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
