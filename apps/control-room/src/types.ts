@@ -605,3 +605,31 @@ declare global {
   }
 }
 
+export interface AdapterSetupGuide {
+  adapter_id: string;
+  display_name: string;
+  provider: string;
+  runtime_type: string;
+  description: string;
+  executable_name: string;
+  install_method: string;
+  install_command: string;
+  verification_command: string;
+  required_env_vars: string[];
+  supported_os: string[];
+  documentation_url: string;
+  prerequisites: string[];
+}
+
+export interface GraphActivityEvent {
+  id: string;
+  operation_type: string;
+  timestamp: string;
+  description: string;
+  status: string;
+  mission_id?: string | null;
+  task_id?: string | null;
+  direction: 'READ' | 'WRITE';
+  success: boolean;
+}
+

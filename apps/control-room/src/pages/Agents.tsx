@@ -7,10 +7,25 @@ import {
   Server, 
   Terminal, 
   Search, 
-  X
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  RotateCw,
+  HelpCircle,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
-import type { AgentRecord, AdapterInfo } from '../types';
-import { pauseAgent, resumeAgent, registerCustomAgent } from '../api';
+import type { AgentRecord, AdapterInfo, AdapterSetupGuide } from '../types';
+import { 
+  pauseAgent, 
+  resumeAgent, 
+  registerCustomAgent, 
+  getAdapterSetupGuide, 
+  recheckAdapterAvailability, 
+  testAdapterExecution 
+} from '../api';
 import { ProviderLogo } from '../components/ProviderLogo';
 
 interface AgentsProps {
@@ -31,9 +46,21 @@ interface FleetItem {
   defaultCaps: string[];
   supportedModels?: string[];
   sessionSupport?: boolean;
+  isPlanned?: boolean;
 }
 
 const FLEET_REGISTRY: FleetItem[] = [
+  {
+    id: 'worker_01',
+    name: 'Autonomous Python Worker',
+    provider: 'AI Supervisor Built-in',
+    role: 'Native Tool Sandbox (File Edit, Diff, Git & Pytest)',
+    category: 'Local',
+    infrastructure: 'LOCAL',
+    defaultCaps: ['code_execution', 'filesystem_read', 'filesystem_write', 'git', 'test_execution'],
+    supportedModels: ['Gemma 4 (Supervised)', 'Claude 3.7 Sonnet', 'Nemotron 4'],
+    sessionSupport: false
+  },
   { 
     id: 'claude_code', 
     name: 'Claude Code', 
@@ -55,89 +82,6 @@ const FLEET_REGISTRY: FleetItem[] = [
     supportedModels: ['Codex / GPT-4o', 'o3-mini'] 
   },
   { 
-    id: 'cursor', 
-    name: 'Cursor Agent', 
-    provider: 'Anysphere', 
-    role: 'Context-Engineered IDE Agent & Fast Code Repair', 
-    category: 'Coding', 
-    infrastructure: 'LOCAL', 
-    defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution', 'git'], 
-    supportedModels: ['Claude 3.7 Sonnet', 'Cursor Small'] 
-  },
-  { 
-    id: 'devin', 
-    name: 'Cognition Devin', 
-    provider: 'Cognition', 
-    role: 'Autonomous End-to-End Cloud Software Engineer', 
-    category: 'Cloud', 
-    infrastructure: 'LOCAL', 
-    defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'browser_control'], 
-    supportedModels: ['Devin Engine', 'Cognition 1.0'],
-    sessionSupport: true 
-  },
-  { 
-    id: 'windsurf', 
-    name: 'Windsurf Cascade', 
-    provider: 'Codeium', 
-    role: 'Flow-State Multi-File Patching & Deep Search', 
-    category: 'Coding', 
-    infrastructure: 'LOCAL', 
-    defaultCaps: ['code_execution', 'filesystem_write', 'git'], 
-    supportedModels: ['Cascade Base', 'Claude 3.7 Sonnet'] 
-  },
-  { 
-    id: 'copilot', 
-    name: 'GitHub Copilot CLI', 
-    provider: 'GitHub', 
-    role: 'Terminal Assistance & Inline Code Synthesis', 
-    category: 'Coding', 
-    infrastructure: 'LOCAL', 
-    defaultCaps: ['code_execution', 'git', 'terminal_execution'], 
-    supportedModels: ['GPT-4o', 'Claude 3.7 Sonnet'] 
-  },
-  { 
-    id: 'cline', 
-    name: 'Cline', 
-    provider: 'Cline Core', 
-    role: 'Autonomous Coding & File Patching', 
-    category: 'Coding', 
-    infrastructure: 'LOCAL', 
-    defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution'], 
-    supportedModels: ['Claude 3.7', 'DeepSeek R1'] 
-  },
-  { 
-    id: 'goose', 
-    name: 'Goose', 
-    provider: 'Block', 
-    role: 'Open Extensible On-machine Developer Agent', 
-    category: 'Open Source', 
-    infrastructure: 'LOCAL', 
-    defaultCaps: ['code_execution', 'terminal_execution', 'developer_tools'], 
-    supportedModels: ['Open Weights', 'Databricks DBRX'] 
-  },
-  { 
-    id: 'hermes', 
-    name: 'Hermes Agent', 
-    provider: 'Nous Research', 
-    role: 'Long-running Autonomous Agent Sessions', 
-    category: 'Open Source', 
-    infrastructure: 'DIGITALOCEAN', 
-    defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'governed_tools'], 
-    supportedModels: ['Hermes-4-70B', 'Gemma-4-31B'], 
-    sessionSupport: true 
-  },
-  { 
-    id: 'digitalocean_managed', 
-    name: 'DigitalOcean Managed Agent', 
-    provider: 'DigitalOcean', 
-    role: 'MicroVM Cloud Sandbox & Action Gateway', 
-    category: 'Cloud', 
-    infrastructure: 'DIGITALOCEAN', 
-    defaultCaps: ['remote_execution', 'microvm_isolation', 'governed_tools', 'git'], 
-    supportedModels: ['Hermes 4', 'Gemma 4', 'Llama 3.3'], 
-    sessionSupport: true 
-  },
-  { 
     id: 'gemini', 
     name: 'Gemini CLI', 
     provider: 'Google', 
@@ -150,7 +94,7 @@ const FLEET_REGISTRY: FleetItem[] = [
   { 
     id: 'qwen', 
     name: 'Qwen Local', 
-    provider: 'Alibaba Cloud', 
+    provider: 'Alibaba Cloud / Ollama', 
     role: 'On-device Local LLM Offline Agent', 
     category: 'Local', 
     infrastructure: 'LOCAL', 
@@ -176,6 +120,94 @@ const FLEET_REGISTRY: FleetItem[] = [
     infrastructure: 'NEBIUS', 
     defaultCaps: ['large_context', 'code_review'], 
     supportedModels: ['Kimi 1.5'] 
+  },
+  { 
+    id: 'hermes', 
+    name: 'Hermes Agent', 
+    provider: 'Nous Research', 
+    role: 'Long-running Autonomous Agent Sessions', 
+    category: 'Open Source', 
+    infrastructure: 'DIGITALOCEAN', 
+    defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'governed_tools'], 
+    supportedModels: ['Hermes-4-70B', 'Gemma-4-31B'], 
+    sessionSupport: true 
+  },
+  { 
+    id: 'digitalocean_managed', 
+    name: 'DigitalOcean Managed Agent', 
+    provider: 'DigitalOcean', 
+    role: 'MicroVM Cloud Sandbox & Action Gateway', 
+    category: 'Cloud', 
+    infrastructure: 'DIGITALOCEAN', 
+    defaultCaps: ['remote_execution', 'microvm_isolation', 'governed_tools', 'git'], 
+    supportedModels: ['Hermes 4', 'Gemma 4', 'Llama 3.3'], 
+    sessionSupport: true 
+  },
+  { 
+    id: 'goose', 
+    name: 'Goose', 
+    provider: 'Block', 
+    role: 'Open Extensible On-machine Developer Agent', 
+    category: 'Open Source', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'terminal_execution', 'developer_tools'], 
+    supportedModels: ['Open Weights', 'Databricks DBRX'] 
+  },
+  { 
+    id: 'cline', 
+    name: 'Cline', 
+    provider: 'Cline Core', 
+    role: 'Autonomous Coding & File Patching', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution'], 
+    supportedModels: ['Claude 3.7', 'DeepSeek R1'] 
+  },
+  // Explicitly marked as PLANNED integrations (Section 5 / Priority 1.E)
+  { 
+    id: 'cursor', 
+    name: 'Cursor Agent', 
+    provider: 'Anysphere', 
+    role: 'Context-Engineered IDE Agent & Fast Code Repair', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'filesystem_write', 'terminal_execution', 'git'], 
+    supportedModels: ['Claude 3.7 Sonnet', 'Cursor Small'],
+    isPlanned: true
+  },
+  { 
+    id: 'devin', 
+    name: 'Cognition Devin', 
+    provider: 'Cognition', 
+    role: 'Autonomous End-to-End Cloud Software Engineer', 
+    category: 'Cloud', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'long_running_session', 'remote_execution', 'browser_control'], 
+    supportedModels: ['Devin Engine', 'Cognition 1.0'],
+    sessionSupport: true,
+    isPlanned: true
+  },
+  { 
+    id: 'windsurf', 
+    name: 'Windsurf Cascade', 
+    provider: 'Codeium', 
+    role: 'Flow-State Multi-File Patching & Deep Search', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'filesystem_write', 'git'], 
+    supportedModels: ['Cascade Base', 'Claude 3.7 Sonnet'],
+    isPlanned: true
+  },
+  { 
+    id: 'copilot', 
+    name: 'GitHub Copilot CLI', 
+    provider: 'GitHub', 
+    role: 'Terminal Assistance & Inline Code Synthesis', 
+    category: 'Coding', 
+    infrastructure: 'LOCAL', 
+    defaultCaps: ['code_execution', 'git', 'terminal_execution'], 
+    supportedModels: ['GPT-4o', 'Claude 3.7 Sonnet'],
+    isPlanned: true
   }
 ];
 
@@ -248,25 +280,14 @@ const INFRASTRUCTURE_PROVIDERS: ProviderItem[] = [
     statusColor: 'var(--text-muted)'
   },
   {
-    id: 'gemini',
-    name: 'Google Gemini',
-    category: 'Multimodal Inference & Incident Diagnostics',
-    description: 'Powers deep failure diagnosis, architecture boundary reviews, multimodal UI and diagram analysis, and operational incident briefings.',
-    features: ['Complex failure diagnosis & root-cause isolation', 'Multimodal UI & architecture analysis', 'Operational incident briefings'],
-    badgeText: 'OPTIONAL INTEGRATION',
-    badgeClass: 'badge-neutral',
-    statusText: 'Configure via Settings',
-    statusColor: 'var(--text-muted)'
-  },
-  {
     id: 'local',
-    name: 'Local Workstation',
-    category: 'Developer Machine Host',
-    description: 'Executes agents on your local workstation with isolated Git worktrees, native subprocess runners, and real-time telemetry.',
-    features: ['Git worktree isolation', 'Local CLI execution (Claude, Codex)', 'Offline-first persistence (SQLite WAL)'],
-    badgeText: 'ALWAYS ACTIVE',
-    badgeClass: 'badge-blue',
-    statusText: 'Connected',
+    name: 'Local Host Substrate',
+    category: 'Developer Workstation & Git Worktrees',
+    description: 'Native host workstation process execution environment. Powers isolated git worktrees, local subprocess sandboxes, and file-based supervisory artifacts.',
+    features: ['Isolated Git worktrees per mission', 'Subprocess supervision & watchdog kill switches', 'Zero cloud egress for offline tasks'],
+    badgeText: 'CONNECTED & ACTIVE',
+    badgeClass: 'badge-green',
+    statusText: 'Host Ready',
     statusColor: 'var(--success)'
   }
 ];
@@ -298,18 +319,30 @@ export const Agents: React.FC<AgentsProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isActing, setIsActing] = useState(false);
+  
+  // Custom Agent Registration modal
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
-
-  // Custom agent registration form
   const [customName, setCustomName] = useState('');
   const [customId, setCustomId] = useState('');
   const [customCommand, setCustomCommand] = useState('');
   const [customExecutionMode, setCustomExecutionMode] = useState<'local_process' | 'remote_managed'>('local_process');
 
+  // Setup / Install Instructions modal
+  const [setupModalItem, setSetupModalItem] = useState<FleetItem | null>(null);
+  const [setupGuide, setSetupGuide] = useState<AdapterSetupGuide | null>(null);
+  const [isLoadingGuide, setIsLoadingGuide] = useState(false);
+  const [isRechecking, setIsRechecking] = useState(false);
+  const [recheckMessage, setRecheckMessage] = useState<string | null>(null);
+  const [copiedCommand, setCopiedCommand] = useState(false);
+
+  // Test Execution state
+  const [testResult, setTestResult] = useState<any | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+
   const safeAgents = Array.isArray(agents) ? agents : [];
   const safeAdapters = Array.isArray(adapters) ? adapters : [];
 
-  // Build unified fleet view
+  // Build unified truthful fleet view
   const fleetList = FLEET_REGISTRY.map(reg => {
     const matchedAdapter = safeAdapters.find(a => 
       a.adapter_id?.toLowerCase() === reg.id.toLowerCase() ||
@@ -321,18 +354,51 @@ export const Agents: React.FC<AgentsProps> = ({
       (matchedAdapter && a.agent_id.toLowerCase().includes(matchedAdapter.adapter_id.toLowerCase()))
     );
 
-    const isInstalled = !!matchedAdapter;
-    const isAvail = matchedAdapter ? (matchedAdapter.availability?.available ?? true) : false;
+    // 1. Truthful Installation & Configuration Status
+    let installStatus: 'INSTALLED_AVAILABLE' | 'NOT_INSTALLED' | 'NOT_CONFIGURED' | 'MISSING_CREDENTIALS' | 'UNAVAILABLE' | 'ERROR' | 'PLANNED';
+    let installMessage = '';
+
+    if (reg.id === 'worker_01') {
+      installStatus = 'INSTALLED_AVAILABLE';
+      installMessage = 'Native Python autonomous worker and sandbox active in workspace.';
+    } else if (reg.isPlanned) {
+      installStatus = 'PLANNED';
+      installMessage = 'Integration planned in roadmap. Real adapter driver not yet loaded.';
+    } else if (matchedAdapter) {
+      const availStatus = matchedAdapter.availability?.status;
+      const isAvail = matchedAdapter.availability?.available ?? false;
+      installMessage = matchedAdapter.availability?.message || '';
+
+      if (isAvail) {
+        installStatus = 'INSTALLED_AVAILABLE';
+      } else if (availStatus === 'NOT_INSTALLED') {
+        installStatus = 'NOT_INSTALLED';
+      } else if (availStatus === 'NOT_CONFIGURED') {
+        installStatus = 'NOT_CONFIGURED';
+      } else if (availStatus === 'UNAUTHORIZED') {
+        installStatus = 'MISSING_CREDENTIALS';
+      } else if (availStatus === 'ERROR') {
+        installStatus = 'ERROR';
+      } else {
+        installStatus = 'UNAVAILABLE';
+      }
+    } else {
+      installStatus = 'NOT_INSTALLED';
+      installMessage = 'Runtime not registered on local host.';
+    }
+
+    // 2. Truthful Execution Status (Section 1.A: Standby is ONLY an execution state, not an installation substitute)
+    let executionStatus: 'RUNNING' | 'BUSY' | 'PAUSED' | 'IDLE_STANDBY' = 'IDLE_STANDBY';
     const isWorking = liveInstance?.status === 'RUNNING' || liveInstance?.status === 'BUSY';
     const isPaused = liveInstance?.status === 'PAUSED';
 
-    let statusDisplay = 'STANDBY (NOT INSTALLED)';
-    if (isWorking) statusDisplay = 'BUSY';
-    else if (isPaused) statusDisplay = 'PAUSED';
-    else if (isInstalled && isAvail) statusDisplay = 'AVAILABLE';
-    else if (isInstalled && matchedAdapter?.availability?.status === 'UNAUTHORIZED') statusDisplay = 'AUTH NEEDED';
-    else if (isInstalled && !isAvail) statusDisplay = 'STANDBY (CLI NOT CONFIGURED)';
-    else statusDisplay = 'STANDBY (NOT INSTALLED)';
+    if (isWorking) {
+      executionStatus = 'BUSY';
+    } else if (isPaused) {
+      executionStatus = 'PAUSED';
+    } else {
+      executionStatus = 'IDLE_STANDBY';
+    }
 
     const capabilities = matchedAdapter?.capabilities || reg.defaultCaps;
 
@@ -340,11 +406,13 @@ export const Agents: React.FC<AgentsProps> = ({
       ...reg,
       adapter: matchedAdapter,
       liveInstance,
-      isInstalled,
-      isAvailable: isAvail,
+      installStatus,
+      installMessage,
+      executionStatus,
+      isInstalled: installStatus === 'INSTALLED_AVAILABLE' || installStatus === 'NOT_CONFIGURED' || installStatus === 'MISSING_CREDENTIALS',
+      isAvailable: installStatus === 'INSTALLED_AVAILABLE',
       isWorking,
       isPaused,
-      statusDisplay,
       capabilities,
       verificationRate: liveInstance?.metadata?.verification_rate || (liveInstance?.status === 'COMPLETED' ? 'Verified' : null),
       interventions: liveInstance?.interventions || 0
@@ -383,6 +451,59 @@ export const Agents: React.FC<AgentsProps> = ({
     }
   };
 
+  const handleOpenSetupModal = async (item: FleetItem) => {
+    setSetupModalItem(item);
+    setIsLoadingGuide(true);
+    setRecheckMessage(null);
+    setCopiedCommand(false);
+    try {
+      const guide = await getAdapterSetupGuide(item.id);
+      setSetupGuide(guide);
+    } catch {
+      setSetupGuide(null);
+    } finally {
+      setIsLoadingGuide(false);
+    }
+  };
+
+  const handleRecheckRuntime = async () => {
+    if (!setupModalItem) return;
+    setIsRechecking(true);
+    setRecheckMessage(null);
+    try {
+      const res = await recheckAdapterAvailability(setupModalItem.id);
+      if (res.available) {
+        setRecheckMessage(`Success! Runtime '${setupModalItem.name}' detected at ${res.executable_path || 'PATH'}.`);
+      } else {
+        setRecheckMessage(`Still unavailable: ${res.message}`);
+      }
+      onRefresh();
+    } catch (e: any) {
+      setRecheckMessage(`Detection probe error: ${e.message}`);
+    } finally {
+      setIsRechecking(false);
+    }
+  };
+
+  const handleTestRuntime = async (adapterId: string) => {
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const res = await testAdapterExecution(adapterId);
+      setTestResult(res);
+    } catch (e: any) {
+      setTestResult({ status: 'FAILED', message: e.message });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleCopyCommand = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCommand(true);
+    setTimeout(() => setCopiedCommand(false), 2000);
+  };
+
   const handleRegisterCustom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customName || !customId || !customCommand) return;
@@ -406,7 +527,7 @@ export const Agents: React.FC<AgentsProps> = ({
 
   const readyCount = fleetList.filter(f => f.isAvailable).length;
   const runningCount = fleetList.filter(f => f.isWorking).length;
-  const standbyCount = fleetList.filter(f => !f.isAvailable && !f.isWorking).length;
+  const missingCount = fleetList.filter(f => !f.isAvailable && !f.isPlanned).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1100px' }}>
@@ -416,8 +537,14 @@ export const Agents: React.FC<AgentsProps> = ({
           <h1 style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
             Agent Fleet Control Center
           </h1>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {fleetList.length} runtimes integrated · <span style={{ color: readyCount > 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 500 }}>{readyCount} ready</span> · {runningCount} active · <span style={{ color: 'var(--text-muted)' }}>{standbyCount} standby</span>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span><strong>{fleetList.length}</strong> total runtimes</span>
+            <span>•</span>
+            <span style={{ color: 'var(--success)', fontWeight: 600 }}>{readyCount} installed & available</span>
+            <span>•</span>
+            <span>{runningCount} actively running</span>
+            <span>•</span>
+            <span style={{ color: 'var(--warning)' }}>{missingCount} require local setup</span>
           </div>
         </div>
 
@@ -493,11 +620,28 @@ export const Agents: React.FC<AgentsProps> = ({
           </div>
 
           {/* Master-Detail Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '18px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: '18px' }}>
             {/* Cards List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {filteredFleet.map(item => {
                 const isSelected = selectedItem?.id === item.id;
+                
+                let badgeClass = 'badge-neutral';
+                let badgeLabel = 'PLANNED';
+                if (item.installStatus === 'INSTALLED_AVAILABLE') {
+                  badgeClass = 'badge-green';
+                  badgeLabel = item.isWorking ? 'RUNNING' : 'AVAILABLE';
+                } else if (item.installStatus === 'NOT_INSTALLED') {
+                  badgeClass = 'badge-amber';
+                  badgeLabel = 'NOT INSTALLED';
+                } else if (item.installStatus === 'NOT_CONFIGURED') {
+                  badgeClass = 'badge-amber';
+                  badgeLabel = 'NOT CONFIGURED';
+                } else if (item.installStatus === 'MISSING_CREDENTIALS') {
+                  badgeClass = 'badge-red';
+                  badgeLabel = 'NEEDS API KEY';
+                }
+
                 return (
                   <div
                     key={item.id}
@@ -506,7 +650,7 @@ export const Agents: React.FC<AgentsProps> = ({
                       borderColor: isSelected ? 'var(--primary)' : 'var(--border)',
                       backgroundColor: isSelected ? 'var(--surface-elevated)' : 'var(--surface)',
                       padding: '12px 14px',
-                      opacity: item.isAvailable ? 1 : 0.75
+                      opacity: item.isAvailable ? 1 : 0.85
                     }}
                     onClick={() => onSelectAgent(item.id)}
                   >
@@ -526,9 +670,8 @@ export const Agents: React.FC<AgentsProps> = ({
                         </div>
                       </div>
 
-                      <span className="status-pill">
-                        <span className={`status-dot ${item.isWorking ? 'running' : item.isInstalled && item.isAvailable ? 'active' : 'idle'}`} />
-                        <span style={{ fontSize: '10px' }}>{item.statusDisplay}</span>
+                      <span className={`badge ${badgeClass}`} style={{ fontSize: '10px' }}>
+                        {badgeLabel}
                       </span>
                     </div>
 
@@ -559,46 +702,147 @@ export const Agents: React.FC<AgentsProps> = ({
                       </div>
                     </div>
 
-                    {selectedItem.liveInstance && (
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={handleToggleAgentPause}
-                        disabled={isActing}
-                      >
-                        {selectedItem.isPaused ? <Play size={12} /> : <Pause size={12} />}
-                        <span>{selectedItem.isPaused ? 'Resume' : 'Pause'}</span>
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedItem.liveInstance && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={handleToggleAgentPause}
+                          disabled={isActing}
+                        >
+                          {selectedItem.isPaused ? <Play size={12} /> : <Pause size={12} />}
+                          <span>{selectedItem.isPaused ? 'Resume' : 'Pause'}</span>
+                        </button>
+                      )}
+
+                      {/* Primary Next Action */}
+                      {selectedItem.isAvailable ? (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleTestRuntime(selectedItem.id)}
+                          disabled={isTesting}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <Zap size={13} />
+                          <span>{isTesting ? 'Testing...' : 'Test Runtime'}</span>
+                        </button>
+                      ) : !selectedItem.isPlanned ? (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleOpenSetupModal(selectedItem)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <Terminal size={13} />
+                          <span>Install / Setup</span>
+                        </button>
+                      ) : (
+                        <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
+                          Planned Integration
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Status Banner */}
+                  {/* Test Result Feedback */}
+                  {testResult && (
+                    <div style={{
+                      padding: '12px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: testResult.status === 'SUCCESS' ? 'var(--success-subtle)' : 'var(--danger-subtle)',
+                      border: `1px solid ${testResult.status === 'SUCCESS' ? 'var(--success-border)' : 'var(--danger-border)'}`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: testResult.status === 'SUCCESS' ? 'var(--success)' : 'var(--danger)' }}>
+                        {testResult.status === 'SUCCESS' ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                        <span>{testResult.status === 'SUCCESS' ? 'Runtime Operable' : 'Diagnostic Check Failed'}</span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
+                        {testResult.message}
+                      </p>
+                      {testResult.executable_path && (
+                        <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                          Binary: {testResult.executable_path}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Dual Status Card: Installation vs Execution */}
                   <div style={{
-                    padding: '12px',
-                    borderRadius: '6px',
+                    padding: '14px',
+                    borderRadius: '8px',
                     backgroundColor: 'var(--surface-elevated)',
                     border: '1px solid var(--border-subtle)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '4px'
+                    gap: '12px'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                        Supervisory Status
-                      </span>
-                      <span className="status-pill">
-                        <span className={`status-dot ${selectedItem.isWorking ? 'running' : selectedItem.isAvailable ? 'active' : 'idle'}`} />
-                        <span style={{ fontSize: '10px' }}>{selectedItem.statusDisplay}</span>
-                      </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          Installation Status
+                        </span>
+                        <div>
+                          <span className={`badge ${
+                            selectedItem.installStatus === 'INSTALLED_AVAILABLE' ? 'badge-green' :
+                            selectedItem.installStatus === 'NOT_INSTALLED' ? 'badge-amber' :
+                            selectedItem.installStatus === 'MISSING_CREDENTIALS' ? 'badge-red' :
+                            'badge-neutral'
+                          }`}>
+                            {selectedItem.installStatus.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          Execution Lifecycle
+                        </span>
+                        <div>
+                          <span className={`badge ${
+                            selectedItem.executionStatus === 'BUSY' ? 'badge-blue' :
+                            selectedItem.executionStatus === 'PAUSED' ? 'badge-amber' :
+                            'badge-neutral'
+                          }`}>
+                            {selectedItem.executionStatus.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                      {selectedItem.isWorking
-                        ? 'Executing tasks on assigned mission under watchdog monitoring.'
-                        : selectedItem.isAvailable
-                          ? `Ready for assignment by Dynamic Router (${selectedItem.infrastructure} execution substrate).`
-                          : selectedItem.isInstalled
-                            ? 'Adapter declared in system, but CLI binary or endpoint not reachable in environment.'
-                            : 'Runtime not configured on this host machine.'}
-                    </div>
+
+                    {/* Prominent Truthful "Why unavailable?" Box */}
+                    {!selectedItem.isAvailable && (
+                      <div style={{
+                        marginTop: '4px',
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 700, color: 'var(--danger)' }}>
+                          <HelpCircle size={14} />
+                          <span>Why is this agent unavailable?</span>
+                        </div>
+                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0 }}>
+                          {selectedItem.installMessage || 'Executable binary not detected on system PATH or required authorization credentials missing.'}
+                        </p>
+                        {!selectedItem.isPlanned && (
+                          <div style={{ marginTop: '4px' }}>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ fontSize: '11px', padding: '3px 8px' }}
+                              onClick={() => handleOpenSetupModal(selectedItem)}
+                            >
+                              <span>View setup commands & requirements →</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Backing Infrastructure & Capabilities */}
@@ -744,6 +988,158 @@ export const Agents: React.FC<AgentsProps> = ({
         </div>
       )}
 
+      {/* Modal: Setup / Install Instructions */}
+      {setupModalItem && (
+        <div className="modal-overlay" onClick={() => setSetupModalItem(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '580px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ProviderLogo providerId={setupModalItem.id} size={22} />
+                <h2 style={{ fontSize: '16px', fontWeight: 600 }}>
+                  Setup & Installation: {setupModalItem.name}
+                </h2>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSetupModalItem(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px 20px' }}>
+              {isLoadingGuide ? (
+                <div style={{ textAlign: 'center', padding: '30px' }}>
+                  <RotateCw size={20} className="spin" color="var(--primary)" />
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>Loading installation metadata...</p>
+                </div>
+              ) : (
+                <>
+                  <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                    {setupGuide?.description || setupModalItem.role}
+                  </p>
+
+                  {/* Installation Command */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                        Installation Command ({setupGuide?.install_method || 'CLI'})
+                      </span>
+                      {setupGuide?.install_command && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: '11px', padding: '2px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          onClick={() => handleCopyCommand(setupGuide.install_command)}
+                        >
+                          {copiedCommand ? <CheckCircle2 size={12} color="var(--success)" /> : <Copy size={12} />}
+                          <span>{copiedCommand ? 'Copied' : 'Copy Command'}</span>
+                        </button>
+                      )}
+                    </div>
+                    <pre style={{
+                      margin: 0,
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '12px',
+                      color: 'var(--primary)',
+                      overflowX: 'auto'
+                    }}>
+                      {setupGuide?.install_command || `# Install ${setupModalItem.name} CLI onto your host`}
+                    </pre>
+                  </div>
+
+                  {/* Required Environment Variables */}
+                  {setupGuide?.required_env_vars && setupGuide.required_env_vars.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                        Required Environment Variables
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {setupGuide.required_env_vars.map(envVar => (
+                          <span key={envVar} className="badge badge-amber" style={{ fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+                            {envVar}
+                          </span>
+                        ))}
+                      </div>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Add to your workspace <code>.env</code> file or user environment.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* OS & Docs Link */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
+                      <span>Supported OS:</span>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                        {setupGuide?.supported_os?.join(', ') || 'Windows, macOS, Linux'}
+                      </span>
+                    </div>
+
+                    {setupGuide?.documentation_url && (
+                      <a
+                        href={setupGuide.documentation_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', textDecoration: 'none' }}
+                      >
+                        <span>Official Vendor Docs</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Security Notice */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'rgba(56, 189, 248, 0.06)',
+                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px'
+                  }}>
+                    <ShieldCheck size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                    <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
+                      <strong>Controlled Verification:</strong> AI Supervisor enforces strict execution security. It will not silently download third-party binaries with elevated privileges. Please execute the command in your terminal, then click <strong>Re-check Runtime</strong>.
+                    </p>
+                  </div>
+
+                  {/* Feedback Message */}
+                  {recheckMessage && (
+                    <div style={{
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: recheckMessage.includes('Success') ? 'var(--success-subtle)' : 'var(--warning-subtle)',
+                      border: `1px solid ${recheckMessage.includes('Success') ? 'var(--success-border)' : 'var(--warning-border)'}`,
+                      fontSize: '12px',
+                      color: recheckMessage.includes('Success') ? 'var(--success)' : 'var(--warning)'
+                    }}>
+                      {recheckMessage}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={() => setSetupModalItem(null)}>
+                Close
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleRecheckRuntime}
+                disabled={isRechecking}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RotateCw size={13} className={isRechecking ? 'spin' : ''} />
+                <span>{isRechecking ? 'Probing PATH...' : 'Re-check Runtime'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Register Custom Agent */}
       {isCustomModalOpen && (
         <div className="modal-overlay" onClick={() => setIsCustomModalOpen(false)}>
@@ -755,7 +1151,7 @@ export const Agents: React.FC<AgentsProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleRegisterCustom} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form onSubmit={handleRegisterCustom} style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 20px' }}>
               <div>
                 <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                   Agent Name

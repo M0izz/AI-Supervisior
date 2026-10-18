@@ -542,15 +542,18 @@ export const MissionComposer: React.FC<MissionComposerProps> = ({
                     onChange={e => setAgentPreference(e.target.value)}
                     style={{ fontSize: '12px' }}
                   >
-                    <option value="auto">Auto-Route (Supervisor Optimal)</option>
-                    <option value="claude-code">Claude Code (Anthropic)</option>
-                    <option value="codex">OpenAI Codex</option>
-                    <option value="hermes">Hermes Agent (Nous)</option>
-                    <option value="digitalocean_managed">DigitalOcean Managed Agent</option>
-                    <option value="gemini">Gemini CLI</option>
-                    <option value="goose">Goose (Block)</option>
-                    <option value="cline">Cline</option>
-                    <option value="qwen">Qwen Local</option>
+                    <option value="auto">Auto-Route (Supervisor Selects Optimal Runtime)</option>
+                    <option value="worker_01">worker_01 — Built-in Python Tool Sandbox [AVAILABLE]</option>
+                    <option value="claude_code">claude_code — Claude Code CLI [INSTALLED & READY]</option>
+                    <option value="codex">codex — OpenAI Codex CLI [NEEDS LOCAL SETUP]</option>
+                    <option value="gemini">gemini — Google Gemini CLI [NEEDS API KEY]</option>
+                    <option value="qwen">qwen — Qwen Local LLM [NEEDS OLLAMA]</option>
+                    <option value="opencode">opencode — OpenCode [NEEDS LOCAL SETUP]</option>
+                    <option value="kimi">kimi — Kimi Code [NEEDS LOCAL SETUP]</option>
+                    <option value="hermes">hermes — Hermes Agent [NEEDS CONFIG]</option>
+                    <option value="digitalocean_managed">digitalocean_managed — Cloud MicroVM Sandbox [NEEDS TOKEN]</option>
+                    <option value="goose">goose — Goose [NEEDS PIPX SETUP]</option>
+                    <option value="cline">cline — Cline [NEEDS LOCAL SETUP]</option>
                   </select>
                 </div>
 

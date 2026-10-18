@@ -1,14 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   Plus, 
   FlaskConical, 
   RefreshCw, 
   Layers,
-  Sparkles,
-  Cpu,
-  Radio
+  Radio,
+  Network
 } from 'lucide-react';
+import type { GraphHealth } from '../types';
+import { getGraphHealth } from '../api';
 
 interface TopBarProps {
   onOpenCommandPalette: () => void;
@@ -18,7 +19,7 @@ interface TopBarProps {
   onRefresh: () => void;
   isRefreshing: boolean;
   onOpenHud?: () => void;
-  onNavigateToLanding?: () => void;
+  onOpenGraphInspector?: () => void;
   wsConnected?: boolean;
   wsLatency?: number | null;
 }
@@ -31,10 +32,23 @@ export const TopBar: React.FC<TopBarProps> = ({
   onRefresh,
   isRefreshing,
   onOpenHud,
-  onNavigateToLanding,
+  onOpenGraphInspector,
   wsConnected = true,
   wsLatency = 12
 }) => {
+  const [graphHealth, setGraphHealth] = useState<GraphHealth | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkGraph = () => {
+      getGraphHealth()
+        .then(h => { if (isMounted) setGraphHealth(h); })
+        .catch(() => { if (isMounted) setGraphHealth(null); });
+    };
+    checkGraph();
+    const timer = setInterval(checkGraph, 10000);
+    return () => { isMounted = false; clearInterval(timer); };
+  }, []);
   return (
     <header className="app-topbar">
       <div className="topbar-left">
@@ -67,21 +81,28 @@ export const TopBar: React.FC<TopBarProps> = ({
           </span>
         </div>
 
-        {/* Cognitive Model Engine Indicator */}
-        <div 
+        {/* Live FalkorDB Property Graph Memory Indicator */}
+        <div
           className="status-pill"
-          style={{ 
-            fontSize: '11px', 
-            padding: '4px 9px',
-            backgroundColor: 'rgba(168, 85, 247, 0.06)',
-            borderColor: 'rgba(168, 85, 247, 0.2)',
-            display: 'none'
+          style={{
+            fontSize: '11.5px',
+            padding: '4px 10px',
+            cursor: onOpenGraphInspector ? 'pointer' : 'default',
+            backgroundColor: graphHealth?.connected ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+            borderColor: graphHealth?.connected ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)',
           }}
-          id="topbar-gemma-pill"
-          title="Supervisory Intelligence: Google Gemma 4 (gemma-4-31B-it)"
+          onClick={onOpenGraphInspector}
+          title={
+            graphHealth?.connected
+              ? `FalkorDB Authoritative Graph Memory: Connected to ${graphHealth.host}:${graphHealth.port} (${graphHealth.graph_name}). Storing ${graphHealth.nodes_count ?? 0} nodes & ${graphHealth.relationships_count ?? 0} relationships. Latency: ${Math.round(graphHealth.latency_ms)}ms. Click to inspect graph.`
+              : `FalkorDB Graph Memory: Disconnected (${graphHealth?.error || 'Port 6379 unavailable'}). Graph-backed retrieval and lineage paused.`
+          }
         >
-          <Cpu size={12} color="var(--purple)" />
-          <span style={{ color: '#c084fc', fontWeight: 600 }}>Gemma 4</span>
+          <Network size={12} color={graphHealth?.connected ? 'var(--success)' : 'var(--danger)'} />
+          <span style={{ color: 'var(--text-secondary)' }}>FalkorDB:</span>
+          <span style={{ color: graphHealth?.connected ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+            {graphHealth?.connected ? `Connected (${graphHealth.nodes_count ?? 0} nodes)` : 'Disconnected'}
+          </span>
         </div>
       </div>
 
@@ -117,19 +138,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           <Plus size={14} />
           <span>Start a Mission</span>
         </button>
-
-        {/* Landing Page Launcher */}
-        {onNavigateToLanding && (
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onNavigateToLanding}
-            title="View AI Supervisor Landing Page"
-            style={{ color: 'var(--primary)' }}
-          >
-            <Sparkles size={13} />
-            <span>Landing Page</span>
-          </button>
-        )}
 
         {/* HUD Launcher */}
         {onOpenHud && (

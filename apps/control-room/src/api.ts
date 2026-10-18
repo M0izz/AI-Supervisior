@@ -19,7 +19,9 @@ import type {
   GraphHealth,
   MissionGraphData,
   TaskGraphContext,
-  VerificationTrace
+  VerificationTrace,
+  AdapterSetupGuide,
+  GraphActivityEvent
 } from './types';
 
 const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
@@ -511,6 +513,29 @@ export async function getMissionDecisions(missionId: string): Promise<{ mission_
 
 export async function getTaskVerificationTrace(missionId: string, taskId: string): Promise<VerificationTrace> {
   return fetchJson<VerificationTrace>(`/api/missions/${missionId}/tasks/${taskId}/verification-trace`);
+}
+
+export async function assignTaskAgent(missionId: string, taskId: string, agentId: string): Promise<any> {
+  return fetchJson(`/api/missions/${missionId}/tasks/${taskId}/assign-agent`, {
+    method: 'POST',
+    body: JSON.stringify({ agent_id: agentId })
+  });
+}
+
+export async function getAdapterSetupGuide(adapterId: string): Promise<AdapterSetupGuide> {
+  return fetchJson<AdapterSetupGuide>(`/api/adapters/${adapterId}/setup-guide`);
+}
+
+export async function recheckAdapterAvailability(adapterId: string): Promise<any> {
+  return fetchJson(`/api/adapters/${adapterId}/check`, { method: 'POST' });
+}
+
+export async function testAdapterExecution(adapterId: string): Promise<any> {
+  return fetchJson(`/api/adapters/${adapterId}/test`, { method: 'POST' });
+}
+
+export async function getGraphActivity(limit: number = 25): Promise<{ events: GraphActivityEvent[]; count: number }> {
+  return fetchJson<{ events: GraphActivityEvent[]; count: number }>(`/api/graph/activity?limit=${limit}`);
 }
 
 

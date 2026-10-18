@@ -12,12 +12,14 @@ import {
   Sparkles,
   ShieldCheck,
   Database,
+  Network,
+  RefreshCw,
   X
 } from 'lucide-react';
-import type { Mission, AgentRecord, ApprovalRequest, Event, InterventionDetail, AdapterInfo, MemoryRecord, SupervisorDecision } from '../types';
+import type { Mission, AgentRecord, ApprovalRequest, Event, InterventionDetail, AdapterInfo, MemoryRecord, SupervisorDecision, GraphActivityEvent } from '../types';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { SupervisorDecisionCard } from '../components/SupervisorDecisionCard';
-import { pauseMission, resumeMission, getSupervisorDecisions, explainDecision } from '../api';
+import { pauseMission, resumeMission, getSupervisorDecisions, explainDecision, getGraphHealth, getGraphActivity } from '../api';
 
 interface OverviewProps {
   missions: Mission[];
@@ -59,6 +61,35 @@ export const Overview: React.FC<OverviewProps> = ({
   const [explainingDecision, setExplainingDecision] = useState<SupervisorDecision | null>(null);
   const [gemmaExplanation, setGemmaExplanation] = useState<any | null>(null);
   const [isExplaining, setIsExplaining] = useState(false);
+
+  // Live FalkorDB Graph Health & Activity Stream
+  const [graphHealth, setGraphHealth] = useState<{ connected: boolean; graph_name?: string; node_count?: number; edge_count?: number; latency_ms?: number; error?: string } | null>(null);
+  const [graphEvents, setGraphEvents] = useState<GraphActivityEvent[]>([]);
+  const [loadingGraph, setLoadingGraph] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchGraphData = async () => {
+      try {
+        const [health, act] = await Promise.all([
+          getGraphHealth().catch(err => ({ connected: false, error: String(err) })),
+          getGraphActivity(12).catch(() => ({ events: [], count: 0 }))
+        ]);
+        if (isMounted) {
+          setGraphHealth(health as any);
+          setGraphEvents(act.events || []);
+        }
+      } catch (err) {
+        if (isMounted) setGraphHealth({ connected: false, error: String(err) });
+      }
+    };
+    fetchGraphData();
+    const interval = setInterval(fetchGraphData, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     getSupervisorDecisions()
@@ -304,6 +335,169 @@ export const Overview: React.FC<OverviewProps> = ({
             Deterministic sandbox tests certify completion
           </div>
         </div>
+
+        {/* Metric 5: FalkorDB Graph Memory & Lineage */}
+        <div 
+          className="surface-card" 
+          style={{ 
+            padding: '16px 20px', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '8px',
+            borderColor: graphHealth?.connected ? 'rgba(56, 189, 248, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+            cursor: 'pointer'
+          }}
+          onClick={() => onNavigateToTab('missions')}
+          title="Click to open FalkorDB Graph Memory Lineage Inspector"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Network size={13} color="var(--primary)" />
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                FalkorDB Graph Memory
+              </span>
+            </div>
+            <span className={`badge ${graphHealth?.connected ? 'badge-green' : 'badge-red'}`}>
+              {graphHealth?.connected ? 'CONNECTED' : 'DISCONNECTED'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
+              {graphHealth?.node_count ?? 0}
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>nodes</span>
+            <span style={{ color: 'var(--text-muted)' }}>•</span>
+            <span style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff', fontFamily: 'var(--font-mono)' }}>
+              {graphHealth?.edge_count ?? 0}
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>edges</span>
+          </div>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Graph: <strong style={{ color: 'var(--primary)', fontFamily: 'var(--font-mono)' }}>{graphHealth?.graph_name || 'ai_supervisor_memory'}</strong></span>
+            <span style={{ color: 'var(--primary)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              Inspect <ArrowRight size={10} />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* FalkorDB Live Authoritative Graph Memory Stream */}
+      <div className="section-group">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div className="section-title">
+            <Network size={15} color="var(--primary)" />
+            <span>FalkorDB Authoritative Memory & Decision Stream</span>
+            <span className="badge badge-purple" style={{ fontSize: '10px', marginLeft: '6px' }}>
+              {graphEvents.length} LIVE OPERATIONS
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={async () => {
+                setLoadingGraph(true);
+                try {
+                  const act = await getGraphActivity(12);
+                  setGraphEvents(act.events || []);
+                } finally {
+                  setLoadingGraph(false);
+                }
+              }}
+              style={{ fontSize: '12px', gap: '5px' }}
+              title="Refresh FalkorDB graph activity"
+            >
+              <RefreshCw size={12} className={loadingGraph ? 'spin' : ''} />
+              <span>Refresh</span>
+            </button>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => onNavigateToTab('missions')}
+              style={{ fontSize: '12px', gap: '6px' }}
+            >
+              <Network size={12} color="var(--primary)" />
+              <span>Open Graph Inspector</span>
+              <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+
+        {graphEvents.length === 0 ? (
+          <div className="surface-card" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+            {graphHealth?.connected 
+              ? 'FalkorDB connected. Graph memory operations (task dependencies, causal failures, handoffs, verifications) will record here in real time during mission execution.' 
+              : `FalkorDB is currently disconnected (${graphHealth?.error || 'Connection refused at localhost:6379'}). Graph-driven recovery decisions and cross-mission memory are paused.`}
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+            gap: '12px'
+          }}>
+            {graphEvents.slice(0, 6).map((ev) => {
+              const isWrite = ev.direction === 'WRITE';
+              const op = ev.operation_type || 'OPERATION';
+              const isFailure = op.includes('FAILURE') || op.includes('REJECT');
+              const isVerification = op.includes('VERIFICATION');
+              const isDecision = op.includes('DECISION');
+
+              const badgeColor = isFailure ? 'badge-red' : isVerification ? 'badge-green' : isDecision ? 'badge-purple' : 'badge-blue';
+
+              return (
+                <div
+                  key={ev.id}
+                  className="surface-card"
+                  style={{
+                    padding: '14px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    transition: 'border-color 0.2s ease, transform 0.2s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className={`badge ${badgeColor}`} style={{ fontSize: '9.5px', padding: '2px 6px', fontFamily: 'var(--font-mono)' }}>
+                        {op}
+                      </span>
+                      <span style={{ fontSize: '10px', color: isWrite ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
+                        {isWrite ? 'GRAPH WRITE' : 'GRAPH READ'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                    {ev.description}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', fontSize: '11px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
+                      {ev.task_id || ev.mission_id || ev.id}
+                    </span>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '2px 6px', fontSize: '11px', color: 'var(--primary)' }}
+                      onClick={() => {
+                        const targetMissionId = ev.mission_id || safeMissions[0]?.id;
+                        if (targetMissionId) onSelectMission(targetMissionId);
+                        onNavigateToTab('missions');
+                      }}
+                    >
+                      <span>Inspect</span>
+                      <ArrowRight size={10} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 2. Active Mission Dominates (If present) */}

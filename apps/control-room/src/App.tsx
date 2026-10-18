@@ -41,21 +41,18 @@ import { Settings } from './pages/Settings';
 import { LandingPage } from './pages/LandingPage';
 
 const getInitialRoute = (): 'landing' | 'app' => {
-  if (typeof window === 'undefined') return 'landing';
+  if (typeof window === 'undefined') return 'app';
   const path = window.location.pathname.toLowerCase();
   const hash = window.location.hash.toLowerCase();
   const search = window.location.search.toLowerCase();
   if (
-    path.startsWith('/app') ||
-    path.startsWith('/control-room') ||
-    hash.includes('control-room') ||
-    hash.includes('app') ||
-    search.includes('view=app') ||
-    search.includes('view=control-room')
+    path.startsWith('/landing') ||
+    hash.includes('landing') ||
+    search.includes('view=landing')
   ) {
-    return 'app';
+    return 'landing';
   }
-  return 'landing';
+  return 'app';
 };
 
 export const App: React.FC = () => {
@@ -93,17 +90,6 @@ export const App: React.FC = () => {
         window.history.pushState(null, '', '/app');
       } catch {
         window.location.hash = '#control-room';
-      }
-    }
-  }, []);
-
-  const navigateToLanding = useCallback(() => {
-    setCurrentRoute('landing');
-    if (window.location.pathname !== '/') {
-      try {
-        window.history.pushState(null, '', '/');
-      } catch {
-        window.location.hash = '';
       }
     }
   }, []);
@@ -285,7 +271,6 @@ export const App: React.FC = () => {
         wsLatency={wsLatency}
         syncStatus={syncStatus}
         onOpenSync={() => setIsSyncOpen(true)}
-        onNavigateToLanding={navigateToLanding}
       />
 
       {/* Main Container */}
@@ -299,7 +284,7 @@ export const App: React.FC = () => {
           onRefresh={loadData}
           isRefreshing={isRefreshing}
           onOpenHud={window.supervisorDesktop?.showHud ? () => window.supervisorDesktop?.showHud() : undefined}
-          onNavigateToLanding={navigateToLanding}
+          onOpenGraphInspector={() => setActiveTab('missions')}
           wsConnected={wsConnected}
           wsLatency={wsLatency}
         />

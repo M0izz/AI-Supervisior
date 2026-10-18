@@ -15,7 +15,7 @@ import {
   Lock,
   X
 } from 'lucide-react';
-import type { PlanVersion } from '../types';
+import type { PlanVersion, AdapterInfo } from '../types';
 import {
   getMissionPlan,
   approveMissionPlan,
@@ -23,7 +23,9 @@ import {
   clarifyMissionPlan,
   editMissionPlan,
   regenerateMissionPlan,
-  executeMission
+  executeMission,
+  getAdapters,
+  assignTaskAgent
 } from '../api';
 import { ProviderLogo } from './ProviderLogo';
 
@@ -62,6 +64,28 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
   // Rejection modal
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
+  // Available adapters for assignment
+  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
+
+  useEffect(() => {
+    getAdapters()
+      .then(res => setAdapters(res.adapters || []))
+      .catch(() => {});
+  }, []);
+
+  const handleAgentSelect = async (taskId: string, newAgentId: string) => {
+    setIsSubmitting(true);
+    try {
+      await assignTaskAgent(missionId, taskId, newAgentId);
+      await loadPlan();
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert(`Failed to assign agent: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const loadPlan = async () => {
     setLoading(true);
@@ -527,21 +551,38 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {/* Assigned Agent */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '3px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    fontSize: '11px',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'var(--font-mono)'
-                  }}>
+                  {/* Interactive Agent Runtime Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <ProviderLogo providerId={task.proposed_agent || (task as any).assigned_agent_id || 'worker_01'} size={14} />
-                    <span>{task.proposed_agent || (task as any).assigned_agent_id || 'worker_01'}</span>
+                    <select
+                      className="select select-sm"
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        fontFamily: 'var(--font-mono)',
+                        backgroundColor: 'var(--surface)',
+                        borderColor: isApproved ? 'var(--border-subtle)' : 'var(--primary)',
+                        cursor: isApproved ? 'default' : 'pointer',
+                        borderRadius: 'var(--radius-sm)'
+                      }}
+                      value={task.proposed_agent || (task as any).assigned_agent_id || 'worker_01'}
+                      disabled={isApproved || isSubmitting}
+                      onChange={e => handleAgentSelect(task.task_id, e.target.value)}
+                      title={isApproved ? "Plan is approved. Click 'Edit Plan' or reject to reassign." : "Select execution agent runtime"}
+                    >
+                      <option value="worker_01">worker_01 (Local Sandbox) [AVAILABLE]</option>
+                      <option value="auto">auto (Supervisor Optimal Route)</option>
+                      {adapters.filter(a => a.availability?.available).map(a => (
+                        <option key={a.adapter_id} value={a.adapter_id}>
+                          {a.adapter_id} ({a.display_name}) [AVAILABLE]
+                        </option>
+                      ))}
+                      {adapters.filter(a => !a.availability?.available).map(a => (
+                        <option key={a.adapter_id} value={a.adapter_id} disabled>
+                          {a.adapter_id} ({a.display_name}) [{a.availability?.status?.replace(/_/g, ' ') || 'UNAVAILABLE'}]
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Action Type */}
@@ -560,6 +601,35 @@ export const PlanReview: React.FC<PlanReviewProps> = ({
                     Risk: {task.risk_classification || (task as any).risk_level || 'LOW'}
                   </span>
                 </div>
+              </div>
+
+              {/* Compatibility Rationale & Recommendation Explanation */}
+              <div style={{
+                marginTop: '6px',
+                marginBottom: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                backgroundColor: 'var(--surface)',
+                padding: '5px 10px',
+                borderRadius: '4px',
+                border: '1px solid var(--border-subtle)'
+              }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <CheckCircle2 size={12} color="var(--success)" />
+                  <span>Compatible capabilities: <code>{(task.required_capabilities || ['code_execution', 'file_editing']).join(', ')}</code></span>
+                </span>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {task.proposed_agent === 'worker_01'
+                    ? 'Recommended: Local Python tool sandbox with strict worktree isolation.'
+                    : task.proposed_agent === 'auto'
+                      ? 'Dynamic auto-routing: Supervisor will select verified runtime at dispatch.'
+                      : `Assigned: ${task.proposed_agent} runtime adapter.`}
+                </span>
               </div>
 
               {/* Description */}

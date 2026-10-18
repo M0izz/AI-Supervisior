@@ -446,8 +446,19 @@ export const Missions: React.FC<MissionsProps> = ({
             {/* Structured Supervisor Decisions */}
             {missionDecisions.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Supervisory Decisions & Interventions ({missionDecisions.length})
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Supervisory Decisions & Interventions ({missionDecisions.length})
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setActiveTab('graph')}
+                    style={{ fontSize: '11px', color: 'var(--primary)', gap: '4px' }}
+                    title="View causal decisions in FalkorDB Graph Inspector"
+                  >
+                    <Network size={12} />
+                    <span>Inspect Decision Lineage in Graph</span>
+                  </button>
                 </div>
                 {missionDecisions.map(dec => (
                   <SupervisorDecisionCard
@@ -561,7 +572,7 @@ export const Missions: React.FC<MissionsProps> = ({
               </div>
             ) : (
               tasks.map(t => (
-                <div key={t.id} className="surface-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px' }}>
+                <div key={t.id} className="surface-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <span className={`status-dot ${t.status === 'IN_PROGRESS' ? 'running' : t.status === 'COMPLETED' || t.status === 'VERIFIED' ? 'active' : 'idle'}`} />
                     <div>
@@ -570,12 +581,28 @@ export const Missions: React.FC<MissionsProps> = ({
                       </div>
                       <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
                         Agent: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{t.assigned_agent_id || 'unassigned'}</span>
+                        {t.dependencies && t.dependencies.length > 0 && (
+                          <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>
+                            • Depends on: {t.dependencies.join(', ')}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <span className={`badge ${t.status === 'COMPLETED' || t.status === 'VERIFIED' ? 'badge-green' : t.status === 'IN_PROGRESS' ? 'badge-blue' : 'badge-neutral'}`}>
-                    {t.status.toLowerCase()}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setActiveTab('graph')}
+                      style={{ fontSize: '11.5px', gap: '4px', color: 'var(--primary)' }}
+                      title="Inspect this task's node and dependencies in FalkorDB Graph Memory"
+                    >
+                      <Network size={12} />
+                      <span>Inspect in Graph</span>
+                    </button>
+                    <span className={`badge ${t.status === 'COMPLETED' || t.status === 'VERIFIED' ? 'badge-green' : t.status === 'IN_PROGRESS' ? 'badge-blue' : 'badge-neutral'}`}>
+                      {t.status.toLowerCase()}
+                    </span>
+                  </div>
                 </div>
               ))
             )}
@@ -596,9 +623,19 @@ export const Missions: React.FC<MissionsProps> = ({
                 </p>
               </div>
 
-              <span className={`badge ${selectedMission.status === 'COMPLETED' ? 'badge-green' : selectedMission.status === 'FAILED' ? 'badge-red' : 'badge-blue'}`}>
-                {selectedMission.status === 'COMPLETED' ? 'ALL VERIFIED' : selectedMission.status === 'FAILED' ? 'REJECTED' : 'SUPERVISION ACTIVE'}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setActiveTab('graph')}
+                  style={{ fontSize: '12px', gap: '6px' }}
+                >
+                  <Network size={12} color="var(--primary)" />
+                  <span>Inspect Evidence in Graph</span>
+                </button>
+                <span className={`badge ${selectedMission.status === 'COMPLETED' ? 'badge-green' : selectedMission.status === 'FAILED' ? 'badge-red' : 'badge-blue'}`}>
+                  {selectedMission.status === 'COMPLETED' ? 'ALL VERIFIED' : selectedMission.status === 'FAILED' ? 'REJECTED' : 'SUPERVISION ACTIVE'}
+                </span>
+              </div>
             </div>
 
             {/* 6-Point Verification Checklist */}

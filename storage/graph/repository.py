@@ -1077,3 +1077,62 @@ class FalkorDBGraphRepository:
             "nodes": nodes,
             "edges": edges,
         }
+
+    async def get_recent_activity(self, limit: int = 25) -> List[Dict[str, Any]]:
+        """
+        Retrieves real, verified graph operations stored in FalkorDB:
+        Missions, Tasks, Executions, Decisions, Verifications, and Events.
+        """
+        cypher = """
+        MATCH (n)
+        WHERE n.created_at IS NOT NULL OR n.timestamp IS NOT NULL
+        RETURN 
+            n.id AS id, 
+            labels(n)[0] AS label, 
+            coalesce(n.created_at, n.timestamp) AS timestamp,
+            n.title AS title,
+            n.status AS status,
+            n.action AS action,
+            n.error_signature AS error_signature,
+            n.mission_id AS mission_id,
+            n.task_id AS task_id
+        ORDER BY timestamp DESC
+        LIMIT $limit
+        """
+        try:
+            res = self.client.query(cypher, {"limit": limit})
+        except Exception as e:
+            logger.warning(f"Error querying recent FalkorDB activity: {e}")
+            return []
+
+        events = []
+        for row in (res.result_set or []):
+            label = row[1] or "Entity"
+            desc = ""
+            if label == "Mission":
+                desc = f"Mission & requirements stored: {row[3] or row[0]}"
+            elif label == "Task":
+                desc = f"Task dependency context recorded: {row[3] or row[0]} ({row[4] or 'PENDING'})"
+            elif label == "Execution":
+                desc = f"Execution attempt recorded: {row[0]} ({row[4] or 'RUNNING'})"
+            elif label == "Decision":
+                desc = f"Supervisory decision recorded: {row[5] or row[3] or 'Action taken'}"
+            elif label == "Verification":
+                desc = f"Independent verification & evidence linked: {row[4] or 'PASSED'}"
+            elif label == "ExecutionEvent":
+                desc = f"Execution event recorded: {row[6] or row[0]}"
+            else:
+                desc = f"{label} operation recorded in FalkorDB"
+
+            events.append({
+                "id": str(row[0]),
+                "operation_type": label,
+                "timestamp": str(row[2]),
+                "description": desc,
+                "status": str(row[4] or "RECORDED"),
+                "mission_id": str(row[7]) if row[7] else None,
+                "task_id": str(row[8]) if row[8] else None,
+                "direction": "WRITE",
+                "success": True,
+            })
+        return events

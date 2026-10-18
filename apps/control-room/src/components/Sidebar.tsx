@@ -8,8 +8,7 @@ import {
   ShieldCheck, 
   Settings, 
   FolderGit2, 
-  Cloud,
-  Sparkles
+  Cloud
 } from 'lucide-react';
 import type { TabType, SyncStatus } from '../types';
 
@@ -23,7 +22,6 @@ interface SidebarProps {
   wsLatency: number | null;
   syncStatus: SyncStatus | null;
   onOpenSync: () => void;
-  onNavigateToLanding?: () => void;
   currentProject?: string;
 }
 
@@ -37,7 +35,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   wsLatency,
   syncStatus,
   onOpenSync,
-  onNavigateToLanding,
   currentProject = 'AI-Supervisior'
 }) => {
   const isOverview = activeTab === 'overview' || activeTab === 'control_room';
@@ -47,16 +44,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isActivity = activeTab === 'activity' || activeTab === 'supervisor_events';
   const isApprovals = activeTab === 'approvals' || activeTab === 'approval_queue';
   const isSettings = activeTab === 'settings';
-  const isLanding = activeTab === 'landing';
 
   return (
     <aside className="app-sidebar" aria-label="Application Navigation">
       {/* Brand Header */}
       <div 
         className="sidebar-brand" 
-        onClick={onNavigateToLanding}
-        style={{ cursor: onNavigateToLanding ? 'pointer' : 'default' }}
-        title="Return to Landing Page"
+        onClick={() => setActiveTab('overview')}
+        style={{ cursor: 'pointer' }}
+        title="Return to Overview Cockpit"
       >
         <div className="brand-mark" title="AI Supervisor Control Plane">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -143,22 +139,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Settings size={16} />
           <span>Settings</span>
-        </button>
-
-        <div className="nav-section-title" style={{ marginTop: '12px' }}>Product</div>
-
-        <button
-          className={`nav-item ${isLanding ? 'active' : ''}`}
-          onClick={() => {
-            if (onNavigateToLanding) {
-              onNavigateToLanding();
-            } else {
-              setActiveTab('landing');
-            }
-          }}
-        >
-          <Sparkles size={16} color="var(--primary)" />
-          <span style={{ color: isLanding ? 'var(--text-primary)' : 'var(--primary)' }}>Landing Page</span>
         </button>
       </nav>
 
