@@ -4,7 +4,7 @@
 >
 > *"Your AI agents work. Your Supervisor makes sure they finish the job."*
 
-[![Track 02: Agent Memory & Coordination](https://img.shields.io/badge/FalkorDB%20Graph%20Hacks-Track%2002%3A%20Memory%20%26%20Coordination-FF4F00?style=for-the-badge&logo=redis)](docs/FALKORDB_GRAPH_INTEGRATION.md)
+[![](https://img.shields.io/badge/FalkorDB%20Graph%20Hacks--FF4F00?style=for-the-badge&logo=redis)](docs/FALKORDB_GRAPH_INTEGRATION.md)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-ai--supervisior.vercel.app-blueviolet?style=for-the-badge&logo=vercel)](https://ai-supervisior.vercel.app/)
 [![FastAPI](https://img.shields.io/badge/backend-FastAPI%20%2B%20Python%203.11%2B-009688?style=for-the-badge&logo=fastapi)](apps/api/)
 [![Frontend](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript-61DAFB?style=for-the-badge&logo=react)](apps/control-room/)
